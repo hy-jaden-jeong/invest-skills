@@ -1,0 +1,17 @@
+{
+  "schema": "reit-thresholds/1",
+  "note": "경험칙이다. 보고서에 기준값을 쓸 때 '경험칙'과 출처를 함께 적는다. 기준값은 이 파일 한 곳에만 둔다.",
+  "affo_payout_pct": {"watch": 85, "alert": 100, "direction": "above",
+                      "source": "kanchi-dividend-sop (MIT): AFFO payout 85% 주의, 100% 위험"},
+  "maturity_single_year_pct": {"watch": 15, "alert": 20, "direction": "above",
+                               "source": "CaseMark analyzing-reit-financials (Apache-2.0): 한 해 만기가 총부채의 15~20%를 넘으면 표시"},
+  "net_debt_to_ebitdare_x": {"watch": 6.0, "alert": 7.0, "direction": "above",
+                             "source": "CaseMark analyzing-reit-financials (Apache-2.0): 섹터에 따라 5.0~7.0x"},
+  "interest_coverage_x": {"watch": 3.0, "alert": 1.5, "direction": "below",
+                          "source": "CaseMark analyzing-reit-financials (Apache-2.0): fixed charge coverage 최소 1.5x. 3.0x watch는 이 skill의 경험칙"},
+  "ffo_tie_out_tolerance_pct": 0.5,
+  "affo_bridge_tolerance_pct": 0.5,
+  "price_max_age_days": 5,
+  "macro_max_age_days": 7,
+  "history_min_points": 12
+}

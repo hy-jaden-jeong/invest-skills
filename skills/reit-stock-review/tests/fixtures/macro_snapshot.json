@@ -1,0 +1,15 @@
+{
+ "schema": "macro-snapshot/1",
+ "date": "2026-11-16",
+ "series": {
+  "DGS10": {
+   "value": 4.5,
+   "unit": "Percent",
+   "status": "reported",
+   "as_of": "2026-11-14",
+   "source": "fred:DGS10",
+   "locator": "(\uac00\uc0c1)",
+   "note": ""
+  }
+ }
+}
