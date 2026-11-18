@@ -1,0 +1,26 @@
+{
+  "schema": "reit-facts/1",
+  "ticker": "BBB",
+  "period": "2026Q2",
+  "note": "(가상) fixture",
+  "facts": {
+    "price": {
+      "value": 100.0,
+      "unit": "USD/share",
+      "status": "reported",
+      "as_of": "2026-11-17",
+      "source": "finnhub:/quote",
+      "locator": "c (가상)",
+      "note": ""
+    },
+    "dividend_frequency": {
+      "value": 4,
+      "unit": "per year",
+      "status": "reported",
+      "as_of": "2026-06-30",
+      "source": "sec:8-K (가상)",
+      "locator": "가상 보도자료 L7 quarterly dividend",
+      "note": ""
+    }
+  }
+}

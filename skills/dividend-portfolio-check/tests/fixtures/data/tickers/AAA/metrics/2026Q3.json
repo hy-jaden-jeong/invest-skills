@@ -1,0 +1,57 @@
+{
+  "schema": "reit-metrics/1",
+  "ticker": "AAA",
+  "period": "2026Q3",
+  "period_end": "2026-09-30",
+  "note": "(가상) fixture",
+  "metrics": {
+    "forward_dividend": {
+      "metric": "forward_dividend",
+      "unit": "USD/share",
+      "value": 3.0,
+      "status": "derived",
+      "as_of": "2026-09-30",
+      "note": ""
+    },
+    "subsector": {
+      "metric": "subsector",
+      "unit": "",
+      "value": "Free Standing",
+      "status": "estimated",
+      "as_of": "2026-09-30",
+      "note": "Nareit REITWatch 분류"
+    },
+    "fixed_rate_debt_pct": {
+      "metric": "fixed_rate_debt_pct",
+      "unit": "%",
+      "value": 90.0,
+      "status": "derived",
+      "as_of": "2026-09-30",
+      "note": ""
+    }
+  },
+  "checks": [
+    {
+      "check": "ffo_tie_out",
+      "pass": true,
+      "status": "derived",
+      "note": ""
+    }
+  ],
+  "flags": [
+    {
+      "flag": "affo_payout",
+      "level": "ok",
+      "value": 75.0,
+      "status": "derived",
+      "basis": "경험칙(가상)",
+      "note": ""
+    }
+  ],
+  "data_gaps": [],
+  "summary": {
+    "metrics_missing": 0,
+    "checks_failed": 0
+  },
+  "facts_file": "/nonexistent/fixture/AAA.json"
+}

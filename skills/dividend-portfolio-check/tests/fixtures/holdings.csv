@@ -1,0 +1,6 @@
+# (가상) fixture holdings. 실제 보유 정보가 아니다.
+ticker,shares,cost_basis,account,note
+AAA,60,40,가상 계좌 A,
+aaa,40,40,가상 계좌 B,소문자 ticker(가상)
+BBB,40,,가상 계좌 A,
+CCC,200,,,

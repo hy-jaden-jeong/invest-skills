@@ -1,0 +1,30 @@
+{
+  "ticker": "BBB",
+  "cik": "0000000000",
+  "latest_earnings_8k": {
+    "form": "8-K",
+    "accession": "0000000002-26-000020",
+    "filed": "2026-10-28",
+    "report_date": "2026-10-28",
+    "items": [
+      "2.02",
+      "9.01"
+    ],
+    "primary_document": "x.htm",
+    "earnings": true
+  },
+  "filings": [
+    {
+      "form": "8-K",
+      "accession": "0000000002-26-000020",
+      "filed": "2026-10-28",
+      "report_date": "2026-10-28",
+      "items": [
+        "2.02",
+        "9.01"
+      ],
+      "primary_document": "x.htm",
+      "earnings": true
+    }
+  ]
+}

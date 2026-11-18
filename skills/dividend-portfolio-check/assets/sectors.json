@@ -1,0 +1,29 @@
+{
+  "schema": "portfolio-sectors/1",
+  "_how": "subsectors: REITWatch subsector 이름 -> macro-check 섹터(sector, 없으면 null)와 금리 민감도 등급(rate, high·medium·low)과 이유(why). 섹터 대응은 reit-sector-scan assets/sector_map.json의 표를 복사했다(skill 하나만 설치해도 돌게). 등급은 경험적 판단이라 portfolio.py가 estimated로 내고 rate_note를 붙인다.",
+  "rate_note": "경험칙: 임대 기간이 길고 임대료 인상이 고정된 섹터일수록 채권처럼 금리에 민감하다는 견해가 흔하다. 기간과 금리 국면에 따라 실증 결과가 엇갈려 등급은 estimated다.",
+  "price_max_age_days": 5,
+  "aliases": {"Timber": "Timberland", "Infrastructure": "Telecommunications"},
+  "subsectors": {
+    "Free Standing": {"sector": "net_lease", "rate": "high", "why": "장기 triple-net 임대, 고정 인상률"},
+    "Gaming": {"sector": null, "rate": "high", "why": "수십 년짜리 master lease, 인상률 상한"},
+    "Health Care": {"sector": "healthcare", "rate": "medium", "why": "triple-net 장기 임대와 운영형(SHOP)이 섞임"},
+    "Telecommunications": {"sector": null, "rate": "medium", "why": "장기 계약이지만 성장 기대가 가격에 큼"},
+    "Data Centers": {"sector": "data_center", "rate": "medium", "why": "중기 계약, 성장 기대가 가격에 큼"},
+    "Industrial": {"sector": "industrial", "rate": "medium", "why": "3~5년 임대, 재계약 때 임대료가 다시 매겨짐"},
+    "Office": {"sector": "office", "rate": "medium", "why": "5~10년 임대, 수요 요인이 금리보다 큼"},
+    "Shopping Centers": {"sector": "retail", "rate": "medium", "why": "5~10년 임대"},
+    "Regional Malls": {"sector": "retail", "rate": "medium", "why": "중기 임대, 부채 비중이 큰 회사가 많음"},
+    "Diversified": {"sector": null, "rate": "medium", "why": "섞인 섹터라 근거가 약함"},
+    "Specialty": {"sector": null, "rate": "medium", "why": "섞인 섹터라 근거가 약함"},
+    "Timberland": {"sector": null, "rate": "medium", "why": "목재 가격 영향이 큼"},
+    "Apartments": {"sector": "residential", "rate": "low", "why": "1년 임대라 임대료가 자주 다시 매겨짐"},
+    "Manufactured Homes": {"sector": "residential", "rate": "low", "why": "1년 안팎 임대"},
+    "Single Family Homes": {"sector": "residential", "rate": "low", "why": "1년 안팎 임대"},
+    "Student Housing": {"sector": "residential", "rate": "low", "why": "학기 단위 임대"},
+    "Self Storage": {"sector": "self_storage", "rate": "low", "why": "월 단위 임대"},
+    "Lodging/Resorts": {"sector": "lodging", "rate": "low", "why": "객실 가격이 매일 다시 매겨짐, 경기 민감도가 큼"},
+    "Home Financing": {"sector": null, "rate": "high", "why": "mortgage REIT, 금리 spread와 장부가가 금리에 직접 묶임"},
+    "Commercial Financing": {"sector": null, "rate": "high", "why": "mortgage REIT, 변동금리 대출과 신용 위험"}
+  }
+}

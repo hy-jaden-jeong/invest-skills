@@ -1,0 +1,25 @@
+{
+  "note": "기대값은 fixture 숫자로 손으로 셈한 값이다(코드로 다시 만든 값이 아니다). fixture는 모두 가상이다.",
+  "date": "2026-11-18",
+  "tickers": {
+    "AAA": {"shares": 100, "value": 5000.0, "weight_pct": 38.4615, "annual_dividend": 300.0, "yield_on_cost_pct": 7.5,
+            "freshness": "fresh", "period": "2026Q3", "why": "100주 × 50.00, 5000/13000, 3.00 × 100, 3.00/40"},
+    "BBB": {"shares": 40, "value": 4000.0, "weight_pct": 30.7692, "annual_dividend": 160.0,
+            "freshness": "stale", "period": "2026Q2", "why": "40 × 100.00, 4.00 × 40, 8-K 2026-10-28 → 2026Q3 > 2026Q2"},
+    "CCC": {"shares": 200, "value": 4000.0, "weight_pct": 30.7692, "annual_dividend": 240.0,
+            "freshness": "no_metrics", "why": "REITWatch 2026-10 호 20.00 × 200, 20.00 × 6.0% × 200"}
+  },
+  "total_value": 13000.0,
+  "annual_dividend": 700.0,
+  "forward_yield_pct": 5.3846,
+  "monthly": {"1": 65.0, "2": 25.0, "4": 65.0, "10": 65.0, "12": 25.0, "coverage_pct": 65.7143,
+              "why": "AAA 300/12 = 25 매달, BBB 160/4 = 40을 10월부터 3달 간격(1·4·7·10월), CCC 일정 모름. (300+160)/700"},
+  "monthly_without_paydate": {"1": 25.0, "4": 25.0, "coverage_pct": 42.8571, "why": "BBB 지급일이 없으면 AAA만: 300/700"},
+  "hhi": 3372.7811,
+  "hhi_why": "(5² + 4² + 4²)/13² × 10000 = 57/169 × 10000",
+  "subsector_pct": {"Free Standing": 38.4615, "Industrial": 30.7692, "Self Storage": 30.7692},
+  "sector_pct": {"net_lease": 38.4615, "industrial": 30.7692, "self_storage": 30.7692},
+  "rate_pct": {"high": 38.4615, "medium": 30.7692, "low": 30.7692},
+  "earnings_quarter": {"2026-11-02": "2026Q3", "2026-02-24": "2025Q4", "2026-04-01": "2026Q1", "2026-10-28": "2026Q3"},
+  "needs_review": ["BBB", "CCC"]
+}
