@@ -71,3 +71,50 @@
 | `maturity_concentration` | `maturity_max_year_pct` | 15% 이상 | 20% 이상 |
 | `net_debt_to_ebitdare` | `net_debt_to_ebitdare` | 6.0x 이상 | 7.0x 이상 |
 | `interest_coverage` | `interest_coverage` | 3.0x 미만 | 1.5x 미만 |
+
+## 일반 배당주 경로 (SIC가 6798이 아님)
+
+`compute()`가 facts의 `company`로 경로를 고르고 metrics에 `path: "dividend"`를 쓴다(REIT는 `"reit"`).
+
+| 지표 | 식 | 메모 |
+| --- | --- | --- |
+| `eps_fy` | EPS guidance 가운데 → 분기 diluted EPS × 4(estimated) | adjusted guidance면 회사 정의 |
+| `forward_dividend`, `forward_yield` | REIT와 같다 | |
+| `eps_payout_forward` | forward dividend / `eps_fy` × 100 | flag `eps_payout`의 기준. EPS가 0 이하면 값을 내지 않는다 |
+| `eps_payout_quarter` | 분기 주당 배당 / 분기 GAAP diluted EPS × 100 | 일회성 비용이 크면 100%를 넘는다. 그러면 flag note에 남긴다 |
+| `fcf_ytd` | 영업현금흐름(YTD) − 설비투자(YTD) | |
+| `fcf_payout_ytd` | 보통주 배당 지급(YTD) / `fcf_ytd` × 100 | FCF가 0 이하면 값을 내지 않고 `fcf_shortfall` 신호가 참 |
+| `dividend_cagr_3y`, `_5y`, `dividend_cuts` | REIT와 같다 | n년 전 연도 값으로 본다. 그 해 값이 없으면 missing |
+| `chowder_number` | forward yield + 5년 배당 CAGR | |
+| `chowder_threshold` | utility(SIC 4900~4999) 8, yield 3% 미만 15, 그 외 12 | Chowder rule |
+| `p_e` | price / `eps_fy` | |
+| `yield_spread_vs_10y` | forward yield − DGS10 | |
+| `yield_trap_signals` | `high_yield`(yield 8% 이상), `payout_over_100`, `fcf_shortfall`(FCF payout 100% 이상이나 FCF 0 이하), `recent_cut`(최근 5년 안 컷), `no_growth`(5년 CAGR 0 이하) | 값이 없어 판단 못 하면 None |
+
+| flag | 지표 | watch | alert |
+| --- | --- | --- | --- |
+| `eps_payout` | `eps_payout_forward`(없으면 `_quarter`) | 75% 이상 | 100% 이상 |
+| `fcf_payout` | `fcf_payout_ytd` | 80% 이상 | 100% 이상 |
+| `chowder` | `chowder_number` vs `chowder_threshold` | 기준 미만 | 없음 |
+| `yield_trap` | 참인 신호 수 | 1개 | 2개 이상. 참이 없고 판단 못 한 신호가 있으면 review |
+
+## diff (earnings mode)
+
+`reit_calc.py diff --prev M1 --curr M2`. 같은 ticker, prev 분기 < curr 분기여야 한다(아니면 exit 1).
+
+- 줄마다 `prev`·`curr`(값, status), `change` = curr − prev(단위가 `%`·`%p`면 %p), `change_pct` = 변화 / |prev| × 100(`%` 단위와 prev 0은 null), `status_change`(나쁜 순서 reported < derived < stale < estimated < missing으로 worse·better·same), `changed`(값이나 status가 다름).
+- flag는 ok < watch < alert 순서로 worse·better, 한쪽이 review면 `review`. `worse.status`·`worse.flags`에 나빠진 것을 모은다.
+- 한쪽이라도 값이 없는 줄이 있으면 exit 2.
+
+## compare (compare mode)
+
+`reit_calc.py compare --metrics M1 M2 ...`. 종목 둘 이상, ticker가 겹치지 않아야 한다(아니면 exit 1).
+
+- 줄마다 종목별 값·status, `median`(값이 있는 종목이 둘 이상일 때 median, status는 가장 나쁜 것, reported면 derived). 이 표에 놓인 종목끼리의 median이고 REITWatch peer median과 다르다.
+- 경고: REITWatch subsector가 다수(가장 많은 subsector가 하나이고 둘 이상)와 다른 종목, subsector를 모르는 종목, 다수가 없는데 subsector가 갈리는 경우, REIT와 일반 배당주를 섞은 경우, 분기가 다른 경우.
+- 경고가 있거나 어떤 종목 metrics에 missing·check 실패가 있으면 exit 2.
+
+## REIT 경로에 더한 규칙 (S4)
+
+- 연환산 EBITDAre가 missing이면 net debt/EBITDAre의 분모를 분기 EBITDAre × 4로 가정한다(estimated).
+- 만기 사다리는 같은 `period` 줄을 더해 해마다 비중을 낸다.

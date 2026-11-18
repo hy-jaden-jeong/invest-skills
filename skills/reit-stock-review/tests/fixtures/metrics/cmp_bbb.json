@@ -1,0 +1,61 @@
+{
+ "schema": "reit-metrics/1",
+ "path": "reit",
+ "ticker": "BBB",
+ "period": "2026Q3",
+ "period_end": "2026-09-30",
+ "note": "(가상) compare·diff check fixture",
+ "metrics": {
+  "p_ffo": {
+   "metric": "p_ffo",
+   "unit": "x",
+   "value": 25.0,
+   "status": "derived",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "forward_yield": {
+   "metric": "forward_yield",
+   "unit": "%",
+   "value": 2.5,
+   "status": "estimated",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "net_debt_to_ebitdare": {
+   "metric": "net_debt_to_ebitdare",
+   "unit": "x",
+   "value": 4.0,
+   "status": "derived",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "subsector": {
+   "metric": "subsector",
+   "unit": "",
+   "value": "Industrial (가상)",
+   "status": "estimated",
+   "note": ""
+  },
+  "sector_kpis": {}
+ },
+ "checks": [
+  {
+   "check": "ffo_tie_out",
+   "pass": true
+  }
+ ],
+ "flags": [
+  {
+   "flag": "affo_payout",
+   "level": "ok"
+  }
+ ],
+ "summary": {
+  "metrics_missing": 0,
+  "checks_failed": 0,
+  "flags": {
+   "affo_payout": "ok"
+  }
+ }
+}

@@ -157,6 +157,167 @@
         "2022",
         "2025"
       ]
+    },
+    "diff": {
+      "note": "fixtures/metrics/diff_prev.json → diff_curr.json (가상). 기대값은 손으로 뺀 값이다",
+      "rows": {
+        "affo_payout_forward": {
+          "change": 8.0,
+          "change_unit": "%p",
+          "change_pct": null,
+          "status_change": "same"
+        },
+        "net_debt_to_ebitdare": {
+          "change": 0.7,
+          "change_unit": "x",
+          "change_pct": 12.7273,
+          "status_change": "same"
+        },
+        "p_affo": {
+          "change": -1.0,
+          "change_unit": "x",
+          "change_pct": -8.3333,
+          "status_change": "same"
+        },
+        "forward_yield": {
+          "change": null,
+          "change_unit": "%p",
+          "change_pct": null,
+          "status_change": "worse"
+        },
+        "occupancy_pct": {
+          "change": -0.5,
+          "change_unit": "%p",
+          "change_pct": null,
+          "status_change": "same"
+        },
+        "interest_coverage": {
+          "change": 0.0,
+          "change_unit": "x",
+          "change_pct": 0.0,
+          "status_change": "same"
+        },
+        "sector_kpis.rent_recapture_rate_pct": {
+          "change": -4.0,
+          "change_unit": "%p",
+          "change_pct": null,
+          "status_change": "same"
+        }
+      },
+      "flags": {
+        "affo_payout": "worse",
+        "net_debt_to_ebitdare": "worse",
+        "interest_coverage": "same",
+        "maturity_concentration": "review"
+      },
+      "worse_status": [
+        "forward_yield"
+      ],
+      "worse_flags": [
+        "affo_payout",
+        "net_debt_to_ebitdare"
+      ]
+    },
+    "compare": {
+      "note": "fixtures/metrics/cmp_*.json (가상). median은 손으로 정렬해 고른 값이다",
+      "two": {
+        "p_ffo": 22.5,
+        "forward_yield": 2.75,
+        "net_debt_to_ebitdare": 4.5
+      },
+      "three": {
+        "p_ffo": 20.0,
+        "forward_yield": 3.0,
+        "net_debt_to_ebitdare": 5.0
+      },
+      "warned": [
+        "CCC"
+      ]
+    },
+    "dividend": {
+      "note": "fixtures/facts_div_2026q3.json (가상). bc로 손계산한 값이다",
+      "values": {
+        "forward_dividend": {
+          "value": 5.2,
+          "status": "derived",
+          "why": "1.30 × 4"
+        },
+        "forward_yield": {
+          "value": 3.25,
+          "status": "derived",
+          "why": "5.20 / 160 × 100"
+        },
+        "eps_fy": {
+          "value": 10.9,
+          "status": "derived",
+          "why": "(10.80 + 11.00) / 2"
+        },
+        "eps_payout_forward": {
+          "value": 47.7064,
+          "status": "derived",
+          "why": "5.20 / 10.90 × 100"
+        },
+        "eps_payout_quarter": {
+          "value": 61.9048,
+          "status": "derived",
+          "why": "1.30 / 2.10 × 100"
+        },
+        "fcf_ytd": {
+          "value": 15000000,
+          "status": "derived",
+          "why": "18,000 − 3,000 USD millions → thousands"
+        },
+        "fcf_payout_ytd": {
+          "value": 62.0,
+          "status": "derived",
+          "why": "9,300 / 15,000 × 100"
+        },
+        "dividend_cagr_5y": {
+          "value": 4.8113,
+          "status": "derived",
+          "why": "(5.11 / 4.04)^(1/5) − 1"
+        },
+        "dividend_cagr_3y": {
+          "value": 4.7177,
+          "status": "derived",
+          "why": "(5.11 / 4.45)^(1/3) − 1"
+        },
+        "chowder_number": {
+          "value": 8.0613,
+          "status": "derived",
+          "why": "3.25 + 4.8113"
+        },
+        "chowder_threshold": {
+          "value": 12,
+          "status": "derived",
+          "why": "yield 3% 이상, utility 아님"
+        },
+        "p_e": {
+          "value": 14.6789,
+          "status": "derived",
+          "why": "160 / 10.90"
+        }
+      },
+      "flags": {
+        "eps_payout": "ok",
+        "fcf_payout": "ok",
+        "chowder": "watch",
+        "yield_trap": "ok"
+      },
+      "utility_threshold": 8,
+      "low_yield": {
+        "forward_yield": 2.6,
+        "chowder_threshold": 15
+      },
+      "trap": {
+        "forward_yield": 8.6667,
+        "signals_true": [
+          "high_yield",
+          "no_growth",
+          "recent_cut"
+        ],
+        "flag": "alert"
+      }
     }
   },
   "edgar": {
@@ -210,6 +371,10 @@
     },
     "dividends": [
       [
+        "2022",
+        0.95
+      ],
+      [
         "2023",
         1.0
       ],
@@ -221,6 +386,39 @@
         "2025",
         1.1
       ]
-    ]
+    ],
+    "xbrl_div": {
+      "note": "fixtures/edgar/companyfacts_div.json (가상). 분기 끝날이 2026-09-27(52·53주 회계연도)",
+      "values": {
+        "net_income_common": [
+          5100000000,
+          "us-gaap:NetIncomeLoss 2026-06-29..2026-09-27"
+        ],
+        "eps_diluted_quarter": [
+          2.1,
+          "us-gaap:EarningsPerShareDiluted 2026-06-29..2026-09-27"
+        ],
+        "dividends_declared_per_share_quarter": [
+          1.3,
+          "us-gaap:CommonStockDividendsPerShareDeclared 2026-06-29..2026-09-27"
+        ],
+        "dividend_regular_latest": [
+          1.3,
+          "us-gaap:CommonStockDividendsPerShareDeclared 2026-06-29..2026-09-27"
+        ],
+        "operating_cash_flow_ytd": [
+          18000000000,
+          "us-gaap:NetCashProvidedByUsedInOperatingActivities 2025-12-29..2026-09-27"
+        ],
+        "capex_ytd": [
+          3000000000,
+          "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment 2025-12-29..2026-09-27"
+        ],
+        "dividends_paid_ytd": [
+          9300000000,
+          "us-gaap:PaymentsOfDividendsCommonStock 2025-12-29..2026-09-27"
+        ]
+      }
+    }
   }
 }

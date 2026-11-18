@@ -5,7 +5,8 @@
   resolve T                         ticker → CIK, 회사 이름, SIC(6798이면 REIT)
   filings T [--forms F] [--limit N] 최근 공시 목록. 실적 8-K(item 2.02)를 표시한다
   exhibits T --accession A          공시의 EX-99 문서를 받아 .txt로 바꾼다
-  xbrl T --period P [--facts F]     XBRL에서 그 분기 값을 facts 초안에 채운다(비어 있는 칸만)
+  xbrl T --period P [--facts F]     XBRL에서 그 분기 값을 facts 초안에 채운다(비어 있는 칸만).
+                                    REIT가 아니면 일반 배당주 칸(EPS, 현금흐름 YTD, 배당)
   dividends T [--facts F]           XBRL 연간 주당 배당 history
   --check                           network 없이 fixture로 확인한다
 
@@ -58,6 +59,24 @@ XBRL_MAP = {
     "dividends_paid_per_share_quarter": ("duration", "USD/shares", ["us-gaap:CommonStockDividendsPerShareCashPaid",
                                                                     "us-gaap:CommonStockDividendsPerShareDeclared"]),
 }
+# 일반 배당주(SIC가 6798이 아님) 칸 ← concept 후보. ytd는 회계연도 시작부터 그 분기 끝날까지(현금흐름표 기간).
+DIVIDEND_XBRL_MAP = {
+    "net_income_common": ("duration", "USD", ["us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic",
+                                              "us-gaap:NetIncomeLoss"]),
+    "eps_diluted_quarter": ("duration", "USD/shares", ["us-gaap:EarningsPerShareDiluted"]),
+    "dividends_declared_per_share_quarter": ("duration", "USD/shares", ["us-gaap:CommonStockDividendsPerShareDeclared",
+                                                                        "us-gaap:CommonStockDividendsPerShareCashPaid"]),
+    "dividend_regular_latest": ("duration", "USD/shares", ["us-gaap:CommonStockDividendsPerShareDeclared",
+                                                           "us-gaap:CommonStockDividendsPerShareCashPaid"]),
+    "operating_cash_flow_ytd": ("ytd", "USD", ["us-gaap:NetCashProvidedByUsedInOperatingActivities",
+                                               "us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"]),
+    "capex_ytd": ("ytd", "USD", ["us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+                                 "us-gaap:PaymentsToAcquireProductiveAssets"]),
+    "dividends_paid_ytd": ("ytd", "USD", ["us-gaap:PaymentsOfDividendsCommonStock", "us-gaap:PaymentsOfOrdinaryDividends",
+                                          "us-gaap:PaymentsOfDividends"]),
+}
+XBRL_NOTE = {"dividend_regular_latest": "XBRL 초안: 분기 배당 1회분(분기 배당이면 분기 값과 같다). 최근 배당 공지가 다르면 고친다"}
+END_TOLERANCE_DAYS = 7  # 52·53주 회계연도는 분기 끝날이 달력 분기 끝날과 며칠 다르다
 UNIT_NAME = {"USD": "USD", "shares": "shares", "USD/shares": "USD/share"}
 DIVIDEND_CONCEPTS = ["us-gaap:CommonStockDividendsPerShareDeclared", "us-gaap:CommonStockDividendsPerShareCashPaid"]
 
@@ -278,13 +297,16 @@ def quarter_end(period):
 
 
 def pick_fact(cf, concept, unit, kind, end):
-    """그 분기 끝날의 값. duration은 80~100일(3개월)만. 같은 기간이 여러 번 나오면 가장 늦게 낸 값."""
+    """그 분기 끝날(±7일)의 값. duration은 80~100일(3개월)만, ytd는 380일 안에서 가장 긴 기간.
+    끝날이 가장 가까운 것, 그다음 (ytd면 긴 기간,) 가장 늦게 낸 값."""
     ns, name = concept.split(":")
     obs = (((cf.get("facts") or {}).get(ns) or {}).get(name) or {}).get("units", {}).get(unit) or []
-    best = None
+    best, best_key = None, None
     for o in obs:
-        if o.get("end") != end.isoformat():
+        gap = abs((parse_date(o["end"]) - end).days)
+        if gap > END_TOLERANCE_DAYS:
             continue
+        days = 0
         if kind == "instant":
             if o.get("start"):
                 continue
@@ -292,17 +314,20 @@ def pick_fact(cf, concept, unit, kind, end):
             if not o.get("start"):
                 continue
             days = (parse_date(o["end"]) - parse_date(o["start"])).days
-            if not 80 <= days <= 100:
+            if kind == "duration" and not 80 <= days <= 100:
                 continue
-        if best is None or o.get("filed", "") > best.get("filed", ""):
-            best = o
+            if kind == "ytd" and not 80 <= days <= 380:
+                continue
+        key = (-gap, days if kind == "ytd" else 0, o.get("filed", ""))
+        if best is None or key > best_key:
+            best, best_key = o, key
     return best
 
 
-def xbrl_draft(cf, period):
+def xbrl_draft(cf, period, is_reit=True):
     end = quarter_end(period)
     out = {}
-    for key, (kind, unit, concepts) in XBRL_MAP.items():
+    for key, (kind, unit, concepts) in (XBRL_MAP if is_reit else DIVIDEND_XBRL_MAP).items():
         for c in concepts:
             o = pick_fact(cf, c, unit, kind, end)
             if o:
@@ -310,13 +335,15 @@ def xbrl_draft(cf, period):
                 out[key] = {"value": o["val"], "unit": UNIT_NAME[unit], "status": "reported", "as_of": o["end"],
                             "source": "sec:xbrl %s %s" % (o.get("form", ""), o.get("accn", "")),
                             "locator": "%s %s" % (c, span),
-                            "note": "XBRL 초안: Ex.99 표의 같은 줄과 맞는지 확인한다"}
+                            "note": XBRL_NOTE.get(key, "XBRL 초안: Ex.99 표의 같은 줄과 맞는지 확인한다")}
                 break
     return out
 
 
 def annual_dividends(cf):
-    """연간(350~380일, 10-K) 주당 배당. Declared가 없으면 CashPaid. 해마다 가장 늦게 낸 값."""
+    """연간(350~380일, 10-K) 주당 배당. 해마다 가장 늦게 낸 값. 해는 기간 가운데 날의 해.
+    Declared를 먼저 쓰되, 마지막 해 값이 CashPaid의 절반도 안 되면 다른 뜻으로 단 tag로 보고 CashPaid를 쓴다."""
+    found = []
     for c in DIVIDEND_CONCEPTS:
         ns, name = c.split(":")
         obs = (((cf.get("facts") or {}).get(ns) or {}).get(name) or {}).get("units", {}).get("USD/shares") or []
@@ -327,29 +354,53 @@ def annual_dividends(cf):
             days = (parse_date(o["end"]) - parse_date(o["start"])).days
             if not 350 <= days <= 380:
                 continue
-            y = o["end"][:4]
+            mid = parse_date(o["start"]) + (parse_date(o["end"]) - parse_date(o["start"])) / 2
+            y = str(mid.year)  # 52·53주 회계연도는 끝날이 다음 해 1월 초일 수 있어 기간 가운데 날의 해로 부른다
             if y not in years or o.get("filed", "") > years[y].get("filed", ""):
                 years[y] = o
         if years:
-            series = [{"period": y, "value": o["val"], "unit": "USD/share", "status": "reported", "as_of": o["end"],
-                       "source": "sec:xbrl %s %s" % (o.get("form"), o.get("accn")),
-                       "locator": "%s FY%s (%s..%s)" % (c, y, o["start"], o["end"]), "note": ""}
-                      for y, o in sorted(years.items())]
-            short = [o for o in obs if o.get("start") and
-                     25 <= (parse_date(o["end"]) - parse_date(o["start"])).days <= 35]
-            hint = "월별 지급 기록이 있음(12회일 수 있음)" if short else "월별 기록 없음(분기 4회일 수 있음)"
-            return series, c, hint
-    return [], None, "XBRL에 주당 배당 concept이 없음"
+            found.append((c, obs, years))
+    if not found:
+        return [], None, "XBRL에 주당 배당 concept이 없음"
+    c, obs, years = found[0]
+    note = ""
+    if len(found) > 1:
+        last0 = found[0][2][max(found[0][2])]["val"]
+        last1 = found[1][2][max(found[1][2])]["val"]
+        if last0 < 0.5 * last1:
+            note = "%s 마지막 해 값 %s가 %s %s의 절반도 안 되어 %s를 씀; " % (
+                found[0][0], last0, found[1][0], last1, found[1][0])
+            c, obs, years = found[1]
+    series = [{"period": y, "value": o["val"], "unit": "USD/share", "status": "reported", "as_of": o["end"],
+               "source": "sec:xbrl %s %s" % (o.get("form"), o.get("accn")),
+               "locator": "%s FY%s (%s..%s)" % (c, y, o["start"], o["end"]), "note": ""}
+              for y, o in sorted(years.items())]
+    short = [o for o in obs if o.get("start") and
+             25 <= (parse_date(o["end"]) - parse_date(o["start"])).days <= 35]
+    hint = note + ("월별 지급 기록이 있음(12회일 수 있음)" if short else "월별 기록 없음(분기 4회일 수 있음)")
+    return series, c, hint
 
 
 def skeleton(info, period, filing):
-    facts = {k: {"value": None, "status": "missing", "note": "Ex.99에서 채울 것"} for k in reit_calc.FACT_KINDS}
-    return {"schema": reit_calc.FACTS_SCHEMA, "ticker": info["ticker"], "period": period,
-            "period_end": quarter_end(period).isoformat(),
-            "company": {k: info[k] for k in ("cik", "name", "sic", "sic_description", "is_reit")},
-            "filing": filing or {}, "facts": facts,
-            "series": {k: [] for k in reit_calc.SERIES_KINDS},
-            "affo_bridge": {"start": None, "items": []}, "sector_kpis": {}}
+    """facts 초안. REIT가 아니면 일반 배당주 칸(reit_calc.DIVIDEND_FACT_KINDS)으로 만든다."""
+    reit = info["is_reit"]
+    kinds = reit_calc.FACT_KINDS if reit else reit_calc.DIVIDEND_FACT_KINDS
+    facts = {k: {"value": None, "status": "missing", "note": "Ex.99에서 채울 것"} for k in kinds}
+    doc = {"schema": reit_calc.FACTS_SCHEMA, "ticker": info["ticker"], "period": period,
+           "period_end": quarter_end(period).isoformat(),
+           "company": {k: info[k] for k in ("cik", "name", "sic", "sic_description", "is_reit")},
+           "filing": filing or {}, "facts": facts,
+           "series": {k: [] for k in (reit_calc.SERIES_KINDS if reit else reit_calc.DIVIDEND_SERIES_KINDS)}}
+    if reit:
+        doc.update({"affo_bridge": {"start": None, "items": []}, "sector_kpis": {}})
+    return doc
+
+
+def earnings_8k_for(rows, period):
+    """그 분기의 실적 8-K: 분기 끝날 뒤 120일 안에 낸 실적 8-K 중 가장 이른 것. 없으면 None."""
+    end = quarter_end(period)
+    cands = [r for r in rows if r["earnings"] and 0 < (parse_date(r["filed"]) - end).days <= 120]
+    return min(cands, key=lambda r: r["filed"]) if cands else None
 
 
 def merge_missing(doc, draft):
@@ -389,7 +440,8 @@ def cmd_resolve(args):
     write_json(info, os.path.join(filings_dir(args.ticker), "company.json"))
     print(json.dumps(info, ensure_ascii=False, indent=2))
     if not info["is_reit"]:
-        log("SIC %s(%s): REIT(6798)가 아님. FFO 경로는 맞지 않는다" % (info["sic"], info["sic_description"]))
+        log("SIC %s(%s): REIT(6798)가 아님. FFO 대신 일반 배당주 경로(EPS·FCF payout, Chowder)를 탄다" % (
+            info["sic"], info["sic_description"]))
     return 0
 
 
@@ -441,13 +493,18 @@ def cmd_xbrl(args):
         return 1
     info, sub = load_company(args.ticker)
     cf = load_companyfacts(args.ticker, info["cik"])
-    draft = xbrl_draft(cf, args.period)
+    draft = xbrl_draft(cf, args.period, is_reit=info["is_reit"])
+    if not info["is_reit"]:
+        log("SIC %s: REIT가 아니라 일반 배당주 칸으로 초안을 만든다(EPS·FCF payout, Chowder)" % info["sic"])
     path = args.facts or facts_path(args.ticker, args.period)
     if os.path.exists(path):
         doc = read_json(path)
     else:
-        latest = next((r for r in filing_list(sub, ["8-K"], 40) if r["earnings"]), None)
-        doc = skeleton(info, args.period, latest and {k: latest[k] for k in ("form", "accession", "filed")})
+        f8k = earnings_8k_for(filing_list(sub, ["8-K"], 80), args.period)
+        doc = skeleton(info, args.period, f8k and {k: f8k[k] for k in ("form", "accession", "filed")})
+        ends = [v["as_of"] for v in draft.values()]
+        if ends:  # 52·53주 회계연도면 실제 분기 끝날(XBRL)이 달력 끝날과 다르다
+            doc["period_end"] = max(sorted(set(ends)), key=ends.count)
     filled = merge_missing(doc, draft)
     write_json(doc, path)
     todo = [k for k, v in doc["facts"].items() if v.get("status") == "missing"]
@@ -538,6 +595,9 @@ def run_check():
     rows = filing_list(sub, ["8-K", "10-Q"], 10)
     ok([r["accession"] for r in rows if r["earnings"]] == exp["earnings_accessions"], "실적 8-K는 item 2.02가 든 것")
     ok(all(r["form"] in ("8-K", "10-Q") for r in rows) and len(filing_list(sub, [], 2)) == 2, "--forms와 --limit")
+    ok((earnings_8k_for(rows, "2026Q3") or {}).get("accession") == exp["earnings_accessions"][0]
+       and (earnings_8k_for(rows, "2026Q2") or {}).get("accession") == exp["earnings_accessions"][1]
+       and earnings_8k_for(rows, "2025Q3") is None, "분기마다 그 분기 실적 8-K(끝날 뒤 120일 안 가장 이른 것)")
 
     # 3. exhibits
     docs = index_documents(fx_text("index.htm"))
@@ -570,11 +630,38 @@ def run_check():
     ok(set(doc["facts"]) == set(reit_calc.FACT_KINDS) and doc["schema"] == reit_calc.FACTS_SCHEMA,
        "facts 초안에 reit_calc의 칸이 모두 있음")
 
+    # 4b. 일반 배당주 초안: 52·53주 회계연도(분기 끝날 2026-09-27), 현금흐름은 YTD
+    cfd = fx_json("companyfacts_div.json")
+    dd = xbrl_draft(cfd, "2026Q3", is_reit=False)
+    for k, (val, loc) in exp["xbrl_div"]["values"].items():
+        got = dd.get(k, {})
+        ok(got.get("value") == val and got.get("locator") == loc, "xbrl(배당주) %s = %s %s (got %s %s)" % (
+            k, val, loc, got.get("value"), got.get("locator")))
+    ok(xbrl_draft(cfd, "2026Q2", is_reit=False).get("operating_cash_flow_ytd", {}).get("value") == 11000000000,
+       "YTD는 그 분기 끝날의 가장 긴 기간(2분기는 6개월 값)")
+    ok("depreciation_amortization" not in dd and "ffo_reported" not in skeleton(
+        dict(info, is_reit=False), "2026Q3", None)["facts"], "배당주 초안·skeleton에는 FFO 칸이 없음")
+    ok(set(skeleton(dict(info, is_reit=False), "2026Q3", None)["facts"]) == set(reit_calc.DIVIDEND_FACT_KINDS),
+       "배당주 skeleton 칸 = reit_calc.DIVIDEND_FACT_KINDS")
+    ok(xbrl_draft(cf, "2026Q4") == {} and pick_fact(cfd, "us-gaap:NetIncomeLoss", "USD", "duration",
+                                                    dt.date(2026, 10, 15)) is None,
+       "끝날이 7일 넘게 다르면 다른 분기로 보고 고르지 않음")
+
     # 5. 배당 history
     series, concept, hint = annual_dividends(cf)
     ok([(s["period"], s["value"]) for s in series] == [tuple(x) for x in exp["dividends"]]
        and concept.endswith("CashPaid") and "월별" in hint,
        "연간 배당: 10-K 연간 값만, 해마다 늦게 낸 값, Declared 없으면 CashPaid")
+    odd = {"facts": {"us-gaap": {
+        "CommonStockDividendsPerShareDeclared": {"units": {"USD/shares": [
+            {"start": "2025-01-01", "end": "2025-12-31", "val": 0.03, "form": "10-K", "filed": "2026-02-20"}]}},
+        "CommonStockDividendsPerShareCashPaid": {"units": {"USD/shares": [
+            {"start": "2025-01-01", "end": "2025-12-31", "val": 4.04, "form": "10-K", "filed": "2026-02-20"}]}}}}}
+    s2, c2, h2 = annual_dividends(odd)
+    ok(c2.endswith("CashPaid") and s2[0]["value"] == 4.04 and "절반" in h2,
+       "Declared 값이 CashPaid의 절반도 안 되면 CashPaid를 씀(가상: 0.03 vs 4.04)")
+    odd["facts"]["us-gaap"]["CommonStockDividendsPerShareDeclared"]["units"]["USD/shares"][0]["val"] = 4.05
+    ok(annual_dividends(odd)[1].endswith("Declared"), "Declared가 정상 값이면 Declared를 씀")
 
     # 6. network 약속
     old = os.environ.pop("SEC_USER_AGENT", None)

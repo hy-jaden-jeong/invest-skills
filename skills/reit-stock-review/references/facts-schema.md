@@ -70,3 +70,22 @@
 ## affo_bridge
 
 회사 AFFO reconciliation을 줄마다 옮긴다. `start`는 `ffo_reported`나 `normalized_ffo_reported`(표가 시작하는 값), `items`는 그 아래 줄들이다. 부호는 더하는 값 기준이다. 표의 소계 줄(예: "Cumulative adjustments")은 넣지 않는다.
+
+## 일반 배당주 칸 (SIC가 6798이 아님)
+
+`company.is_reit`가 false면(없으면 `company.sic`가 6798이 아니면) 칸 목록이 다르다. 목록은 `reit_calc.py`의 `DIVIDEND_FACT_KINDS` 한 곳에 있고 `edgar.py xbrl`이 그것으로 초안을 만든다. `affo_bridge`·`sector_kpis`는 없고 series는 `dividend_per_share_annual`만 쓴다.
+
+| 칸 | 뜻 | 대개 어디에 |
+| --- | --- | --- |
+| `net_income_common` | 분기 순이익(보통주 귀속, 없으면 순이익) | XBRL `NetIncomeLossAvailableToCommonStockholdersBasic` → `NetIncomeLoss` |
+| `eps_diluted_quarter` | 분기 GAAP diluted EPS | XBRL `EarningsPerShareDiluted` |
+| `eps_guidance_low`, `eps_guidance_high` | 연간 EPS guidance. adjusted(non-GAAP)면 `note`에 쓴다 | 보도자료 guidance 표 |
+| `dividend_regular_latest`, `dividend_frequency` | 최근 정기 배당 1회분, 연 지급 횟수 | 배당 공지(회사 IR). XBRL 초안은 분기 주당 배당 |
+| `dividends_declared_per_share_quarter` | 분기 선언(없으면 지급) 주당 배당 | XBRL `CommonStockDividendsPerShareDeclared` → `CashPaid` |
+| `operating_cash_flow_ytd` | 영업활동 현금흐름, 회계연도 누적 | XBRL `NetCashProvidedByUsedInOperatingActivities` |
+| `capex_ytd` | 설비투자, 회계연도 누적(양수) | XBRL `PaymentsToAcquirePropertyPlantAndEquipment` |
+| `dividends_paid_ytd` | 보통주 배당 지급, 회계연도 누적(양수) | XBRL `PaymentsOfDividendsCommonStock` → `PaymentsOfOrdinaryDividends` → `PaymentsOfDividends` |
+| `price` | 주가 | `quote.py`가 넣는다 |
+
+- XBRL 분기 값은 끝날이 달력 분기 끝날에서 7일 안인 관측을 고른다(52·53주 회계연도). 누적(`_ytd`) 칸은 그 끝날의 380일 안 기간 중 가장 긴 것이다. 새 초안의 `period_end`는 XBRL 관측의 끝날이다.
+- 연간 배당 history의 해는 회계연도 기간 가운데 날의 해다(끝날이 다음 해 1월 초인 53주 해 때문). `Declared` 마지막 해 값이 `CashPaid`의 절반도 안 되면 `CashPaid`를 쓴다(다른 뜻으로 단 tag).
