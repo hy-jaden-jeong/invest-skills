@@ -56,10 +56,10 @@
 | B2 | 섹터 이름을 주면 그 섹터의 수요·공급 지표(예: 오피스 ↔ professional and business services 고용, 오피스 건설 지출)를 함께 낸다 | S1: 같은 run의 `sectors.office` = USPBS, USINFO, USFIRE(수요), TLOFCONS(공급). 이어서 `fetch --sector retail`을 돌리자 같은 날 snapshot에 retail 6개가 더해지고 office와 웹 값이 남음(series 35개). `--check`의 "--sector office는 core + office" 통과 |
 | B3 | `FRED_API_KEY`가 없어도 B1이 돈다 | S1: 위 run이 `FRED_API_KEY` 없이(`env -u`) `fred_access: fredgraph.csv`로 돌았다. DGS10 최신값 5.12(2026-11-16)가 https://fred.stlouisfed.org/series/DGS10 page의 "2026-11-16: 5.12"와 같음. custom User-Agent를 붙이면 fredgraph가 응답하지 않아 urllib 기본값을 쓴다 |
 | B4 | FRED에 없는 값(ISM PMI, Fed funds 기대치)은 웹 채우기로 넣고 `source: web`과 URL을 단다. 못 찾으면 `missing` | S1: ISM 1차 자료 PDF(ismworld.org r4in202610pmi.pdf)의 "The Manufacturing PMI® registered 55.5 percent."를 `macro.py web ISM_MFG_PMI --value 55.5 --as-of 2026-10 --url ... --quote ...`로 넣어 `reported`, `source: web:<URL>`, `locator`=원문. CME FedWatch page는 60초 timeout이라 `--missing`으로 missing. `--quote` 없이 넣으면 exit 1로 거절. `--check`가 `--secondary`→estimated, 오래된 기준일→stale을 확인 |
-| B5 | "어느 섹터가 싸", "저평가 섹터 찾아줘"라고 하면 `reit-sector-scan`이 REITWatch를 받아 subsector마다 median P/FFO·배당수익률의 자기 history percentile·z-score, 배당수익률−10년물 spread, 3·5년 상대 성과를 표로 낸다 | |
-| B6 | 처음 돌 때 2015-01부터 분기말 달(3·6·9·12월)과 최근 12개월을 backfill한다. 파싱한 JSON만 남기고 PDF는 지운다 | |
-| B7 | 섹터를 고르면 그 섹터 종목의 screening 표(P/FFO, 배당수익률, 시총, debt ratio)를 낸다 | |
-| B8 | 구조적 하락 신호(수요 지표가 계속 나빠지고, 공급이 계속 늘어남)가 있는 섹터는 "싸 보이는 이유"를 함께 적는다 | |
+| B5 | "어느 섹터가 싸", "저평가 섹터 찾아줘"라고 하면 `reit-sector-scan`이 REITWatch를 받아 subsector마다 median P/FFO·배당수익률의 자기 history percentile·z-score, 배당수익률−10년물 spread, 3·5년 상대 성과를 표로 낸다 | S2: backfill 뒤 `reitwatch.py sectors --out ~/invest-data/sectors/2026-11-18.json` exit 0. REITWatch 2026-10 호(가격 기준일 2026-09-30, 종목 180개, unparsed 0)로 equity subsector 17개 표, 표본 48개 호(2015-01~2026-10의 1·4·7·10월). Free Standing: P/FFO median 12.465, 배당수익률 median 5.125. PDF text의 Free Standing 10개 row를 손으로 정렬해 센 값(P/FFO 가운데 12.45·12.48 → 12.465, 배당 5.09·5.16 → 5.125)과 같음. P/FFO percentile 4.1667·z -1.54, spread +0.005(DGS10 5.12, 2026-11-16), 3·5년 상대 +0.74·+5.19. `--macro-snapshot /nonexistent/snap.json`이면 exit 2, DGS10과 17개 subsector의 spread가 모두 `missing`(note "macro snapshot이 없음"), 구조 신호 `review`. `--check`가 손계산 값(지어낸 fixture의 median 14.0, percentile 30.0, z -0.7746, spread 0.75, 상대 +0.5)과 맞음 |
+| B6 | 처음 돌 때 2015-01부터 분기말 달(3·6·9·12월)과 최근 12개월을 backfill한다. 파싱한 JSON만 남기고 PDF는 지운다 | S2: `fetch --month 2026-10 --backfill` exit 0, 1분 37초. 받음 55, 이미 있음 1(2026-10), 실패 0. 2015-01~2026-10 호 56개 모두 unparsed 0, 종목 180~213개. 끝난 뒤 `~/invest-data/reitwatch`에 PDF·txt 0개, 전체 5.0M(parsed 56개 + history.csv). `fetch --month latest`는 RW2611이 404라 2026-10을 받음. `--check`가 달 목록 56개, 이미 받은 호 건너뛰기, latest의 404 건너뛰기를 확인 |
+| B7 | 섹터를 고르면 그 섹터 종목의 screening 표(P/FFO, 배당수익률, 시총, debt ratio)를 낸다 | S2: `peers --ticker O` → Free Standing 10종목, P/FFO 오름차순(PINE 8.11, GTY 11.21, NNN 11.6 …), 칸 P/FFO·배당수익률·시총·debt ratio 등, median P/FFO 12.465. PINE 8.11·7.38은 PDF row와 같음. 없는 이름(`--subsector Offices`)은 exit 1과 있는 이름 목록 |
+| B8 | 구조적 하락 신호(수요 지표가 계속 나빠지고, 공급이 계속 늘어남)가 있는 섹터는 "싸 보이는 이유"를 함께 적는다 | S2: macro snapshot에 섹터 7개를 더 받은 뒤(B19) `structural.flag`가 watch 5개: Office(demand 3개 중 USINFO·USFIRE 나빠짐, TLOFCONS 늘어남), Data Centers, Apartments·Manufactured Homes·Single Family Homes(임대 공실률 상승, 5+ unit 허가 증가). 메모 절차는 SKILL.md "구조적 하락 신호"에 썼다. 메모를 실제로 쓰는 것은 agent 몫이라 이번 증명에서는 판정까지만 확인했다. `--check`가 판정 규칙(나빠짐·늘어남·supply 없는 섹터는 ok·snapshot에 없는 섹터는 review)을 확인 |
 | B9 | "O 분석해줘"라고 하면 `reit-stock-review` deep mode가 EDGAR에서 최신 실적 8-K Ex.99와 XBRL을 받고, agent가 값을 읽어 facts에 위치와 함께 적고, script가 지표를 계산해 보고서를 쓴다 | |
 | B10 | deep 보고서에는 FFO→AFFO bridge, 배당 지속성(forward yield, AFFO payout, 배당 CAGR, 컷 이력), 재무(net debt/EBITDAre, coverage, 고정금리 비중, 만기 사다리), 운영(occupancy, WALE, 임차인 집중도, same-store NOI, 섹터별 지표), valuation(P/FFO·P/AFFO의 자기 history·peer·10년물 대비, implied cap rate), 다시 볼 조건, 데이터 구멍이 있다 | |
 | B11 | Nareit 식으로 다시 계산한 FFO가 회사 발표값과 0.5% 넘게 다르면 exit 2이고 보고서 "데이터 구멍"에 올린다 | |
@@ -70,8 +70,8 @@
 | B16 | "내 포트폴리오 점검해줘"라고 하면 `dividend-portfolio-check`가 holdings CSV를 읽어 비중, 섹터 쏠림, 예상 연 배당과 월별 배당 일정, 종목별 flag, 금리 민감도 노출을 보고한다 | |
 | B17 | 분석이 없거나 오래된 종목(새 실적 8-K가 나왔는데 metrics가 그 전 분기)은 `reit-stock-review`로 자동으로 다시 분석한다. 시작 전에 몇 종목인지 알린다 | |
 | B18 | holdings 경로는 `INVEST_HOLDINGS_FILE` 또는 `$INVEST_DATA_DIR/holdings.csv`이고, 없으면 사용자에게 묻는다. 레포에는 가상 예시만 있다 | |
-| B19 | 위 단계 skill의 snapshot이 없거나 오래됐으면, 그 skill이 설치돼 있으면 갱신하고 아니면 그 칸을 `missing`으로 두고 계속한다 | |
-| B20 | 어떤 보고서에도 "사라", "팔아라", 목표가가 없다 | S1: SKILL.md "해석할 때"에 추천·목표가 금지를 적었다. 위 보고서에 `grep -E '사라|팔아|매수하|매도하|목표가|비중을 (늘|줄)|buy|sell'` 0건(머리의 "매수·매도 권유가 아니다" 고지만 있음). S3·S5 보고서에서 다시 확인한다 |
+| B19 | 위 단계 skill의 snapshot이 없거나 오래됐으면, 그 skill이 설치돼 있으면 갱신하고 아니면 그 칸을 `missing`으로 두고 계속한다 | S2: 첫 `sectors`가 stderr에 "macro snapshot에 없는 섹터: data_center, healthcare, industrial, lodging, net_lease, residential, self_storage"를 내고 그 subsector를 `review`로 둔 채 exit 0으로 계속했다. SKILL.md 절차대로 `macro.py fetch --sector <섹터>` 7번(모두 exit 0) 뒤 다시 돌리자 review는 대응 섹터가 없는 5개(Diversified, Gaming, Specialty, Telecommunications, Timberland)만 남음. snapshot이 없으면 spread missing으로 계속(B5) |
+| B20 | 어떤 보고서에도 "사라", "팔아라", 목표가가 없다 | S1: SKILL.md "해석할 때"에 추천·목표가 금지를 적었다. 위 보고서에 `grep -E '사라|팔아|매수하|매도하|목표가|비중을 (늘|줄)|buy|sell'` 0건(머리의 "매수·매도 권유가 아니다" 고지만 있음). S3·S5 보고서에서 다시 확인한다 ; S2: SKILL.md "해석할 때"에 추천·목표가 금지를 적었다. `sectors` JSON에 위 grep 0건. 보고서 md는 agent가 쓰므로 S3·S5 보고서와 함께 다시 확인한다 |
 
 ## 설계
 
@@ -124,6 +124,26 @@ flowchart TB
 - `missing`: `value`는 null, `note`에 이유. 0이나 보간으로 채우지 않는다. 입력이 하나라도 missing이면 계산값도 missing이다.
 - 웹 채우기 값은 `source: "web:<URL>"`이고 `locator`에 원문 문장을 그대로 둔다. 회사 IR·SEC·통계 기관 같은 1차 자료면 `reported`, 기사·블로그 같은 2차 자료면 `estimated`다.
 
+### REITWatch parsed 형식
+
+`reit-sector-scan`이 쓰고 `reit-stock-review`가 ticker로 subsector·consensus FFO·peer를 찾는 파일이다. `$INVEST_DATA_DIR/reitwatch/parsed/<YYYY-MM>.json` 하나가 REITWatch 한 호다.
+
+```json
+{"schema": "reitwatch-parsed/1", "month": "2026-10", "as_of": "2026-09-30",
+ "source": "https://www.reit.com/sites/default/files/reitwatch/RW2610.pdf",
+ "fy1": 2026, "fy2": 2027, "parsed_at": "...", "unparsed": ["..."],
+ "rows": [{"ticker": "O", "name": "Realty Income", "subsector": "Free Standing",
+           "price": 54.3, "ffo_fy1": 4.35, "ffo_fy2": 4.53, "p_ffo_fy1": 12.48, "p_ffo_fy2": 11.98,
+           "div_yield": 6.0, "mkt_cap": 50632.1, "debt_ratio": 39.1,
+           "hi52": 67.56, "lo52": 53.35, "ffo_growth": 4.2, "implied_mkt_cap": 50729.6,
+           "tr_1y": -5.34, "tr_3y": 8.68, "tr_5y": 2.3, "rating": "A-"}]}
+```
+
+- 첫 칸은 `"schema": "reitwatch-parsed/1"`이다. `month`는 PDF URL의 호(`RW{yymm}`), `as_of`는 PDF의 가격 기준일("Data as of")이다. 10월 호의 가격은 9월 말 값이다.
+- 칸 이름은 위와 같다. PDF에 값이 없으면(`-`) null이다. 단위: `price`·`ffo_*`는 달러(주당), `p_ffo_*`는 배수, `div_yield`·`debt_ratio`·`ffo_growth`·`tr_*`는 %, `mkt_cap`(equity)·`implied_mkt_cap`은 백만 달러. `fy1`·`fy2`는 FFO 추정 column의 연도다.
+- PDF의 AVERAGE row, FFO payout, Debt/EBITDA는 넣지 않는다(D9).
+- `unparsed`는 표 안에 있었지만 column 수가 맞지 않아 읽지 못한 줄이다.
+
 ## 결정
 
 | # | 결정 | 답 | 정한 쪽 | 먼저 정할 것 | 이유와 버린 대안 | 상태 |
@@ -144,6 +164,15 @@ flowchart TB
 | D14 | 같은 날 다시 받기 | 같은 날 snapshot 파일이 있으면 새로 받은 series만 바꾸고 나머지(다른 섹터, 웹 채우기 값)는 남긴다 | agent | D3 | 오피스를 받고 리테일을 받으면 하루 snapshot 하나에 둘 다 있어야 다른 skill이 최신 파일 하나만 읽는다 | 정해짐 |
 | D15 | 웹 채우기 값 넣기 | `macro.py web` 명령이 snapshot의 `web` 항목에 넣는다. URL과 원문 문장이 없으면 거절하고, `--secondary`면 `estimated`, 아니면 `reported`다 | agent | D7 | agent가 JSON을 손으로 고치면 출처 없는 값이 들어갈 수 있다. script가 D7 규칙을 막는다 | 정해짐 |
 | D16 | macro 계산 규칙 | 변화: 일·주 자료는 목표일 이전 7일 안의 마지막 관측, 월·분기 자료는 같은 날짜 관측과 뺀다(없으면 null). 분기 자료는 1개월 변화 없음. YoY는 단위가 Percent가 아닐 때만. 10년 percentile: 최신일 10년 전 초과~최신일 관측 중 최신값 이하 비율(%), history가 10년보다 짧으면 null. stale은 관측일(기간 시작일)부터 오늘까지 일수가 `max_lag_days`를 넘을 때. exit 2는 FRED series의 missing만 센다(웹 채우기 전 항목은 세지 않음) | agent | D6 | 2025-10 CPI처럼 빠진 달을 옆 달로 메우면 틀린 변화가 나온다. 금리의 YoY(%)는 뜻이 없어 12개월 변화(%p)로 본다 | 정해짐 |
+| D17 | REITWatch 호와 분기말 | 파일 이름 `<YYYY-MM>`은 PDF의 호(URL의 `RW{yymm}`)다. backfill의 분기 표본은 1·4·7·10월 호다. 이 호의 가격 기준일이 3·6·9·12월 말이다 | agent | D10 | 2026-10 호의 "Data as of"가 2026-09-30이다. D10의 "분기말"은 분기말 가격을 뜻하므로 3·6·9·12월 호(2·5·8·11월 말 가격)가 아니라 그 다음 달 호를 받는다 | 정해짐 |
+| D18 | REITWatch 파싱 | `pdftotext -layout` 출력에서 "Name Ticker" 머리줄 뒤부터 OVERALL AVERAGE까지 읽는다. 숫자 23개(+신용등급) 줄이 종목, 숫자 없는 짧은 줄이 subsector 이름이다. 이름이 두 줄로 꺾인 종목(ticker로 시작하는 줄)은 앞 줄을 이름으로 쓴다. column 수가 다른 줄은 `unparsed`에 남기고, 종목이 50개 미만이면 파싱 실패(exit 1)다 | agent | D9 | 2015~2026 호 7개의 layout이 같다(2010 호는 다름). 이름 꺾임은 2015-01 호 HASI에서 봤다. 빈 값도 `-`로 찍혀 token 수가 유지된다(2026-10 호 COLD·NLOP의 debt ratio). 그래서 글자 위치로 column을 자르지 않고 token 수로 읽는다 | 정해짐 |
+| D19 | percentile·z-score | history 표본은 같은 subsector 이름의 1·4·7·10월 호와 최신 호다. percentile은 표본 중 최신값 이하 비율(%), z-score는 (최신값 − 평균) / 표본 표준편차다. 표본이 8개 미만이면 missing이다 | agent | D17 | 최근 12개월을 매달 넣으면 최근 1년의 무게가 네 배가 된다. 8개는 2년치 분기다 | 정해짐 |
+| D20 | 배당수익률−10년물 spread | subsector median 배당수익률 − macro snapshot의 DGS10 최신값(%p). 두 기준일을 `note`에 쓴다. snapshot이 없으면 missing, snapshot 날짜가 오늘보다 7일 넘게 이르면 stale이다 | agent | D19 | REITWatch 기준일(월말)과 DGS10 최신일이 다르다. macro-check의 snapshot을 읽기만 한다는 설계(D1)를 지키려고 REITWatch 안의 10년물 값은 쓰지 않는다 | 정해짐 |
+| D21 | mortgage subsector | Home Financing, Commercial Financing(이름에 Financing·Mortgage가 든 것)은 섹터 표에서 빼고 `excluded`에 이유와 함께 적는다. peers에는 나온다 | agent | D9 | REITWatch가 mortgage REIT의 FFO를 내지 않아 P/FFO 비교가 안 된다 | 정해짐 |
+| D22 | 3·5년 상대 성과 | subsector 종목의 3-Yr·5-Yr total return median − 같은 호 equity 종목 전체 median(%p) | agent | D21 | PDF의 subsector 표(Exhibit 2)에는 3·5년 수익률이 없다. 지금 상장된 종목만 들어 survivorship이 있어 `note`에 쓴다 | 정해짐 |
+| D23 | 구조적 하락 신호 | `assets/sector_map.json`이 REITWatch subsector → macro-check 섹터, 섹터 지표마다 demand·supply와 좋은 방향을 정한다. demand는 3·12개월 변화가 둘 다 나쁜 방향이면 "나빠짐", supply는 둘 다 양수면 "늘어남"이다. 값이 있는 demand 지표의 절반 이상이 나빠지고 supply가 하나라도 늘면 `watch`, 지표가 없으면 `review`, 아니면 `ok`다. 메모는 agent가 SKILL.md 절차로 쓴다 | agent | D20 | macro-check snapshot에는 demand·supply 구분이 없다. 3개월만 보면 한 달 잡음에 흔들려 12개월과 함께 본다 | 정해짐 |
+| D24 | 최신 호 받기 | `fetch --month latest`는 이번 달부터 세 달 앞까지 거꾸로 보며 처음 있는 호를 받는다 | agent | D17 | 호가 언제 올라오는지 정해져 있지 않다(2026-11-18에 RW2611은 404) | 정해짐 |
+| D25 | 이름이 바뀐 subsector | `assets/sector_map.json`의 `aliases`(Timber → Timberland, Infrastructure → Telecommunications)로 history를 잇는다. parsed 파일의 이름은 PDF 그대로 둔다 | agent | D19 | backfill 결과 2024-01 호부터 두 이름이 바뀌었다(Timber 2015-01~2023-10, Timberland 2024-01~). 잇지 않으면 표본이 2024-01 호부터의 12개뿐이라 history 대부분을 잃는다(이으면 Timberland 48개, Telecommunications 44개). 2015년의 Mixed, 2023-10에 생긴 Gaming은 잇지 않는다 | 정해짐 |
 
 ## test할 seam
 
@@ -161,7 +190,7 @@ flowchart TB
 | # | 만드는 것 | 채우는 동작 | 먼저 끝나야 하는 slice | 증명 방법 | 상태 |
 | --- | --- | --- | --- | --- | --- |
 | S1 | `macro-check`: series 목록, key 없는 FRED 수집·cache, snapshot(변화·YoY·percentile), 섹터 지표, 웹 채우기 절차, `--check` | B1, B2, B3, B4, B20 | 없음 | `FRED_API_KEY` 없이 `macro.py fetch --sector office`가 exit 0~2로 snapshot을 쓰고, DGS10 최신값이 FRED 웹 값과 같다. `--check` exit 0 | 끝: key 없이 `fetch --sector office` exit 0, FRED 31개 reported, DGS10 5.12(2026-11-16)가 FRED page와 같음. `--check` exit 0(손계산 값, 로직을 하나씩 일부러 깨는 mutation 11개가 모두 FAIL로 잡힘). 보고서 작성, ISM 웹 채우기 reported, FedWatch missing |
-| S2 | `reit-sector-scan`: REITWatch 받기·파싱·backfill, subsector median·percentile·spread·상대 성과 표, peers, 구조적 하락 메모 | B5, B6, B7, B8, B19 | S1 | 최신 REITWatch로 섹터 표가 나오고 Free Standing median이 PDF row로 손계산한 값과 같다. macro snapshot을 지우면 spread 칸이 missing으로 나온다 | 대기 |
+| S2 | `reit-sector-scan`: REITWatch 받기·파싱·backfill, subsector median·percentile·spread·상대 성과 표, peers, 구조적 하락 메모 | B5, B6, B7, B8, B19 | S1 | 최신 REITWatch로 섹터 표가 나오고 Free Standing median이 PDF row로 손계산한 값과 같다. macro snapshot을 지우면 spread 칸이 missing으로 나온다 | 끝: `--check` exit 0(손계산 값, 로직을 하나씩 일부러 깨는 mutation 13개가 모두 FAIL로 잡힘). 실제 backfill 56개 호 받기·파싱 실패 0, PDF 남지 않음. 최신 2026-10 호로 섹터 표, Free Standing median 12.465·5.125가 PDF row 손계산과 같음. snapshot 경로가 없으면 spread missing. peers 표, 구조 신호 watch 5개 |
 | S3 | `reit-stock-review` deep: EDGAR resolve·filings·exhibits·xbrl, Finnhub·웹 시세, facts 형식, `reit_calc.py metrics`, 보고서 | B9, B10, B11, B15, B19, B20 | S2 | O 2026Q3 deep 보고서가 나오고 FFO 재계산이 1,041,026과 같다. FFO 입력 하나를 바꾸면 exit 2와 데이터 구멍이 나온다 | 대기 |
 | S4 | `reit-stock-review` compare·earnings·일반 배당주 경로 | B12, B13, B14 | S3 | PLD·REXR·EGP compare 표, O 2026Q2→Q3 earnings diff, 일반 배당주 1종목(가상 아님, 예: JNJ) payout 경로 | 대기 |
 | S5 | `dividend-portfolio-check`: holdings 형식·가상 예시, 비중·섹터·배당 일정·금리 노출, 오래된 종목 자동 재분석 | B16, B17, B18, B19, B20 | S4 | 가상 holdings 3종목으로 보고서가 나오고, metrics가 없는 종목이 자동으로 분석된 뒤 표에 들어간다 | 대기 |
