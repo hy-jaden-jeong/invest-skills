@@ -57,7 +57,7 @@ def from_finnhub(symbol, body, today, max_days):
     """Finnhub /quote JSON → 값 envelope. c는 현재가(장 마감 뒤에는 종가), t는 그 시각(unix)."""
     q = json.loads(body)
     c, t = q.get("c"), q.get("t")
-    if not c or not t:
+    if not reit_calc.is_finite(c) or c <= 0 or not reit_calc.is_finite(t) or t <= 0:
         return reit_calc.missing("Finnhub가 %s 값을 주지 않음(c=%r, t=%r)" % (symbol, c, t))
     as_of = dt.datetime.fromtimestamp(t, dt.timezone.utc).date()
     status, note = age_status(as_of, today, max_days)
@@ -76,7 +76,8 @@ def get_price(symbol, key, today, max_days, fetch=finnhub_get):
 
 
 def web_price(today, max_days, value=None, as_of=None, url=None, quote=None, secondary=False, missing=None):
-    """웹 채우기 규칙: URL·원문 문장이 없으면 거절(None, 이유). 2차 자료는 estimated, 오래되면 stale."""
+    """웹 채우기 규칙: URL·원문 문장이 없으면 거절(None, 이유). 2차 자료는 estimated, 오래되면 stale.
+    둘 다면 더 나쁜 estimated를 지키고 나이는 note에 쓴다(나쁜 순서 reported < derived < stale < estimated < missing)."""
     if missing is not None:
         if not missing.strip():
             return None, "--missing에는 이유를 쓴다"
@@ -90,11 +91,14 @@ def web_price(today, max_days, value=None, as_of=None, url=None, quote=None, sec
         d = reit_calc.parse_date(as_of)
     except (TypeError, ValueError):
         return None, "--value는 숫자, --as-of는 YYYY-MM-DD"
-    if v <= 0:
-        return None, "--value는 0보다 커야 함"
+    if not reit_calc.is_finite(v) or v <= 0:
+        return None, "--value는 0보다 큰 유한한 숫자여야 함"
+    if d > today:
+        return None, "--as-of 날짜(%s)가 오늘(%s)보다 늦음" % (d.isoformat(), today.isoformat())
     status, note = age_status(d, today, max_days)
     kind = "2차 자료" if secondary else "1차 자료"
-    return {"value": v, "unit": "USD/share", "status": status or ("estimated" if secondary else "reported"),
+    base = "estimated" if secondary else "reported"
+    return {"value": v, "unit": "USD/share", "status": reit_calc.worst([base, status or base]),
             "as_of": d.isoformat(), "source": "web:" + url, "locator": quote.strip(),
             "note": "; ".join(x for x in (kind, note) if x)}, ""
 
@@ -126,7 +130,7 @@ def cmd_price(args, today=None, fetch=finnhub_get):
             code = 2
         if args.period and not put_price(facts_path(t, args.period), env):
             return 1
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    print(json.dumps(out, ensure_ascii=False, indent=2, allow_nan=False))
     return code
 
 
@@ -215,6 +219,13 @@ def run_check():
     ok(web_price(today, md, secondary=True, **a)[0]["status"] == "estimated", "2차 자료 웹 가격은 estimated")
     ok(web_price(today, md, **dict(a, as_of="2026-11-01"))[0]["status"] == "stale", "오래된 웹 가격은 stale")
     ok(web_price(today, md, missing="찾지 못함")[0]["status"] == "missing", "--missing")
+    ok(all(web_price(today, md, **dict(a, value=v))[0] is None for v in ("nan", "inf", "-inf")),
+       "NaN·무한대 가격은 거절")
+    old2 = web_price(today, md, secondary=True, **dict(a, as_of="2026-11-01"))[0]
+    ok(old2["status"] == "estimated" and "허용 %d일" % md in old2["note"],
+       "오래된 2차 자료는 estimated를 지킨다(estimated가 stale보다 나쁨), note에 나이")
+    ok(web_price(today, md, **dict(a, as_of="2026-11-19"))[0] is None, "기준일이 오늘보다 늦으면 거절")
+    ok(from_finnhub("TEST", '{"c": NaN, "t": 1794949200}', today, md)["status"] == "missing", "Finnhub c가 NaN이면 missing")
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "f.json")

@@ -22,6 +22,7 @@ import datetime as dt
 import glob
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -31,7 +32,8 @@ SCHEMA = "portfolio-snapshot/1"
 DATES_SCHEMA = "portfolio-dividend-dates/1"
 METRICS_SCHEMA = "reit-metrics/1"
 STATUSES = ["reported", "derived", "stale", "estimated", "missing"]
-RANK = {s: i for i, s in enumerate(STATUSES)}  # 뒤로 갈수록 나쁘다(reit-stock-review D37과 같다)
+RANK = {s: i for i, s in enumerate(STATUSES)}  # 뒤로 갈수록 나쁘다(reit-stock-review와 같은 순서)
+FREQUENCIES = (1, 2, 4, 12)  # 배당 일정을 만들 수 있는 연 지급 횟수
 COLUMNS = ["ticker", "shares", "cost_basis", "account", "note"]
 GRADES = ["high", "medium", "low", "review"]
 
@@ -54,11 +56,11 @@ def read_json(path):
 
 
 def write_json(doc, path):
+    text = json.dumps(doc, ensure_ascii=False, indent=2, allow_nan=False)  # NaN·Infinity 토큰을 쓰지 않는다
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+        f.write(text + "\n")
     os.replace(tmp, path)
 
 
@@ -67,7 +69,21 @@ def parse_date(s):
 
 
 def worst(statuses):
-    return max(statuses, key=RANK.get)
+    """가장 나쁜 status. 모르는 status는 missing으로 본다."""
+    return max((s if s in RANK else "missing" for s in statuses), key=RANK.get)
+
+
+def is_finite(v):
+    """숫자이고 NaN·무한대가 아니다. bool은 숫자로 치지 않는다."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def positive(text):
+    """holdings 숫자 칸: 유한한 양수만 받는다."""
+    x = float(text)
+    if not math.isfinite(x) or x <= 0:
+        raise ValueError
+    return x
 
 
 def r4(x):
@@ -138,20 +154,16 @@ def parse_holdings(text):
             errors.append("%d번 줄: ticker %r" % (lineno, row.get("ticker")))
             continue
         try:
-            shares = float(row.get("shares", ""))
-            if shares <= 0:
-                raise ValueError
+            shares = positive(row.get("shares", ""))
         except ValueError:
-            errors.append("%d번 줄: shares %r는 양수가 아님" % (lineno, row.get("shares")))
+            errors.append("%d번 줄: shares %r는 유한한 양수가 아님" % (lineno, row.get("shares")))
             continue
         cost = None
         if row.get("cost_basis"):
             try:
-                cost = float(row["cost_basis"])
-                if cost <= 0:
-                    raise ValueError
+                cost = positive(row["cost_basis"])
             except ValueError:
-                errors.append("%d번 줄: cost_basis %r는 양수가 아님" % (lineno, row["cost_basis"]))
+                errors.append("%d번 줄: cost_basis %r는 유한한 양수가 아님" % (lineno, row["cost_basis"]))
                 continue
         h = by.setdefault(t, {"ticker": t, "shares": 0.0, "lots": []})
         h["shares"] += shares
@@ -169,7 +181,7 @@ def quarter_of(d):
 
 
 def earnings_quarter(report_date):
-    """실적 8-K의 report_date보다 앞선 마지막 달력 분기 끝날의 분기(D50)."""
+    """실적 8-K의 report_date보다 앞선 마지막 달력 분기 끝날의 분기. 2026-11-02 8-K는 2026Q3다."""
     d = parse_date(report_date)
     q = (d.month - 1) // 3  # 0..3, 이번 분기
     return "%dQ4" % (d.year - 1) if q == 0 else "%dQ%d" % (d.year, q)
@@ -215,6 +227,17 @@ def latest_reitwatch(rw_dir):
     return None, None
 
 
+def reitwatch_age_note(rw, today, max_days):
+    """REITWatch 가격 기준일이 today보다 max_days 넘게 앞서면 그 이유 글(reit-stock-review와 같은 규칙)."""
+    if not rw or not rw.get("as_of"):
+        return ""
+    age = (today - parse_date(rw["as_of"])).days
+    if age <= max_days:
+        return ""
+    return "REITWatch %s 호(가격 기준일 %s)는 %s보다 %d일 앞섬(허용 %d일): reit-sector-scan fetch로 갱신" % (
+        rw.get("month"), rw["as_of"], today.isoformat(), age, max_days)
+
+
 def load_optional(path, schema=None):
     if not path or not os.path.isfile(path):
         return None
@@ -226,9 +249,12 @@ def load_optional(path, schema=None):
 
 
 def fact_value(f, unit, today=None, max_age=None):
-    """facts의 값 하나를 읽는다. 출처 없는 값은 쓰지 않는다(reit-stock-review D31과 같은 규칙)."""
+    """facts의 값 하나를 읽는다. reit-stock-review의 값 규칙과 같다: status는 다섯 가지 중 하나,
+    value는 유한한 숫자, status와 상관없이 source·locator가 없는 값은 쓰지 않는다."""
     if not isinstance(f, dict) or f.get("status") not in STATUSES or f.get("status") == "missing" or f.get("value") is None:
         return missing(unit, (f or {}).get("note") or "facts에 값 없음")
+    if not is_finite(f["value"]):
+        return missing(unit, "value(%r)가 유한한 숫자가 아님" % f["value"])
     if not (str(f.get("source", "")).strip() and str(f.get("locator", "")).strip()):
         return missing(unit, "source나 locator가 없어 쓰지 않음")
     out = val(f["value"], unit, f["status"], f.get("as_of"), f.get("source", ""), f.get("locator", ""), f.get("note", ""))
@@ -243,6 +269,8 @@ def fact_value(f, unit, today=None, max_age=None):
 def metric_value(m, unit):
     if not isinstance(m, dict) or m.get("status") not in STATUSES or m.get("value") is None:
         return missing(unit, (m or {}).get("note") or "metrics에 값 없음")
+    if not isinstance(m["value"], str) and not is_finite(m["value"]):
+        return missing(unit, "metrics 값(%r)이 유한한 숫자가 아님" % m["value"])
     return val(m["value"], m.get("unit") or unit, m["status"], m.get("as_of"), "metrics", m.get("metric", ""), m.get("note", ""))
 
 
@@ -271,13 +299,16 @@ def freshness(t, metrics, filings):
 
 
 def schedule(fwd, freq, paydate, shares):
-    """월별 지급액. 월배당은 날짜 없이 매달, 그 밖은 최근 지급일의 달부터 12/빈도 달 간격(D53)."""
+    """월별 지급액. 월배당은 날짜 없이 매달, 그 밖은 최근 지급일의 달부터 12/빈도 달 간격.
+    빈도는 1·2·4·12만 받는다(4.0은 4). 아니면 그 종목 일정만 missing이고 점검은 계속한다."""
     if fwd["value"] is None or freq["value"] is None:
         return {"months": None, "status": "missing", "note": "; ".join(
             v["note"] for v in (fwd, freq) if v["value"] is None) or "값 없음"}
     n = freq["value"]
-    if n not in (1, 2, 4, 12):
-        return {"months": None, "status": "missing", "note": "배당 빈도 %s는 일정을 만들 수 없음" % n}
+    if not is_finite(n) or n not in FREQUENCIES:
+        return {"months": None, "status": "missing",
+                "note": "배당 빈도 %s는 일정을 만들 수 없음(1·2·4·12만)" % n}
+    n = int(n)
     inputs = [fwd, freq]
     if n == 12:
         months = list(range(1, 13))
@@ -302,6 +333,8 @@ def ticker_view(h, ddir, rw, rw_path, filings_dir, dates, assets, today):
     rw_src = "reitwatch:%s" % (rw or {}).get("month", "")
     rw_loc = "%s rows[ticker=%s]" % (rw_path, t)
     rw_note = "REITWatch %s 호 screening 값(가격 기준일 %s)" % ((rw or {}).get("month"), (rw or {}).get("as_of"))
+    # 오래된 REITWatch 값은 estimated(stale보다 나쁨)를 지키고 나이를 note에 붙인다
+    rw_note = "; ".join(x for x in (rw_note, reitwatch_age_note(rw, today, assets["reitwatch_max_age_days"])) if x)
     v = {"ticker": t, "shares": shares, "lots": h["lots"], "basis": "none", "metrics_file": mpath, "facts_file": None}
     max_age = assets.get("price_max_age_days", 5)
     if metrics:
@@ -394,7 +427,7 @@ def portfolio(views, assets):
     annual = derive("USD", [x["annual_dividend"] for x in views], lambda *a: sum(a))
     fy = derive("%", [annual, total], lambda a, b: r4(a / b * 100), "연 배당 합 / 평가액 합")
     total["value"], annual["value"] = r4(total["value"]), r4(annual["value"])
-    # 월별 일정은 일정을 아는 종목만 더한다(D52)
+    # 월별 일정은 일정을 아는 종목만 더한다(배당일을 모르는 종목 때문에 월배당 종목 일정까지 사라지지 않게)
     known = [x for x in views if x["schedule"]["months"]]
     months = {str(m): r4(sum(x["schedule"]["months"].get(str(m), 0.0) for x in known)) for m in range(1, 13)}
     known_annual = sum(x["annual_dividend"]["value"] for x in known)
@@ -410,9 +443,9 @@ def portfolio(views, assets):
     for g in GRADES:
         members = [x for x in views if x["rate_sensitivity"]["value"] == g]
         if members:
-            rate[g] = {"pct": r4(sum(x["weight"]["value"] for x in members)) if total["value"] is not None else None,
-                       "tickers": [x["ticker"] for x in members],
-                       "status": "missing" if g == "review" or total["value"] is None else worst(["estimated", weights["status"]])}
+            st = "missing" if g == "review" or total["value"] is None else worst(["estimated", weights["status"]])
+            rate[g] = {"pct": r4(sum(x["weight"]["value"] for x in members)) if st != "missing" else None,
+                       "tickers": [x["ticker"] for x in members], "status": st}
     flags = {}
     for x in views:
         for f in x["flags"]:
@@ -420,7 +453,9 @@ def portfolio(views, assets):
     return {"total_value": total, "annual_dividend": annual, "forward_yield": fy, "monthly_schedule": sched,
             "concentration": {"by_subsector": group_pct(views, lambda x: x["subsector"]["value"], weights),
                               "by_sector": group_pct(views, lambda x: x["sector"], weights),
-                              "hhi": hhi, "top": max(((x["weight"]["value"] or 0, x["ticker"]) for x in views))[1]},
+                              "hhi": hhi,
+                              "top": max((x["weight"]["value"], x["ticker"]) for x in views)[1]
+                              if all(x["weight"]["value"] is not None for x in views) else None},
             "rate_exposure": {"grades": rate, "note": assets["rate_note"]},
             "flags_by_level": flags}
 
@@ -434,6 +469,9 @@ def build(holdings, ddir, rw_dir, filings_dir, dates_path, assets, today, holdin
               "screening": x.get("screening")} for x in views if x["freshness"]["status"] in ("no_metrics", "stale")]
     unknown = [x["ticker"] for x in views if x["freshness"]["status"] == "unknown"]
     gaps = []
+    rw_age = reitwatch_age_note(rw, today, assets["reitwatch_max_age_days"])
+    if rw_age and any(x["basis"] == "reitwatch" or x["price"]["source"].startswith("reitwatch:") for x in views):
+        gaps.append({"item": "reitwatch", "status": "stale", "reason": rw_age})
     for x in views:
         for k in ("price", "forward_dividend", "dividend_frequency", "subsector", "value", "annual_dividend"):
             if x[k]["status"] in ("missing", "stale", "estimated"):
@@ -445,14 +483,15 @@ def build(holdings, ddir, rw_dir, filings_dir, dates_path, assets, today, holdin
     for k in ("total_value", "annual_dividend", "forward_yield"):
         if pf[k]["status"] == "missing":
             gaps.append({"item": "portfolio.%s" % k, "status": "missing", "reason": pf[k]["note"]})
+    n_failed = sum(len(x["checks_failed"]) for x in views)
     doc = {"schema": SCHEMA, "date": today.isoformat(), "holdings_file": holdings_file,
            "inputs": {"data_dir": ddir, "reitwatch_file": rw_path, "filings_dir": filings_dir,
                       "dividend_dates_file": dates_path if dates else None},
            "tickers": views, "portfolio": pf, "needs_review": needs, "freshness_unknown": unknown,
            "data_gaps": gaps,
            "summary": {"tickers": len(views), "needs_review": len(needs), "freshness_unknown": len(unknown),
-                       "missing": sum(1 for g in gaps if g["status"] == "missing")}}
-    code = 2 if (needs or unknown or doc["summary"]["missing"]) else 0
+                       "missing": sum(1 for g in gaps if g["status"] == "missing"), "checks_failed": n_failed}}
+    code = 2 if (needs or unknown or doc["summary"]["missing"] or n_failed) else 0
     return doc, code
 
 
@@ -502,9 +541,12 @@ def cmd_check(args):
 def cmd_paydate(args):
     t = args.ticker.upper()
     try:
-        parse_date(args.date)
+        d = parse_date(args.date)
     except (ValueError, TypeError):
         log("--date는 YYYY-MM-DD")
+        return 1
+    if d > dt.date.today():
+        log("--date 날짜(%s)가 오늘보다 늦음. 지급일은 이미 지난 최근 지급일을 넣는다" % d.isoformat())
         return 1
     if not (args.source.strip() and args.locator.strip()):
         log("--source와 --locator(원문 문장)가 있어야 넣는다. 출처 없는 값은 쓰지 않는다")
@@ -657,7 +699,7 @@ def run_check():
                        ("ticker,shares\nAAA,-5\n", "shares 음수")):
         ok(parse_holdings(bad)[1], "holdings 오류: %s" % label)
 
-    # 추천 문장이 없다(B20)
+    # 추천 문장이 없다(사라·팔아라·비중 조정·목표가를 쓰지 않는다)
     blob = json.dumps(doc, ensure_ascii=False)
     ok(not re.search(r"사라|팔아|매수하|매도하|목표가|비중을 (늘|줄)|\bbuy\b|\bsell\b", blob, re.I), "snapshot에 추천 문장 없음")
 
@@ -691,6 +733,90 @@ def run_check():
 
     # 같은 입력이면 같은 바이트
     ok(json.dumps(run()[0], ensure_ascii=False) == json.dumps(run()[0], ensure_ascii=False), "같은 입력이면 같은 snapshot")
+
+    # 숫자는 유한해야 한다(NaN·무한대는 입력 오류, facts·metrics 값은 missing)
+    for bad, label in (("ticker,shares\nAAA,nan\n", "shares nan"), ("ticker,shares\nAAA,inf\n", "shares inf"),
+                       ("ticker,shares,cost_basis\nAAA,1,nan\n", "cost_basis nan")):
+        ok(parse_holdings(bad)[1], "holdings 오류: %s" % label)
+    ok(fact_value({"value": float("nan"), "status": "reported", "source": "x (가상)", "locator": "y (가상)"},
+                  "USD/share")["status"] == "missing"
+       and metric_value({"value": float("inf"), "status": "derived"}, "%")["status"] == "missing",
+       "facts·metrics의 NaN·무한대 값은 missing")
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            write_json({"x": float("nan")}, os.path.join(tmp, "n.json"))
+        nan_written = True
+    except ValueError:
+        nan_written = False
+    ok(not nan_written, "JSON에 NaN을 쓰려 하면 멈춤(allow_nan=False)")
+
+    # 가격 없는 종목이 있으면 비중 1위(top)도 missing(None을 0으로 보지 않음)
+    ok(d4["portfolio"]["concentration"]["top"] is None and pf["concentration"]["top"] == "AAA",
+       "비중이 missing인 종목이 있으면 concentration.top은 null, 아니면 비중 1위")
+
+    # 배당 빈도: 4.0은 4로, 1·2·4·12가 아니면 그 종목 일정만 not_covered
+    fwd = val(4.0, "USD/share", "derived")
+    pd_ = val("2026-10-15", "date", "reported")
+    s4 = schedule(fwd, val(4.0, "per year", "reported"), pd_, 10)
+    s3 = schedule(fwd, val(3, "per year", "reported"), pd_, 10)
+    ok(s4["months"] == {"1": 10.0, "4": 10.0, "7": 10.0, "10": 10.0} and s3["months"] is None
+       and "3" in s3["note"], "빈도 4.0은 1·4·7·10월 10.0씩, 빈도 3은 일정 missing")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        import shutil
+        dd = os.path.join(tmp, "data")
+        shutil.copytree(ddir, dd)
+
+        def run_tmp(hs_text, day=today):
+            hs2, _ = parse_holdings(hs_text)
+            return build(hs2, dd, os.path.join(dd, "reitwatch", "parsed"), os.path.join(dd, "portfolio", "filings"),
+                         os.path.join(dd, "portfolio", "dividend_dates.json"), assets, day)
+        ok(run_tmp("ticker,shares\nAAA,100\n")[1] == 0, "AAA 하나(다 채움)는 exit 0")
+        mp = os.path.join(dd, "tickers", "AAA", "metrics", "2026Q3.json")
+        m = read_json(mp)
+        m["checks"] = [dict(c, **{"pass": False}) for c in m["checks"]]
+        write_json(m, mp)
+        d6, c6 = run_tmp("ticker,shares\nAAA,100\n")
+        ok(c6 == 2 and d6["summary"]["checks_failed"] == 1, "metrics에 check 실패가 있으면 exit 2")
+        fp = os.path.join(dd, "tickers", "BBB", "facts", "2026Q2.json")
+        f = read_json(fp)
+        f["facts"]["dividend_frequency"]["value"] = 3
+        write_json(f, fp)
+        d7, c7 = run_tmp("ticker,shares\nAAA,100\nBBB,40\n")
+        ok(c7 == 2 and [n["ticker"] for n in d7["portfolio"]["monthly_schedule"]["not_covered"]] == ["BBB"]
+           and d7["portfolio"]["monthly_schedule"]["covered"] == ["AAA"], "빈도 3인 종목이 있어도 점검은 끝나고 그 종목만 not_covered")
+        rp = os.path.join(dd, "reitwatch", "parsed", "2026-10.json")
+        r = read_json(rp)
+        for row in r["rows"]:
+            if row["ticker"] == "CCC":
+                row["subsector"] = "Unknown (가상)"
+        write_json(r, rp)
+        d8, _ = run_tmp("ticker,shares\nCCC,200\n")
+        rv = d8["portfolio"]["rate_exposure"]["grades"]["review"]
+        ok(d8["portfolio"]["total_value"]["value"] == 4000.0 and rv["status"] == "missing" and rv["pct"] is None,
+           "금리 민감도 review(status missing)의 pct는 null")
+
+    # REITWatch 가격 기준일이 --date보다 허용 일수를 넘게 앞서면 나이를 적는다(estimated는 그대로)
+    d9, _ = run(day=parse_date("2027-03-01"))
+    c9 = next(x for x in d9["tickers"] if x["ticker"] == "CCC")
+    ok(c9["price"]["status"] == "estimated" and "허용 %d일" % assets["reitwatch_max_age_days"] in c9["price"]["note"]
+       and any(g["item"] == "reitwatch" and g["status"] == "stale" for g in d9["data_gaps"])
+       and not any(g["item"] == "reitwatch" for g in doc["data_gaps"]),
+       "REITWatch 2026-09-30이 2027-03-01보다 152일 앞섬: CCC 가격 note와 데이터 구멍 reitwatch stale")
+
+    # paydate 날짜가 오늘보다 늦으면 거절
+    with tempfile.TemporaryDirectory() as tmp:
+        saved_dir = os.environ.get("INVEST_DATA_DIR")
+        os.environ["INVEST_DATA_DIR"] = tmp
+        try:
+            future = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+            ok(main(["paydate", "zzz", "--date", future, "--source", "sec:8-K (가상)", "--locator", "x (가상)"]) == 1,
+               "paydate 날짜가 오늘보다 늦으면 exit 1")
+        finally:
+            if saved_dir is None:
+                os.environ.pop("INVEST_DATA_DIR", None)
+            else:
+                os.environ["INVEST_DATA_DIR"] = saved_dir
 
     log("check: %d개 실패" % len(fails) if fails else "check: 모두 통과")
     return 2 if fails else 0

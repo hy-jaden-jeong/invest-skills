@@ -1,11 +1,11 @@
 ---
 name: reit-sector-scan
-description: Nareit REITWatch(매달 나오는 PDF)를 받아 미국 REIT subsector마다 median P/FFO·배당수익률과 그 자기 history 대비 percentile·z-score, 배당수익률−10년물 spread, 3·5년 상대 성과를 표로 내고, macro-check snapshot의 섹터 수요·공급 지표를 함께 놓아 구조적 하락 신호가 있는 섹터에 "싸 보이는 이유" 메모를 쓴다. 섹터를 고르면 그 섹터 종목의 screening 표(P/FFO, 배당수익률, 시총, debt ratio)를 낸다. "어느 섹터가 싸", "저평가 섹터 찾아줘", "리츠 섹터 밸류에이션 봐줘", "net lease 종목 비교 표 줘" 요청에 쓴다. 매크로 지표 수집은 macro-check, 종목 하나의 공시 분석은 reit-stock-review가 맡는다. 매수·매도 판단은 내리지 않는다.
+description: Nareit REITWatch(매달 나오는 PDF)를 받아 미국 REIT subsector마다 median P/FFO·배당수익률과 그 자기 history 대비 percentile·z-score, 배당수익률−10년물 spread, 3·5년 상대 성과를 표로 내고, macro-check snapshot의 섹터 수요·공급 지표를 함께 놓아 구조적 하락 신호가 있는 섹터에 "싸 보이는 이유" 메모를 쓴다. 섹터를 고르면 그 섹터 종목의 screening 표(P/FFO, 배당수익률, 시총, debt ratio)를 낸다. "어느 섹터가 싸", "저평가 섹터 찾아줘", "리츠 섹터 valuation 봐줘", "net lease 종목 비교 표 줘" 요청에 쓴다. 매크로 지표 수집은 macro-check, 종목 하나의 공시 분석은 reit-stock-review가 맡는다. 매수·매도 판단은 내리지 않는다.
 ---
 
 # REIT 섹터 스캔
 
-REITWatch의 종목 row로 subsector 밸류에이션을 다시 세고, 자기 history와 금리, 섹터 매크로 지표에 비춰 본다. 숫자는 script가 계산하고 agent는 읽고 해석만 한다. 같은 입력이면 같은 숫자가 나와야 하기 때문이다.
+REITWatch의 종목 row로 subsector valuation을 다시 세고, 자기 history와 금리, 섹터 매크로 지표에 비춰 본다. 숫자는 script가 계산하고 agent는 읽고 해석만 한다. 같은 입력이면 같은 숫자가 나와야 하기 때문이다.
 
 `<skill 폴더>`는 이 SKILL.md가 있는 폴더다. 데이터 폴더는 `$INVEST_DATA_DIR`(없으면 `~/invest-data`)이고 레포 밖에 있다. REITWatch는 Nareit 저작물이라 PDF와 parsed JSON을 레포에 넣지 않는다.
 
@@ -72,7 +72,7 @@ REITWatch subsector와 macro-check 섹터의 대응, 섹터 지표마다의 dema
 - script의 판정(`structural.indicators`의 `judged`): demand 지표는 3개월·12개월 변화가 둘 다 나쁜 방향이면 "나빠짐", supply 지표는 둘 다 양수면 "늘어남"이다. 값이 있는 demand 지표의 절반 이상이 나빠지고 supply가 하나라도 늘면 `watch`, 지표가 없으면 `review`, 아니면 `ok`다. `context` 지표는 표에만 놓는다.
 - `watch`인 subsector마다 메모를 쓴다.
   1. 나빠진 demand 지표와 늘어난 supply 지표를 값·3·12개월 변화·기준일과 함께 옮긴다. snapshot 숫자를 그대로 쓴다.
-  2. 밸류에이션 칸과 나란히 놓는다. 예: "P/FFO median이 history 하위 20%지만, 같은 기간 수요 지표 둘이 3·12개월 모두 줄었고 건설 지출은 12개월에 +33% 늘었다."
+  2. valuation 칸과 나란히 놓는다. 예: "P/FFO median이 history 하위 20%지만, 같은 기간 수요 지표 둘이 3·12개월 모두 줄었고 건설 지출은 12개월에 +33% 늘었다."
   3. "싸 보이는 이유"를 가능성으로 쓴다. 수요 감소가 일시적인지 구조적인지(예: 원격 근무, 온라인 쇼핑 비중)를 가르는 근거를 하나 이상 찾고, 웹에서 찾았으면 출처 URL과 원문 문장을 단다. 못 찾았으면 "근거를 찾지 못함"이라고 쓴다.
   4. 다시 볼 조건을 한 줄 쓴다. 예: "office 고용 3개월 변화가 플러스로 돌아서면".
 - `ok`여도 percentile이 극단(10 이하나 90 이상)인 subsector에는 지표 표를 짧게 붙인다. `review`는 왜 판단 못 했는지(`note`)를 "데이터 구멍"에 쓴다.

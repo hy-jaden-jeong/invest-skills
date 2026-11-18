@@ -1,5 +1,5 @@
 {
-  "_how": "subsectors: REITWatch subsector 이름 -> macro-check 섹터(없으면 null). indicators: macro-check 섹터마다 series id, role(demand·supply·context), good(demand가 좋아지는 방향 up·down). context는 표에만 놓고 구조적 하락 신호(D23)에는 세지 않는다. 대응은 경험적 판단이라 보고서에 대리 지표라고 쓴다.",
+  "_how": "subsectors: REITWatch subsector 이름 -> macro-check 섹터(없으면 null). indicators: macro-check 섹터마다 series id, role(demand·supply·context), good(demand가 좋아지는 방향 up·down). context는 표에만 놓고 구조적 하락 신호에는 세지 않는다. 대응은 경험적 판단이라 보고서에 대리 지표라고 쓴다.",
   "aliases": {
     "_how": "예전 subsector 이름 -> 지금 이름. history를 이어 붙일 때만 쓰고 parsed 파일의 이름은 바꾸지 않는다. Nareit이 2024-01 호부터 이름을 바꿨다",
     "Timber": "Timberland",

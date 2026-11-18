@@ -2,12 +2,17 @@
 
 `scripts/reit_calc.py`가 계산하는 지표의 뜻과 식이다. 식은 script와 이 파일이 같아야 한다. 하나를 고치면 다른 쪽도 고친다.
 
-> 이 파일의 절차(FFO → AFFO → leverage → 배당 지속성 순서, 만기 집중도 표시, FFO 표를 줄마다 맞추는 품질 확인, 회사 정의 지표에 출처 표시)는 CaseMark의 `analyzing-reit-financials` skill(https://github.com/CaseMark/skills, Apache License 2.0)에서 가져왔다.
+> 이 파일의 절차(FFO → AFFO → leverage → 배당 지속성 순서, 만기 집중도 표시, FFO 표를 줄마다 맞추는 품질 확인, 회사 정의 지표에 출처 표시)는 CaseMark의 `analyzing-reit-financials` skill(https://github.com/CaseMark/skills, `skills/finance/analyzing-reit-financials/SKILL.md`)에서 가져왔다.
+> 원본 저작권: Copyright 2025 CaseMark, Inc. Apache License, Version 2.0으로 배포된다. License 전문은 같은 폴더의 `LICENSE-Apache-2.0.txt`에 있다(https://www.apache.org/licenses/LICENSE-2.0).
 > 바꾼 점: NAV 추정과 투자 thesis·bull/bear 절은 뺐다. FFO 식을 Nareit 2018 정의로 적고 재계산이 회사 값과 0.5% 넘게 다르면 실패로 했다. 기준값은 `assets/thresholds.json` 한 곳으로 옮겼다. 결과에서 매수·매도 판단을 뺐다. 한국어로 다시 썼다.
 
 ## status
 
 계산값은 입력 status를 물려받는다. 나쁜 순서는 `reported` < `derived` < `stale` < `estimated` < `missing`이다. 입력이 모두 reported면 계산값은 `derived`다. 입력이 하나라도 missing이면 계산값도 missing이고, 0이나 다른 값으로 채우지 않는다. 가정이 든 계산(분기×4 같은 run-rate)은 `estimated`로 두고 가정을 `note`에 쓴다.
+
+- 한 값이 두 상태에 걸리면(2차 자료이면서 오래됨, REITWatch 추정값이면서 오래됨) 더 나쁜 쪽을 status로 두고 나머지 사정은 `note`에 쓴다. 그래서 오래된 2차 자료는 `estimated`다. stale로 바꾸면 오래될수록 좋은 status가 되기 때문이다.
+- facts 값은 status와 상관없이 `source`·`locator`가 있어야 하고, `value`는 유한한 숫자여야 한다(NaN·무한대는 아님). 어기면 missing으로 내리고 데이터 구멍에 올린다. 모르는 status도 missing이다.
+- 결과 JSON에는 NaN·Infinity를 쓰지 않는다. 회사 FFO·AFFO가 0이면 tie-out은 실패이고 `diff_pct`는 null이다.
 
 ## FFO와 AFFO
 
@@ -58,8 +63,10 @@
 | `affo_yield` | 연간 AFFO per share / price × 100 | |
 | `implied_cap_rate` | 연환산 NOI / (시총 + net debt + 우선주) × 100 | NOI와 debt가 같은 기준(pro-rata 또는 consolidated)인지 `note`에 적는다 |
 | `yield_spread_vs_10y`, `affo_yield_spread_vs_10y` | yield − DGS10 (%p) | DGS10은 macro-check snapshot. snapshot이 가격 기준일보다 7일 넘게 앞서면 stale |
-| `p_ffo_reitwatch`, `p_ffo_history_pctile` | REITWatch P/FFO FY1, 자기 history 중 최신값 이하 비율 | 12달보다 짧으면 null. 같은 출처(REITWatch)끼리 견준다 |
+| `p_ffo_reitwatch`, `p_ffo_history_pctile` | REITWatch P/FFO FY1, 자기 history 중 최신값 이하 비율 | history 표본은 1·4·7·10월 호(가격 기준일이 분기말)와 최신 호다(reit-sector-scan과 같은 표본). 8개(`history_min_points`)보다 적으면 missing. 같은 출처(REITWatch)끼리 견준다 |
 | `peer_median_p_ffo`, `p_ffo_vs_peer` | 같은 subsector peer의 REITWatch P/FFO median, 비율 | reit-sector-scan의 parsed 파일을 읽기만 한다 |
+
+REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `period_end`)보다 75일(`reitwatch_max_age_days`) 넘게 앞서면, 그 호에서 온 값(consensus FFO, `p_ffo_reitwatch`, `peer_median_p_ffo`, `p_ffo_history_pctile`)의 `note`에 나이를 쓰고 데이터 구멍에 `reitwatch`(stale)를 올린다. status는 estimated 그대로다(estimated가 stale보다 나쁘다). REITWatch 호는 그 달 중순이 지나서 올라오기도 해 최신 호의 기준일이 평소에도 30~60일 앞서므로 그보다 넉넉히 둔다.
 
 ## flag
 
@@ -89,7 +96,7 @@
 | `chowder_threshold` | utility(SIC 4900~4999) 8, yield 3% 미만 15, 그 외 12 | Chowder rule |
 | `p_e` | price / `eps_fy` | |
 | `yield_spread_vs_10y` | forward yield − DGS10 | |
-| `yield_trap_signals` | `high_yield`(yield 8% 이상), `payout_over_100`, `fcf_shortfall`(FCF payout 100% 이상이나 FCF 0 이하), `recent_cut`(최근 5년 안 컷), `no_growth`(5년 CAGR 0 이하) | 값이 없어 판단 못 하면 None |
+| `yield_trap_signals` | `high_yield`(yield 8% 이상), `payout_over_100`, `fcf_shortfall`(FCF payout 100% 이상이나 FCF 0 이하), `recent_cut`(최근 5년 안 컷), `no_growth`(5년 CAGR 0 이하) | 값이 없어 판단 못 하면 None이고 status는 missing. 다 판단했으면 쓴 입력의 가장 나쁜 status(reported면 derived). flag `yield_trap`에도 그 status를 붙인다 |
 
 | flag | 지표 | watch | alert |
 | --- | --- | --- | --- |
@@ -104,7 +111,7 @@
 
 - 줄마다 `prev`·`curr`(값, status), `change` = curr − prev(단위가 `%`·`%p`면 %p), `change_pct` = 변화 / |prev| × 100(`%` 단위와 prev 0은 null), `status_change`(나쁜 순서 reported < derived < stale < estimated < missing으로 worse·better·same), `changed`(값이나 status가 다름).
 - flag는 ok < watch < alert 순서로 worse·better, 한쪽이 review면 `review`. `worse.status`·`worse.flags`에 나빠진 것을 모은다.
-- 한쪽이라도 값이 없는 줄이 있으면 exit 2.
+- 한쪽이라도 값이 없는 줄이 있거나, prev·curr metrics에 check 실패가 있으면 exit 2. `summary`에 `checks_failed_prev`·`checks_failed_curr`.
 
 ## compare (compare mode)
 
@@ -113,6 +120,7 @@
 - 줄마다 종목별 값·status, `median`(값이 있는 종목이 둘 이상일 때 median, status는 가장 나쁜 것, reported면 derived). 이 표에 놓인 종목끼리의 median이고 REITWatch peer median과 다르다.
 - 경고: REITWatch subsector가 다수(가장 많은 subsector가 하나이고 둘 이상)와 다른 종목, subsector를 모르는 종목, 다수가 없는데 subsector가 갈리는 경우, REIT와 일반 배당주를 섞은 경우, 분기가 다른 경우.
 - 경고가 있거나 어떤 종목 metrics에 missing·check 실패가 있으면 exit 2.
+- metrics 파일에 모르는 status가 있으면 missing으로 본다.
 
 ## REIT 경로에 더한 규칙 (S4)
 
