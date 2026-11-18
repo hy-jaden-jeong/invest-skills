@@ -1,0 +1,84 @@
+{
+  "_how": "subsectors: REITWatch subsector 이름 -> macro-check 섹터(없으면 null). indicators: macro-check 섹터마다 series id, role(demand·supply·context), good(demand가 좋아지는 방향 up·down). context는 표에만 놓고 구조적 하락 신호(D23)에는 세지 않는다. 대응은 경험적 판단이라 보고서에 대리 지표라고 쓴다.",
+  "aliases": {
+    "_how": "예전 subsector 이름 -> 지금 이름. history를 이어 붙일 때만 쓰고 parsed 파일의 이름은 바꾸지 않는다. Nareit이 2024-01 호부터 이름을 바꿨다",
+    "Timber": "Timberland",
+    "Infrastructure": "Telecommunications"
+  },
+  "subsectors": {
+    "Office": "office",
+    "Industrial": "industrial",
+    "Shopping Centers": "retail",
+    "Regional Malls": "retail",
+    "Free Standing": "net_lease",
+    "Apartments": "residential",
+    "Manufactured Homes": "residential",
+    "Single Family Homes": "residential",
+    "Student Housing": "residential",
+    "Health Care": "healthcare",
+    "Lodging/Resorts": "lodging",
+    "Self Storage": "self_storage",
+    "Data Centers": "data_center",
+    "Diversified": null,
+    "Timberland": null,
+        "Telecommunications": null,
+    "Gaming": null,
+    "Specialty": null
+  },
+  "indicators": {
+    "office": [
+      {"id": "USPBS", "role": "demand", "good": "up"},
+      {"id": "USINFO", "role": "demand", "good": "up"},
+      {"id": "USFIRE", "role": "demand", "good": "up"},
+      {"id": "TLOFCONS", "role": "supply", "note": "Census는 data center 건설을 office에 넣는다"}
+    ],
+    "industrial": [
+      {"id": "CES4349300001", "role": "demand", "good": "up"},
+      {"id": "INDPRO", "role": "demand", "good": "up"},
+      {"id": "IMPGS", "role": "demand", "good": "up"},
+      {"id": "ECOMPCTSA", "role": "demand", "good": "up"},
+      {"id": "ISM_MFG_PMI", "role": "demand", "good": "up"},
+      {"id": "ISRATIO", "role": "context", "note": "재고가 늘면 창고 수요가 늘 수도, 판매가 약한 것일 수도 있다"},
+      {"id": "TLCOMCONS", "role": "supply", "note": "commercial에는 warehouse와 retail 건물이 함께 든다"}
+    ],
+    "retail": [
+      {"id": "USTRADE", "role": "demand", "good": "up"},
+      {"id": "RSAFS", "role": "demand", "good": "up"},
+      {"id": "RSXFS", "role": "demand", "good": "up"},
+      {"id": "ECOMPCTSA", "role": "demand", "good": "down", "note": "온라인 비중이 오르면 매장 수요에 부담"},
+      {"id": "RETAILIRSA", "role": "demand", "good": "down", "note": "재고/판매 비율이 오르면 판매가 약하다"},
+      {"id": "TLCOMCONS", "role": "supply", "note": "commercial에는 warehouse와 retail 건물이 함께 든다"}
+    ],
+    "residential": [
+      {"id": "CUSR0000SEHA", "role": "demand", "good": "up"},
+      {"id": "CUSR0000SAH1", "role": "demand", "good": "up"},
+      {"id": "RRVRUSQ156N", "role": "demand", "good": "down", "note": "임대 공실률"},
+      {"id": "HOUST5F", "role": "supply"},
+      {"id": "PERMIT5", "role": "supply"},
+      {"id": "MORTGAGE30US", "role": "context"},
+      {"id": "FIXHAI", "role": "context"}
+    ],
+    "healthcare": [
+      {"id": "CES6562000001", "role": "demand", "good": "up"},
+      {"id": "CES6562310001", "role": "demand", "good": "up"},
+      {"id": "TLHLTHCONS", "role": "supply"}
+    ],
+    "data_center": [
+      {"id": "CES5051800001", "role": "demand", "good": "up"},
+      {"id": "IPUTIL", "role": "demand", "good": "up", "note": "전력 수요의 대리 지표"},
+      {"id": "TLOFCONS", "role": "supply", "note": "Census는 data center 건설을 office에 넣는다"}
+    ],
+    "lodging": [
+      {"id": "CES7072100001", "role": "demand", "good": "up"},
+      {"id": "TLLODGCONS", "role": "supply"}
+    ],
+    "self_storage": [
+      {"id": "EXHOSLUSM495S", "role": "demand", "good": "up", "note": "이사 수요의 대리 지표"}
+    ],
+    "net_lease": [
+      {"id": "RSXFS", "role": "demand", "good": "up"},
+      {"id": "DGS10", "role": "context"},
+      {"id": "BAA10Y", "role": "context"}
+    ]
+  }
+}

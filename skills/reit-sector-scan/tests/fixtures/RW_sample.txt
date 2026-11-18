@@ -1,0 +1,50 @@
+(가상) REITWatch 종목 표 layout을 흉내 낸 fixture. 이름·ticker·값은 모두 지어낸 것이다.
+                                   Data as of September 30, 2026
+
+                      Investment Performance by Property Sector and Subsector
+Office                                                14           -14.0                 -8.2           2.7              4.63
+
+                                                                                                           30
+                                                         Share Price ($)          FFO per Share        Price/FFO           FFO           FFO         Debt/                                                                            Equity      Implied
+                                                                   52 Week        Estimates ($)        Estimates        Growth (%)    Payout (%)    EBITDA                        Total Return (%)                       Dividend     Market       Market      Debt
+Name                                    Ticker   30-Sep-2026   High      Low     2026      2027     2026       2027     2026 - 2027    2026: Q2    2026: Q2    Sep-26    QTD       YTD       1-Yr      3-Yr     5-Yr     Yield (%)   Cap ($M)    Cap ($M)    Ratio (%)   Volume     Volume     Liquidity   Issuer Rating
+Office
+Alpha Office Trust (가상)                 OFA          20.00     25.00     15.00      1.50      1.60      8.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00      1.00      2.00      5.00   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+Beta Towers (가상)                        OFB          20.00     25.00     15.00      1.50      1.60     10.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00      2.00         -      6.00   1,000.0   1,000.0      40.0       100     2,000     0.900
+Gamma Office (가상)                       OFC          20.00     25.00     15.00      1.50      1.60     12.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00      3.00      4.00      7.00   1,000.0   1,000.0         -       100     2,000     0.900      BBB
+AVERAGE                                                21.25    27.07    16.71     2.66      2.77     8.10       7.69         5.49         47.49       8.06      -8.69   -11.61     -0.66    -16.50      0.11   -10.95       4.88      2,555.4     2,739.4        64.0      1,000     10,000      0.900
+
+Industrial
+Delta Logistics (가상)                    IDA          20.00     25.00     15.00      1.50      1.60     20.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00     10.00      8.00      3.00   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+Epsilon Warehouse (가상)                  IDB          20.00     25.00     15.00      1.50      1.60     22.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00     12.00      9.00      4.00   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+Broken Row Corp (가상)                   BRK       1.00      2.00     3.00      4.00      5.00      6.00      7.00      8.00      9.00     10.00     11.00     12.00
+AVERAGE                                                59.52    68.64    52.76     3.69      3.92    14.72      13.97         5.39         63.85       5.12      -4.64    -4.79    12.30      14.88      7.84    -2.44       5.71     15,092.8    15,401.3        33.0      1,000     10,000      0.900
+
+OVERALL AVERAGE                                        37.65    44.88    32.16     3.14      3.30    11.16      10.59          5.44        54.31        6.77     -6.95    -8.68      4.90      -3.05     3.38    -7.21       5.24      7,928.6     8,165.9        52.0      1,000     10,000      0.900
+
+
+                                                                                                                                                   31
+                                                                                                                                                        Retail
+                                                         Share Price ($)          FFO per Share        Price/FFO           FFO           FFO         Debt/                                                                            Equity      Implied
+                                                                   52 Week        Estimates ($)        Estimates        Growth (%)    Payout (%)    EBITDA                        Total Return (%)                       Dividend     Market       Market      Debt
+Name                                    Ticker   30-Sep-2026   High      Low     2026      2027     2026       2027     2026 - 2027    2026: Q2    2026: Q2    Sep-26    QTD       YTD       1-Yr      3-Yr     5-Yr     Yield (%)   Cap ($M)    Cap ($M)    Ratio (%)   Volume     Volume     Liquidity   Issuer Rating
+Free Standing
+Zeta Net Lease (가상)                     FSA          20.00     25.00     15.00      1.50      1.60     11.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00      4.00      1.00      6.00  50,000.0  50,000.0      40.0       100     2,000     0.900      A-
+Eta Very Long Name Sustainable Net Lease Capital (가상)
+                                        FSB          20.00     25.00     15.00      1.50      1.60     13.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00      5.00      2.00      5.00   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+Theta Retail Net (가상)                   FSC          20.00     25.00     15.00      1.50      1.60     15.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00      6.00      3.00      4.50   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+Iota Ground Lease (가상)                  FSD          20.00     25.00     15.00      1.50      1.60     30.00     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00      7.00      4.00      3.00   1,000.0   1,000.0      40.0       100     2,000     0.900
+Kappa Small Cap (가상)                    FSE          20.00     25.00     15.00         -      1.60         -     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00         -      5.00      7.00   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+AVERAGE                                                21.25    27.07    16.71     2.66      2.77     8.10       7.69         5.49         47.49       8.06      -8.69   -11.61     -0.66    -16.50      0.11   -10.95       4.88      2,555.4     2,739.4        64.0      1,000     10,000      0.900
+
+OVERALL AVERAGE                                        37.65    44.88    32.16     3.14      3.30    11.16      10.59          5.44        54.31        6.77     -6.95    -8.68      4.90      -3.05     3.38    -7.21       5.24      7,928.6     8,165.9        52.0      1,000     10,000      0.900
+
+                                                                                                                                                   40
+                                                         Share Price ($)          FFO per Share        Price/FFO           FFO           FFO         Debt/                                                                            Equity      Implied
+                                                                   52 Week        Estimates ($)        Estimates        Growth (%)    Payout (%)    EBITDA                        Total Return (%)                       Dividend     Market       Market      Debt
+Name                                    Ticker   30-Sep-2026   High      Low     2026      2027     2026       2027     2026 - 2027    2026: Q2    2026: Q2    Sep-26    QTD       YTD       1-Yr      3-Yr     5-Yr     Yield (%)   Cap ($M)    Cap ($M)    Ratio (%)   Volume     Volume     Liquidity   Issuer Rating
+Home Financing
+Lambda Mortgage (가상)                    HFA          20.00     25.00     15.00         -      1.60         -     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00     50.00     50.00     12.00   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+Mu Mortgage (가상)                        HFB          20.00     25.00     15.00         -      1.60         -     11.00      3.00     70.00      5.50     -1.00     -2.00      3.00      4.00     50.00     50.00     14.00   1,000.0   1,000.0      40.0       100     2,000     0.900      BBB
+OVERALL AVERAGE                                        37.65    44.88    32.16     3.14      3.30    11.16      10.59          5.44        54.31        6.77     -6.95    -8.68      4.90      -3.05     3.38    -7.21       5.24      7,928.6     8,165.9        52.0      1,000     10,000      0.900
+

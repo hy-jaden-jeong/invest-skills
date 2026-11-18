@@ -1,0 +1,33 @@
+{
+ "schema": "reitwatch-parsed/1",
+ "month": "2025-07",
+ "as_of": "2025-06-30",
+ "source": "fixture (가상)",
+ "fy1": null,
+ "fy2": null,
+ "parsed_at": null,
+ "unparsed": [],
+ "rows": [
+  {
+   "ticker": "FSX",
+   "name": "FSX (가상)",
+   "subsector": "Free Standing",
+   "price": null,
+   "ffo_fy1": null,
+   "ffo_fy2": null,
+   "p_ffo_fy1": 17,
+   "p_ffo_fy2": null,
+   "div_yield": 6.0,
+   "mkt_cap": null,
+   "debt_ratio": null,
+   "hi52": null,
+   "lo52": null,
+   "ffo_growth": null,
+   "implied_mkt_cap": null,
+   "tr_1y": null,
+   "tr_3y": null,
+   "tr_5y": null,
+   "rating": null
+  }
+ ]
+}
