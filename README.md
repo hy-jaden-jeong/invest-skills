@@ -8,12 +8,12 @@
 
 | skill | 하는 일 | 요청 예 | 필요한 것 |
 | --- | --- | --- | --- |
-| [macro-check](skills/macro-check/SKILL.md) | FRED에서 금리·credit·물가·고용·성장·주택·건설 지표와 섹터별 수요·공급 지표를 받아 snapshot(최신값, 1·3·12개월 변화, YoY, 10년 percentile)과 매크로 보고서를 쓴다 | "매크로 점검해줘", "금리·고용 요즘 어때", "오피스 섹터 매크로 봐줘" | python3. `FRED_API_KEY`는 있으면 쓰고 없어도 돈다 |
+| [macro-check](skills/macro-check/SKILL.md) | FRED에서 금리·credit·물가·고용·성장·주택·건설 지표와 섹터별 수요·공급 지표를 받아 snapshot(최신값, 1·3·12개월 변화, YoY, 10년 percentile)과 매크로 보고서를 쓴다 | "매크로 점검해줘", "금리·고용 요즘 어때", "오피스 섹터 매크로 봐줘" | python3. API key 없이 돈다(FRED는 key 없는 `fredgraph.csv`) |
 | [reit-sector-scan](skills/reit-sector-scan/SKILL.md) | Nareit REITWatch를 받아 subsector마다 median P/FFO·배당수익률의 자기 history percentile·z-score, 10년물 대비 spread, 3·5년 상대 성과를 표로 내고, macro-check의 섹터 수요·공급 지표로 구조적 하락 신호를 짚는다. 섹터를 고르면 종목 screening 표를 낸다 | "어느 섹터가 싸", "저평가 섹터 찾아줘", "net lease 종목 비교 표 줘" | python3, `pdftotext`(poppler). macro-check snapshot이 있으면 spread와 섹터 지표를 채운다 |
-| [reit-stock-review](skills/reit-stock-review/SKILL.md) | 미국 REIT 종목 하나의 최신 실적 공시(8-K Ex.99, XBRL)를 SEC EDGAR에서 받아, agent가 출처와 함께 적은 facts로 Nareit FFO 재계산·AFFO bridge·배당 지속성·부채·운영·valuation 지표를 계산하고 deep 보고서를 쓴다. 같은 섹터 종목을 한 표에 놓고(compare), 새 분기를 직전 분기와 diff하고(earnings), REIT가 아닌 배당주는 EPS·FCF payout·Chowder rule로 본다 | "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" | python3, `SEC_USER_AGENT`(연락처). `FINNHUB_API_KEY`는 있으면 쓰고 없으면 가격을 웹에서 채운다. 선택: macro-check snapshot(10년물 spread)과 reit-sector-scan의 REITWatch parsed(subsector, consensus FFO, peer·자기 history)가 있으면 읽고, 없으면 그 칸만 missing |
-| [dividend-portfolio-check](skills/dividend-portfolio-check/SKILL.md) | holdings CSV와 종목 metrics로 비중, subsector·섹터 쏠림, 예상 연 배당과 월별 배당 일정, 종목별 flag, 금리 민감도 노출을 점검한다. metrics가 없거나 새 실적 뒤 오래된 종목은 reit-stock-review deep으로 다시 분석한다 | "내 포트폴리오 점검해줘", "배당 언제 얼마 들어와", "섹터 쏠림 봐줘" | python3, holdings 파일(아래 "개인 정보"). 재분석에는 reit-stock-review와 `SEC_USER_AGENT` |
+| [reit-stock-review](skills/reit-stock-review/SKILL.md) | 미국 REIT 종목 하나의 최신 실적 공시(8-K Ex.99, XBRL)를 SEC EDGAR에서 받아, agent가 출처와 함께 적은 facts로 Nareit FFO 재계산·AFFO bridge·배당 지속성·부채·운영·valuation 지표를 계산하고 deep 보고서를 쓴다. 같은 섹터 종목을 한 표에 놓고(compare), 새 분기를 직전 분기와 diff하고(earnings), REIT가 아닌 배당주는 EPS·FCF payout·Chowder rule로 본다 | "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" | python3. 설정 없음. 처음 공시 원문을 받을 때 SEC용 이름·이메일을 한 번 묻는다(key가 아니라 SEC가 요구하는 연락처, `$INVEST_DATA_DIR/config.json`에 저장). 가격은 key 없는 Yahoo chart, 실패하면 웹에서 채운다. 선택: macro-check snapshot(10년물 spread)과 reit-sector-scan의 REITWatch parsed(subsector, consensus FFO, peer·자기 history)가 있으면 읽고, 없으면 그 칸만 missing |
+| [dividend-portfolio-check](skills/dividend-portfolio-check/SKILL.md) | holdings CSV와 종목 metrics로 비중, subsector·섹터 쏠림, 예상 연 배당과 월별 배당 일정, 종목별 flag, 금리 민감도 노출을 점검한다. metrics가 없거나 새 실적 뒤 오래된 종목은 reit-stock-review deep으로 다시 분석한다 | "내 포트폴리오 점검해줘", "배당 언제 얼마 들어와", "섹터 쏠림 봐줘" | python3, holdings 파일(아래 "개인 정보"). 재분석에는 reit-stock-review |
 
-skill이 쓰는 데이터(snapshot, 보고서, cache)는 레포 밖 `$INVEST_DATA_DIR`(없으면 `~/invest-data`)에 쌓인다. 환경 변수와 외부 도구는 위 표의 "필요한 것"에 적힌 skill에만 필요하다.
+skill이 쓰는 데이터(snapshot, 보고서, cache)는 레포 밖 `$INVEST_DATA_DIR`(없으면 `~/invest-data`)에 쌓인다. API key나 미리 할 설정 없이 돈다. 외부 도구는 위 표의 "필요한 것"에 적힌 skill에만 필요하다. SEC 공시 원문을 처음 받을 때만 agent가 이름·이메일을 한 번 묻는다(`SEC_USER_AGENT` 환경 변수로 줘도 된다).
 
 ### 함께 설치할 것
 
@@ -48,7 +48,7 @@ skill이 새로 생기면 위 명령을 다시 돌려 link를 건다.
 
 ## 개인 정보
 
-보유 종목, 계좌, 매매 기록 같은 내 투자 정보는 이 레포에 넣지 않는다. 레포 밖 파일에 두고 skill이 그 파일을 읽게 한다. API key는 환경 변수로 준다.
+보유 종목, 계좌, 매매 기록 같은 내 투자 정보는 이 레포에 넣지 않는다. 레포 밖 파일에 두고 skill이 그 파일을 읽게 한다. skill은 API key를 쓰지 않는다.
 
 `dividend-portfolio-check`의 holdings 파일은 `INVEST_HOLDINGS_FILE`(환경 변수로 준 경로)이나 `$INVEST_DATA_DIR/holdings.csv`(없으면 `~/invest-data/holdings.csv`)에 둔다. 형식은 [가상 예시](skills/dividend-portfolio-check/assets/holdings.example.csv)를 보고, 레포 안의 예시 파일에 실제 보유를 적지 않는다. 점검 snapshot과 보고서도 `$INVEST_DATA_DIR/portfolio/` 아래에만 쌓인다.
 

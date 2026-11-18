@@ -1266,12 +1266,12 @@ def run_check():
 
     # 3. 값이 빠지면 0으로 채우지 않고 missing을 물려준다
     nop = copy.deepcopy(base)
-    nop["facts"]["price"] = {"value": None, "status": "missing", "note": "FINNHUB_API_KEY 없음, 웹 채우기 전"}
+    nop["facts"]["price"] = {"value": None, "status": "missing", "note": "Yahoo chart 받기 실패, 웹 채우기 전"}
     d3, c3 = compute(nop, th_rw, macro=macro, rw=rw)
     ok(c3 == 2 and d3["metrics"]["forward_yield"]["value"] is None and d3["metrics"]["forward_yield"]["status"] == "missing"
        and d3["metrics"]["implied_cap_rate"]["status"] == "missing" and d3["metrics"]["affo_payout_forward"]["value"] is not None,
        "price가 없으면 yield·cap rate는 missing, payout은 계산")
-    ok("price" in d3["metrics"]["forward_yield"]["missing_inputs"] and "FINNHUB" in d3["metrics"]["forward_yield"]["note"],
+    ok("price" in d3["metrics"]["forward_yield"]["missing_inputs"] and "Yahoo chart" in d3["metrics"]["forward_yield"]["note"],
        "missing 이유가 note에 이어짐")
 
     # 4. 출처(source·locator) 없는 값은 쓰지 않는다

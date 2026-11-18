@@ -59,6 +59,5 @@
     "sector_office": ["DGS10", "CPIAUCSL", "USPBS", "TESTM", "ECOMPCTSA", "NOTASERIES", "NOFILE", "ISM_MFG_PMI"],
     "group_rates": ["DGS10", "NOTASERIES"],
     "sector_residential_group_housing": ["RRVRUSQ156N"]
-  },
-  "api_parse": {"_why": "공식 API JSON의 '.'은 빈 관측(None)으로 둔다", "dates": ["2026-11-11", "2026-11-12", "2026-11-13", "2026-11-16"], "values": [null, 5.10, 5.15, 5.12]}
+  }
 }

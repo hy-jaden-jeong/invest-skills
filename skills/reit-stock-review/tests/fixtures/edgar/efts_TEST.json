@@ -1,0 +1,35 @@
+{
+ "_note": "가상 응답. 2026-11-18 efts.sec.gov/LATEST/search-index?keysTyped=O 응답의 모양만 따왔다",
+ "hits": {
+  "total": {
+   "value": 3,
+   "relation": "eq"
+  },
+  "hits": [
+   {
+    "_id": "1",
+    "_score": 900.0,
+    "_source": {
+     "entity": "TEST REIT (TEST) (가상)",
+     "tickers": "TEST"
+    }
+   },
+   {
+    "_id": "2",
+    "_score": 10.0,
+    "_source": {
+     "entity": "TESTER CO (TESTR, TESTW) (가상)",
+     "tickers": "TESTR, TESTW"
+    }
+   },
+   {
+    "_id": "3",
+    "_score": 9.0,
+    "_source": {
+     "entity": "TST HOLDINGS (TST.A, TST.B) (가상)",
+     "tickers": "TST.A, TST.B"
+    }
+   }
+  ]
+ }
+}

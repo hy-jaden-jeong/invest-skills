@@ -2,7 +2,8 @@
 """reit-stock-review: 주가를 받아 facts의 price 칸에 넣는다.
 
 명령
-  price T... [--period P]     FINNHUB_API_KEY가 있으면 Finnhub /quote, 없으면 missing(웹 채우기로 넘긴다)
+  price T... [--period P]     key 없는 Yahoo chart endpoint에서 마지막 거래일 종가를 받는다.
+                              실패(HTTP 오류, 형식 변화, 빈 값)하면 missing(웹 채우기로 넘긴다)
   web T --period P (--value V --as-of D --url U --quote Q [--secondary] | --missing 이유)
                               웹에서 찾은 가격을 넣는다. URL과 원문 문장이 없으면 거절한다
   --check                     network 없이 확인한다
@@ -24,7 +25,9 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reit_calc  # noqa: E402  같은 skill 폴더 안의 script
 
-FINNHUB = "https://finnhub.io/api/v1/quote"
+YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/%s?range=5d&interval=1d"
+# 문서에 없는 endpoint다. 일반 브라우저 User-Agent가 아니면 거절하는 일이 있어 이 값을 쓴다(사람·레포 정보 없음).
+YAHOO_UA = "Mozilla/5.0"
 
 
 def log(msg):
@@ -42,37 +45,85 @@ def age_status(as_of, today, max_days):
     return None, ""
 
 
-def finnhub_get(symbol, key):
-    url = FINNHUB + "?" + urllib.parse.urlencode({"symbol": symbol, "token": key})
+def yahoo_symbol(t):
+    """Yahoo는 class 주식의 점을 줄표로 쓴다(BRK.B → BRK-B)."""
+    return t.upper().replace(".", "-")
+
+
+def yahoo_url(symbol):
+    return YAHOO_CHART % urllib.parse.quote(yahoo_symbol(symbol), safe="-^")
+
+
+def yahoo_get(symbol):
+    url = yahoo_url(symbol)
+    req = urllib.request.Request(url, headers={"User-Agent": YAHOO_UA})
     try:
-        with urllib.request.urlopen(url, timeout=20) as r:
+        with urllib.request.urlopen(req, timeout=20) as r:
             return r.read().decode("utf-8")
     except urllib.error.HTTPError as e:
-        raise IOError("Finnhub HTTP %d" % e.code)
+        raise IOError("Yahoo chart HTTP %d" % e.code)
     except (urllib.error.URLError, OSError) as e:
-        raise IOError("Finnhub network 오류 %s" % getattr(e, "reason", e))
+        raise IOError("Yahoo chart network 오류 %s" % getattr(e, "reason", e))
 
 
-def from_finnhub(symbol, body, today, max_days):
-    """Finnhub /quote JSON → 값 envelope. c는 현재가(장 마감 뒤에는 종가), t는 그 시각(unix)."""
-    q = json.loads(body)
-    c, t = q.get("c"), q.get("t")
-    if not reit_calc.is_finite(c) or c <= 0 or not reit_calc.is_finite(t) or t <= 0:
-        return reit_calc.missing("Finnhub가 %s 값을 주지 않음(c=%r, t=%r)" % (symbol, c, t))
-    as_of = dt.datetime.fromtimestamp(t, dt.timezone.utc).date()
-    status, note = age_status(as_of, today, max_days)
-    return {"value": float(c), "unit": "USD/share", "status": status or "reported", "as_of": as_of.isoformat(),
-            "source": "finnhub:/quote", "locator": "%s?symbol=%s c=%s t=%s" % (FINNHUB, symbol, c, t),
-            "note": note or "Finnhub 현재가(장 마감 뒤에는 종가)"}
-
-
-def get_price(symbol, key, today, max_days, fetch=finnhub_get):
-    if not key:
-        return reit_calc.missing("FINNHUB_API_KEY 없음: 웹 채우기(quote.py web)로 넣는다")
+def from_yahoo(symbol, body, today, max_days, now=None):
+    """Yahoo chart JSON → 값 envelope. 마지막으로 끝난 거래일의 종가를 쓴다.
+    장 중이면 오늘 bar의 close는 종가가 아니라 그때 가격이라 건너뛴다.
+    형식이 다르거나 값이 비면 missing(0이나 추측으로 채우지 않는다)."""
+    now = now if now is not None else dt.datetime.now(dt.timezone.utc).timestamp()
+    url = yahoo_url(symbol)
     try:
-        return from_finnhub(symbol, fetch(symbol, key), today, max_days)
+        doc = json.loads(body)
+        chart = doc["chart"]
+        if chart.get("error") or not chart.get("result"):
+            err = chart.get("error") or {}
+            return reit_calc.missing("Yahoo chart가 %s 값을 주지 않음(%s)" % (symbol, err.get("description") or err.get("code") or "빈 result"))
+        r = chart["result"][0]
+        meta = r["meta"]
+        ts = r["timestamp"]
+        closes = r["indicators"]["quote"][0]["close"]
+        if not isinstance(ts, list) or not isinstance(closes, list) or len(ts) != len(closes):
+            raise ValueError("timestamp와 close 길이가 다름")
+        if str(meta.get("symbol", "")).upper() != yahoo_symbol(symbol):
+            raise ValueError("다른 symbol이 옴(%r)" % meta.get("symbol"))
+        if meta.get("currency") != "USD":
+            return reit_calc.missing("Yahoo chart %s 통화가 USD가 아님(%r)" % (symbol, meta.get("currency")))
+        off = int(meta.get("gmtoffset") or 0)
+        reg = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+        rstart, rend = reg.get("start"), reg.get("end")
+        rmt = meta.get("regularMarketTime")
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
+        return reit_calc.missing("Yahoo chart 형식이 바뀜(%s): 웹 채우기(quote.py web)로 넣는다" % e)
+    today_local = dt.datetime.fromtimestamp(now + off, dt.timezone.utc).date()
+    pick = None
+    for t, c in zip(ts, closes):
+        if not reit_calc.is_finite(t) or not reit_calc.is_finite(c) or c <= 0:
+            continue
+        day = dt.datetime.fromtimestamp(t + off, dt.timezone.utc).date()
+        if reit_calc.is_finite(rstart) and reit_calc.is_finite(rend):
+            closed = t < rstart or now >= rend   # 지금 세션 bar는 장이 끝난 뒤에만 종가다
+        else:
+            closed = day < today_local           # 세션 정보가 없으면 오늘 bar는 쓰지 않는다
+        if closed:
+            pick = (t, c, day)
+    if pick is None:
+        return reit_calc.missing("Yahoo chart에 %s의 끝난 거래일 종가가 없음: 웹 채우기(quote.py web)로 넣는다" % symbol)
+    t, c, as_of = pick
+    if as_of > today:
+        return reit_calc.missing("Yahoo chart 기준일(%s)이 오늘(%s)보다 늦음" % (as_of.isoformat(), today.isoformat()))
+    status, note = age_status(as_of, today, max_days)
+    c = round(float(c), 4)
+    return {"value": c, "unit": "USD/share", "status": status or "reported", "as_of": as_of.isoformat(),
+            "source": "yahoo:chart",
+            "locator": "%s as_of=%s close=%s timestamp=%s regularMarketTime=%s" % (url, as_of.isoformat(), c, t, rmt),
+            "note": note or "Yahoo chart 마지막 거래일 종가(거래소 종가를 옮긴 시세 feed, key 없음)"}
+
+
+def get_price(symbol, today, max_days, fetch=yahoo_get, now=None):
+    try:
+        return from_yahoo(symbol, fetch(symbol), today, max_days, now)
     except (IOError, ValueError) as e:
-        return reit_calc.missing("Finnhub 받기 실패: %s" % e)
+        return reit_calc.missing("Yahoo chart 받기 실패(%s): 웹 채우기(quote.py web)로 넣는다" % e)
 
 
 def web_price(today, max_days, value=None, as_of=None, url=None, quote=None, secondary=False, missing=None):
@@ -118,13 +169,12 @@ def put_price(path, env):
     return True
 
 
-def cmd_price(args, today=None, fetch=finnhub_get):
+def cmd_price(args, today=None, fetch=yahoo_get):
     today = today or dt.date.today()
     th = reit_calc.load_thresholds()
-    key = os.environ.get("FINNHUB_API_KEY", "").strip()
     out, code = {}, 0
     for t in args.tickers:
-        env = get_price(t.upper(), key, today, th["price_max_age_days"], fetch)
+        env = get_price(t.upper(), today, th["price_max_age_days"], fetch)
         out[t.upper()] = env
         if env["status"] == "missing":
             code = 2
@@ -195,19 +245,68 @@ def run_check():
     today = dt.date(2026, 11, 18)
     th = reit_calc.load_thresholds()
     md = th["price_max_age_days"]
-    # 2026-11-17 21:00 UTC (가상 응답)
-    body = json.dumps({"c": 55.12, "d": 0.3, "dp": 0.5, "h": 55.5, "l": 54.9, "o": 55.0, "pc": 54.82, "t": 1794949200})
-    e = from_finnhub("TEST", body, today, md)
+    fx = os.path.join(reit_calc.skill_root(), "tests", "fixtures", "yahoo")
+    with open(os.path.join(fx, "chart_TEST.json"), encoding="utf-8") as f:
+        body = f.read()
+    with open(os.path.join(fx, "chart_NOPE.json"), encoding="utf-8") as f:
+        nope = f.read()
+    j = json.loads(body)
+    reg = j["chart"]["result"][0]["meta"]["currentTradingPeriod"]["regular"]
+    before_open = reg["start"] - 3600          # 2026-11-18 08:30 ET: 어제 장은 끝났고 오늘 장은 아직
+    e = from_yahoo("TEST", body, today, md, now=before_open)
     ok(e["value"] == 55.12 and e["as_of"] == "2026-11-17" and e["status"] == "reported"
-       and e["source"] == "finnhub:/quote" and "c=55.12" in e["locator"], "Finnhub /quote: c와 t로 값·기준일")
-    ok(from_finnhub("TEST", body, dt.date(2026, 11, 30), md)["status"] == "stale", "오래된 Finnhub 값은 stale")
-    ok(from_finnhub("NOPE", json.dumps({"c": 0, "t": 0}), today, md)["status"] == "missing", "모르는 symbol(c=0)은 missing")
-    ok(get_price("TEST", "", today, md)["status"] == "missing" and "웹 채우기" in get_price("TEST", "", today, md)["note"],
-       "FINNHUB_API_KEY가 없으면 missing, 웹 채우기로 넘김")
+       and e["source"] == "yahoo:chart" and "close=55.12" in e["locator"] and "as_of=2026-11-17" in e["locator"]
+       and e["locator"].startswith("https://query1.finance.yahoo.com/v8/finance/chart/TEST?range=5d&interval=1d"),
+       "Yahoo chart: 마지막 거래일 종가, 기준일, locator에 URL·기준일")
+    ok(from_yahoo("TEST", body, dt.date(2026, 11, 30), md, now=before_open)["status"] == "stale",
+       "오래된 Yahoo 종가는 stale(%d일 규칙)" % md)
+    # 장 중: 오늘(11-18) bar가 생겼지만 close는 그때 가격이라 쓰지 않는다
+    live = json.loads(body)
+    rr = live["chart"]["result"][0]
+    rr["timestamp"].append(reg["start"])
+    rr["indicators"]["quote"][0]["close"].append(99.0)
+    in_session = reg["start"] + 3600
+    e2 = from_yahoo("TEST", json.dumps(live), today, md, now=in_session)
+    ok(e2["value"] == 55.12 and e2["as_of"] == "2026-11-17", "장 중이면 오늘 bar를 건너뛰고 어제 종가")
+    e3 = from_yahoo("TEST", json.dumps(live), today, md, now=reg["end"] + 60)
+    ok(e3["value"] == 99.0 and e3["as_of"] == "2026-11-18", "장이 끝난 뒤에는 오늘 종가")
+    ok(from_yahoo("NOPE", nope, today, md, now=before_open)["status"] == "missing", "모르는 symbol(error 응답)은 missing")
+    bad = json.loads(body)
+    del bad["chart"]["result"][0]["indicators"]
+    ok(from_yahoo("TEST", json.dumps(bad), today, md, now=before_open)["status"] == "missing"
+       and "형식" in from_yahoo("TEST", json.dumps(bad), today, md, now=before_open)["note"], "형식이 바뀌면 missing")
+    ok(from_yahoo("TEST", "<html>blocked</html>", today, md, now=before_open)["status"] == "missing", "JSON이 아니면 missing")
+    empty = json.loads(body)
+    empty["chart"]["result"][0]["indicators"]["quote"][0]["close"] = [None] * 5
+    ok(from_yahoo("TEST", json.dumps(empty), today, md, now=before_open)["status"] == "missing", "close가 비면 missing")
+    nan = json.loads(body)
+    nan["chart"]["result"][0]["indicators"]["quote"][0]["close"] = [float("nan")] * 5
+    ok(from_yahoo("TEST", json.dumps(nan), today, md, now=before_open)["status"] == "missing", "close가 NaN이면 missing")
+    other = json.loads(body)
+    other["chart"]["result"][0]["meta"]["symbol"] = "XYZ"
+    ok(from_yahoo("TEST", json.dumps(other), today, md, now=before_open)["status"] == "missing", "다른 symbol이 오면 missing")
+    krw = json.loads(body)
+    krw["chart"]["result"][0]["meta"]["currency"] = "KRW"
+    ok(from_yahoo("TEST", json.dumps(krw), today, md, now=before_open)["status"] == "missing", "USD가 아니면 missing")
+    ok(yahoo_url("BRK.B").endswith("/BRK-B?range=5d&interval=1d"), "class 주식 점은 줄표로(BRK.B → BRK-B)")
 
-    def down(sym, key):
-        raise IOError("Finnhub HTTP 429 (가상)")
-    ok(get_price("TEST", "k", today, md, down)["status"] == "missing", "Finnhub 실패는 missing(0으로 채우지 않음)")
+    def down(sym):
+        raise IOError("Yahoo chart HTTP 429 (가상)")
+    d = get_price("TEST", today, md, down)
+    ok(d["status"] == "missing" and "웹 채우기" in d["note"], "Yahoo 실패는 missing(0으로 채우지 않음), 웹 채우기로 넘김")
+
+    class A:
+        tickers, period = ["TEST", "NOPE"], None
+    got = {}
+
+    def fake(sym):
+        got[sym] = True
+        return body if sym == "TEST" else nope
+    import contextlib
+    import io as _io
+    with contextlib.redirect_stdout(_io.StringIO()):
+        ok(cmd_price(A, today=today, fetch=fake) == 2 and set(got) == {"TEST", "NOPE"},
+           "price: 한 종목이라도 missing이면 exit 2")
 
     a = dict(value="55.1", as_of="2026-11-17", url="https://www.nyse.com/quote/XNYS:TEST (가상)", quote="TEST 55.10 (가상)")
     ok(web_price(today, md, **dict(a, url=""))[0] is None and web_price(today, md, **dict(a, quote=" "))[0] is None,
@@ -225,13 +324,12 @@ def run_check():
     ok(old2["status"] == "estimated" and "허용 %d일" % md in old2["note"],
        "오래된 2차 자료는 estimated를 지킨다(estimated가 stale보다 나쁨), note에 나이")
     ok(web_price(today, md, **dict(a, as_of="2026-11-19"))[0] is None, "기준일이 오늘보다 늦으면 거절")
-    ok(from_finnhub("TEST", '{"c": NaN, "t": 1794949200}', today, md)["status"] == "missing", "Finnhub c가 NaN이면 missing")
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "f.json")
         reit_calc.write_json({"schema": reit_calc.FACTS_SCHEMA, "ticker": "TEST", "period": "2026Q3", "facts": {}}, path)
         put_price(path, web_price(today, md, **a)[0])
-        put_price(path, reit_calc.missing("Finnhub 실패(가상)"))
+        put_price(path, reit_calc.missing("Yahoo chart 실패(가상)"))
         ok(reit_calc.read_json(path)["facts"]["price"]["value"] == 55.1, "missing이 앞서 넣은 가격을 덮지 않음")
         ok(main(["web", "TEST", "--facts", path, "--value", "55", "--as-of", "2026-11-17", "--url", "https://x (가상)"]) == 1,
            "CLI: --quote 없으면 exit 1")

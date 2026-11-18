@@ -9,8 +9,8 @@
       "unit": "USD/share",
       "status": "reported",
       "as_of": "2026-11-17",
-      "source": "finnhub:/quote",
-      "locator": "c (가상)",
+      "source": "yahoo:chart",
+      "locator": "close (가상)",
       "note": ""
     },
     "dividend_frequency": {

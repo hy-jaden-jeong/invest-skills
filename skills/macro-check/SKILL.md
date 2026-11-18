@@ -22,7 +22,7 @@ description: 미국 매크로 지표(금리, credit spread, 물가, 고용, 성�
 
 exit code: 0이면 FRED series를 다 받았다. 2면 일부 series가 missing이다(받기 실패, 이유는 `note`). 1이면 입력이 틀렸거나 network가 끊겨 아무것도 받지 못했다. 2여도 snapshot은 쓰였으니 보고서를 쓰고 빠진 것을 "데이터 구멍"에 적는다. 웹 채우기 전 항목은 exit code에 들어가지 않는다.
 
-`FRED_API_KEY` 환경 변수가 있으면 FRED 공식 API로, 없으면 key가 필요 없는 `fredgraph.csv`로 받는다. 받은 CSV는 `$INVEST_DATA_DIR/macro/cache/<ID>.csv`에 두고 하루 안이면 다시 받지 않는다. network가 실패하면 하루 넘은 cache라도 쓰고 `note`에 그렇게 적는다.
+FRED 값은 API key 없이 `fredgraph.csv?id=<ID>`로 받는다. 설정할 환경 변수는 없다. 문서에 없는 endpoint라 형식이 바뀌거나 끊기면 그 series는 missing(exit 2)으로 남는다. 받은 CSV는 `$INVEST_DATA_DIR/macro/cache/<ID>.csv`에 두고 하루 안이면 다시 받지 않는다. network가 실패하면 하루 넘은 cache라도 쓰고 `note`에 그렇게 적는다.
 
 ## snapshot
 

@@ -1,0 +1,105 @@
+{
+ "_note": "\uac00\uc0c1 \uc751\ub2f5. 2026-11-18 \uc2e4\uc81c Yahoo chart \uc751\ub2f5(range=5d, interval=1d)\uc758 \ubaa8\uc591\ub9cc \ub530\uc624\uace0 symbol\u00b7\uac12\uc740 \ubc14\uafe8\ub2e4",
+ "chart": {
+  "result": [
+   {
+    "meta": {
+     "currency": "USD",
+     "symbol": "TEST",
+     "exchangeName": "NYQ",
+     "fullExchangeName": "NYSE",
+     "instrumentType": "EQUITY",
+     "regularMarketTime": 1794949202,
+     "gmtoffset": -18000,
+     "timezone": "EST",
+     "exchangeTimezoneName": "America/New_York",
+     "regularMarketPrice": 55.12,
+     "chartPreviousClose": 56.1,
+     "priceHint": 2,
+     "currentTradingPeriod": {
+      "pre": {
+       "timezone": "EST",
+       "start": 1794992400,
+       "end": 1795012200,
+       "gmtoffset": -18000
+      },
+      "regular": {
+       "timezone": "EST",
+       "start": 1795012200,
+       "end": 1795035600,
+       "gmtoffset": -18000
+      },
+      "post": {
+       "timezone": "EST",
+       "start": 1795035600,
+       "end": 1795050000,
+       "gmtoffset": -18000
+      }
+     },
+     "dataGranularity": "1d",
+     "range": "5d"
+    },
+    "timestamp": [
+     1794407400,
+     1794493800,
+     1794580200,
+     1794839400,
+     1794925800
+    ],
+    "indicators": {
+     "quote": [
+      {
+       "open": [
+        56.0,
+        55.8,
+        55.5,
+        55.3,
+        55.12
+       ],
+       "high": [
+        56.0,
+        55.8,
+        55.5,
+        55.3,
+        55.12
+       ],
+       "low": [
+        56.0,
+        55.8,
+        55.5,
+        55.3,
+        55.12
+       ],
+       "close": [
+        56.0,
+        55.8,
+        55.5,
+        55.3,
+        55.12
+       ],
+       "volume": [
+        1000,
+        1000,
+        1000,
+        1000,
+        1000
+       ]
+      }
+     ],
+     "adjclose": [
+      {
+       "adjclose": [
+        56.0,
+        55.8,
+        55.5,
+        55.3,
+        55.12
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "error": null
+ }
+}

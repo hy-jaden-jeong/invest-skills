@@ -21,7 +21,6 @@ import sys
 import tempfile
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 
 SCHEMA = "macro-snapshot/1"
@@ -39,7 +38,6 @@ HISTORY_MONTHS = 133   # 10년 percentile과 12개월 변화에 쓸 history(11�
 # User-Agent는 urllib 기본값을 둔다. 2026-11-18에 직접 정한 값(브라우저 흉내 포함)은 fredgraph가 응답하지 않았다.
 MAX_NETWORK_FAILS = 3  # network 오류가 연달아 이만큼 나면 남은 series는 받지 않는다
 FREDGRAPH = "https://fred.stlouisfed.org/graph/fredgraph.csv"
-FRED_API = "https://api.stlouisfed.org/fred/series/observations"
 
 
 class FetchError(Exception):
@@ -147,15 +145,6 @@ def parse_fredgraph_csv(text, sid):
     return obs
 
 
-def parse_fred_api_json(text):
-    data = json.loads(text)
-    out = []
-    for o in data["observations"]:
-        x = None if o["value"] in ("", ".") else float(o["value"])
-        out.append((parse_date(o["date"]), x if x is not None and math.isfinite(x) else None))
-    return out
-
-
 def to_csv(obs, sid):
     lines = ["observation_date,%s" % sid]
     lines += ["%s,%s" % (d.isoformat(), "" if v is None else repr(v)) for d, v in obs]
@@ -179,7 +168,8 @@ def http_get(url, safe_url):
     raise NetworkError(last)
 
 
-def network_loader(api_key):
+def network_loader():
+    """key 없는 fredgraph.csv로 받는다(API key·사용자 설정 없음)."""
     cache_dir = os.path.join(data_dir(), "macro", "cache")
     fails = [0]
 
@@ -191,16 +181,8 @@ def network_loader(api_key):
         try:
             if fails[0] >= MAX_NETWORK_FAILS:
                 raise FetchError("network 오류가 %d번 이어져 받지 않음" % MAX_NETWORK_FAILS)
-            if api_key:
-                q = {"series_id": sid, "api_key": api_key, "file_type": "json",
-                     "observation_start": start.isoformat()}
-                text = http_get(FRED_API + "?" + urllib.parse.urlencode(q), "FRED API " + sid)
-                obs = parse_fred_api_json(text)
-                if not any(v is not None for _, v in obs):
-                    raise FetchError("값이 하나도 없음")
-            else:
-                url = "%s?id=%s&cosd=%s" % (FREDGRAPH, sid, start.isoformat())
-                obs = parse_fredgraph_csv(http_get(url, "fredgraph.csv " + sid), sid)
+            url = "%s?id=%s&cosd=%s" % (FREDGRAPH, sid, start.isoformat())
+            obs = parse_fredgraph_csv(http_get(url, "fredgraph.csv " + sid), sid)
             fails[0] = 0
             time.sleep(0.2)
         except (FetchError, ValueError, KeyError) as e:
@@ -448,11 +430,10 @@ def cmd_fetch(args):
     if not chosen:
         log("고른 series가 없음")
         return 1
-    key = os.environ.get("FRED_API_KEY", "").strip()
-    access = "fred-api" if key else "fredgraph.csv"
+    access = "fredgraph.csv"
     today = dt.date.today()
     log("%d개 series를 %s로 받는다" % (len([s for s in chosen if s["source"] == "fred"]), access))
-    snap, code = build_snapshot(chosen, network_loader(key), today, access,
+    snap, code = build_snapshot(chosen, network_loader(), today, access,
                                 {"group": args.group, "sector": args.sector})
     fred = [e for e in snap["series"].values()]
     if fred and all(e["status"] == "missing" for e in fred):
@@ -599,11 +580,29 @@ def run_check():
     ok(snap["sectors"].get("office") == ["USPBS", "ECOMPCTSA"], "sectors.office 목록")
     ok(code == exp["exit_code"], "FRED missing이 있으면 exit 2 (got %s)" % code)
 
-    # 4. 공식 API JSON 읽기
-    with open(os.path.join(fixtures, "api_DGS10.json"), encoding="utf-8") as f:
-        obs = parse_fred_api_json(f.read())
-    want = exp["api_parse"]
-    ok([d.isoformat() for d, _ in obs] == want["dates"] and [v for _, v in obs] == want["values"], "공식 API JSON 읽기")
+    # 4. key 없는 fredgraph.csv로만 받는다(가짜 http_get으로 URL을 본다, network 없음)
+    global http_get
+    real_get, urls = http_get, []
+    with open(os.path.join(fixtures, "DGS10.csv"), encoding="utf-8") as f:
+        dgs10 = f.read()
+
+    def fake_get(url, safe_url):
+        urls.append(url)
+        return dgs10
+    old_dir = os.environ.get("INVEST_DATA_DIR")
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["INVEST_DATA_DIR"] = tmp
+            http_get = fake_get
+            obs, _ = network_loader()("DGS10", dt.date(2015, 1, 1))
+    finally:
+        http_get = real_get
+        if old_dir is None:
+            os.environ.pop("INVEST_DATA_DIR", None)
+        else:
+            os.environ["INVEST_DATA_DIR"] = old_dir
+    ok(len(urls) == 1 and urls[0].startswith(FREDGRAPH + "?id=DGS10") and "api_key" not in urls[0] and obs,
+       "FRED는 key 없는 fredgraph.csv로만 받는다(api_key 없음)")
 
     # 5. 웹 채우기와 같은 날 합치기 (임시 폴더)
     with tempfile.TemporaryDirectory() as tmp:

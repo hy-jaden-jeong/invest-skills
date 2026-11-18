@@ -24,7 +24,7 @@ holdings와 종목 metrics를 읽어 script가 비중·배당·쏠림을 계산�
 ## 차례
 
 1. **holdings 확인**: 위 순서로 파일을 정하고 ticker 목록을 읽는다.
-2. **실적 공시 목록 저장**: 오래된 종목을 가리려면 종목마다 최신 실적 8-K가 필요하다. reit-stock-review가 같은 skills 폴더에 있고 `SEC_USER_AGENT`가 있으면 종목마다 돌린다.
+2. **실적 공시 목록 저장**: 오래된 종목을 가리려면 종목마다 최신 실적 8-K가 필요하다. reit-stock-review가 같은 skills 폴더에 있으면 종목마다 돌린다. API key나 설정은 필요 없다.
 
    ```bash
    mkdir -p "$INVEST_DATA_DIR/portfolio/filings"
@@ -32,7 +32,7 @@ holdings와 종목 metrics를 읽어 script가 비중·배당·쏠림을 계산�
      > "$INVEST_DATA_DIR/portfolio/filings/T.json"
    ```
 
-   `portfolio.py`는 EDGAR를 직접 부르지 않고 이 파일만 읽는다. skill끼리는 데이터 폴더의 파일로만 주고받기 때문이다. exit가 0이 아니면 그 파일을 지운다. 파일이 없는 종목은 freshness가 `unknown`이 된다. `SEC_USER_AGENT`가 없으면 사용자에게 "이름 email" 모양의 값을 export해 달라고 하고, 그 값을 파일에 적지 않는다.
+   `portfolio.py`는 EDGAR를 직접 부르지 않고 이 파일만 읽는다. skill끼리는 데이터 폴더의 파일로만 주고받기 때문이다. exit가 0이 아니면 그 파일을 지운다. 파일이 없는 종목은 freshness가 `unknown`이 된다.
 3. **위 단계 데이터 확인**: `$INVEST_DATA_DIR/reitwatch/parsed/`가 비어 있으면 reit-sector-scan이 설치돼 있을 때 그 skill의 `fetch --month latest`를 돌린다. 없으면 그대로 계속한다(metrics 없는 종목의 screening 값이 missing이 된다).
 4. **점검**: `python3 <skill 폴더>/scripts/portfolio.py check`. `$INVEST_DATA_DIR/portfolio/snapshots/<날짜>.json`을 쓰고 경로를 찍는다. stderr에 평가액, 연 배당, needs_review가 나온다.
    - exit 0: 다 채웠다. exit 2: missing, needs_review, freshness unknown, 읽은 metrics의 check 실패 중 하나가 있다. exit 1: holdings가 없거나 형식이 틀렸다(줄 번호가 나온다. 숫자 칸은 유한한 양수만 받는다).
@@ -50,6 +50,7 @@ holdings와 종목 metrics를 읽어 script가 비중·배당·쏠림을 계산�
    - subagent가 없으면 한 종목씩 차례로 한다.
    - `edgar.py resolve`가 `is_reit: false`(SIC가 6798이 아님)면 reit-stock-review가 일반 배당주 경로(EPS·FCF payout, Chowder rule, yield trap 신호)로 분석한다. 그 metrics에는 REITWatch subsector가 없어 이 skill의 금리 민감도는 `review`로 남는다. 보고서에 그렇게 적는다.
    - reit-stock-review가 설치돼 있지 않으면 다시 분석하지 않는다. screening 값만 쓰고 그렇게 적는다.
+   - 처음 `exhibits`가 "연락처 설정 없음"(exit 1)이나 HTTP 403으로 멈추면 사용자에게 이름과 이메일을 한 번 묻고 `python3 <skills 폴더>/reit-stock-review/scripts/edgar.py config --user-agent "이름 이메일"`로 저장한 뒤 다시 돈다. 이것은 key가 아니라 SEC가 요구하는 연락처다. 값은 `$INVEST_DATA_DIR/config.json`에만 두고 레포나 보고서에 적지 않는다. subagent에 나눠 맡길 때는 첫 종목을 맡기기 전에 이것을 먼저 해 둔다.
 3. 배당 빈도가 12(월배당)가 아니면 최근 배당 지급일을 넣는다. 보도자료(.txt)의 배당 선언 문장(예: "payable on October 15")에서 읽는다. 없으면 회사 IR의 배당 page를 웹에서 찾는다.
 
    ```bash
