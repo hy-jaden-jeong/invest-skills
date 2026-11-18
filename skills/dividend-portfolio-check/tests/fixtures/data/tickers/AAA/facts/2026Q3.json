@@ -1,0 +1,26 @@
+{
+  "schema": "reit-facts/1",
+  "ticker": "AAA",
+  "period": "2026Q3",
+  "note": "(가상) fixture",
+  "facts": {
+    "price": {
+      "value": 50.0,
+      "unit": "USD/share",
+      "status": "estimated",
+      "as_of": "2026-11-16",
+      "source": "web:https://example.com/aaa(가상)",
+      "locator": "| Nov 16, 2026 | 50.00 |(가상)",
+      "note": "2차 자료"
+    },
+    "dividend_frequency": {
+      "value": 12,
+      "unit": "per year",
+      "status": "reported",
+      "as_of": "2026-09-30",
+      "source": "sec:8-K (가상)",
+      "locator": "가상 보도자료 L5 monthly dividends",
+      "note": ""
+    }
+  }
+}

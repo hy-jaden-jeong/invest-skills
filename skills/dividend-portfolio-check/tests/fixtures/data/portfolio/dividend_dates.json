@@ -1,0 +1,13 @@
+{
+  "schema": "portfolio-dividend-dates/1",
+  "tickers": {
+    "BBB": {
+      "value": "2026-10-15",
+      "status": "reported",
+      "as_of": "2026-10-15",
+      "source": "sec:8-K (가상)",
+      "locator": "가상 보도자료 L12 paid on October 15",
+      "note": ""
+    }
+  }
+}

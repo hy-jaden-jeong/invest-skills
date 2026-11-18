@@ -1,0 +1,8 @@
+# (가상) holdings 예시. 실제 보유 정보는 이 레포에 넣지 않고 $INVEST_DATA_DIR/holdings.csv 또는 INVEST_HOLDINGS_FILE 경로에 둔다.
+# ticker: 미국 상장 ticker, shares: 주식 수(양수), cost_basis: 주당 평균 매입가 USD(선택), account·note: 자유 글(선택).
+# 같은 ticker를 계좌마다 여러 줄로 적어도 된다. 주식 수를 더해 본다.
+ticker,shares,cost_basis,account,note
+O,60,55.00,계좌 A(가상),
+O,40,57.50,계좌 B(가상),
+PLD,20,,계좌 A(가상),매입가 모름(가상)
+VICI,150,30.00,계좌 B(가상),

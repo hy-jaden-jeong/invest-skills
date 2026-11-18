@@ -1,0 +1,30 @@
+{
+  "ticker": "AAA",
+  "cik": "0000000000",
+  "latest_earnings_8k": {
+    "form": "8-K",
+    "accession": "0000000001-26-000010",
+    "filed": "2026-11-02",
+    "report_date": "2026-11-02",
+    "items": [
+      "2.02",
+      "9.01"
+    ],
+    "primary_document": "x.htm",
+    "earnings": true
+  },
+  "filings": [
+    {
+      "form": "8-K",
+      "accession": "0000000001-26-000010",
+      "filed": "2026-11-02",
+      "report_date": "2026-11-02",
+      "items": [
+        "2.02",
+        "9.01"
+      ],
+      "primary_document": "x.htm",
+      "earnings": true
+    }
+  ]
+}
