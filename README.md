@@ -6,7 +6,11 @@
 
 ## skill 목록
 
-아직 없다.
+| skill | 하는 일 | 요청 예 | 필요한 것 |
+| --- | --- | --- | --- |
+| [macro-check](skills/macro-check/SKILL.md) | FRED에서 금리·credit·물가·고용·성장·주택·건설 지표와 섹터별 수요·공급 지표를 받아 snapshot(최신값, 1·3·12개월 변화, YoY, 10년 percentile)과 매크로 보고서를 쓴다 | "매크로 점검해줘", "금리·고용 요즘 어때", "오피스 섹터 매크로 봐줘" | python3. `FRED_API_KEY`는 있으면 쓰고 없어도 돈다 |
+
+skill이 쓰는 데이터(snapshot, 보고서, cache)는 레포 밖 `$INVEST_DATA_DIR`(없으면 `~/invest-data`)에 쌓인다. 환경 변수와 외부 도구는 위 표의 "필요한 것"에 적힌 skill에만 필요하다.
 
 ### 함께 설치할 것
 
@@ -37,7 +41,7 @@ Codex:
 mkdir -p ~/.agents/skills && for s in ~/invest-skills/skills/*/; do ln -sfn "${s%/}" ~/.agents/skills/"$(basename "$s")"; done
 ```
 
-skill이 하나도 없을 때 zsh에서 돌리면 "no matches found"가 나온다. skill이 생긴 뒤에 돌린다.
+skill이 새로 생기면 위 명령을 다시 돌려 link를 건다.
 
 ## 개인 정보
 
