@@ -1,11 +1,11 @@
 ---
 name: reit-stock-review
-description: 미국 REIT 종목 하나를 공시로 깊게 분석한다(deep mode). SEC EDGAR에서 최신 실적 8-K의 Ex.99(보도자료·supplemental)와 XBRL을 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. 주가는 FINNHUB_API_KEY가 있으면 Finnhub, 없으면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "PLD 깊게 봐줘", "이 리츠 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 밸류에이션과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 같은 섹터 비교(compare)와 실적 뒤 점검(earnings)은 아직 없다. 매수·매도 판단은 내리지 않는다.
+description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 하나의 최신 실적 8-K Ex.99(보도자료·supplemental)와 XBRL을 SEC EDGAR에서 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. compare mode는 같은 섹터 여러 종목을 한 표에 놓고 subsector가 다르면 경고하며, earnings mode는 새 분기 metrics를 직전 분기와 diff해 바뀐 지표와 나빠진 status·flag를 보고한다. REIT가 아닌 배당주(SIC 6798이 아님)는 FFO 대신 EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호로 본다. 주가는 FINNHUB_API_KEY가 있으면 Finnhub, 없으면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 밸류에이션과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 매수·매도 판단은 내리지 않는다.
 ---
 
-# 종목 깊게 보기 (deep mode)
+# 종목 공시 분석 (deep·compare·earnings)
 
-종목 하나의 최신 분기 공시를 읽어 facts를 만들고, script가 지표를 계산하고, agent가 보고서를 쓴다. 숫자는 script만 계산한다. agent는 공시에서 값을 읽어 위치와 함께 적고 해석한다. 같은 입력이면 같은 숫자가 나와야 하고, agent가 손으로 셈한 숫자는 틀려도 가릴 방법이 없기 때문이다.
+종목 하나의 최신 분기 공시를 읽어 facts를 만들고, script가 지표를 계산하고, agent가 보고서를 쓴다. 이것이 deep mode이고, compare mode(여러 종목)와 earnings mode(두 분기)는 deep mode의 1~9단계로 만든 metrics 파일을 script로 견준다. 숫자는 script만 계산한다. agent는 공시에서 값을 읽어 위치와 함께 적고 해석한다. 같은 입력이면 같은 숫자가 나와야 하고, agent가 손으로 셈한 숫자는 틀려도 가릴 방법이 없기 때문이다.
 
 `<skill 폴더>`는 이 SKILL.md가 있는 폴더다. 데이터 폴더는 `$INVEST_DATA_DIR`(없으면 `~/invest-data`)이고 레포 밖에 있다. 아래에서 `T`는 ticker, `P`는 달력 분기(`2026Q3`)다.
 
@@ -17,15 +17,18 @@ description: 미국 REIT 종목 하나를 공시로 깊게 분석한다(deep mod
 
 ## 차례
 
-1. **종목 확인**: `python3 <skill 폴더>/scripts/edgar.py resolve T`. `is_reit`가 false(SIC가 6798이 아님)면 FFO 경로가 맞지 않는다. 사용자에게 알리고 멈춘다(일반 배당주 경로는 아직 없다).
-2. **실적 공시 찾기**: `edgar.py filings T`. `latest_earnings_8k`(item 2.02가 든 8-K)의 accession과 `report_date`로 분기 `P`를 정한다. 사용자가 분기를 말했으면 그 분기의 실적 8-K를 고른다.
+1. **종목 확인**: `python3 <skill 폴더>/scripts/edgar.py resolve T`. `is_reit`가 false(SIC가 6798이 아님)면 아래 "일반 배당주 경로"를 탄다. FFO가 REIT에만 맞는 지표이기 때문이다.
+2. **실적 공시 찾기**: `edgar.py filings T`. `latest_earnings_8k`(item 2.02가 든 8-K)의 accession과 `report_date`로 분기 `P`를 정한다. 사용자가 분기를 말했으면 그 분기의 실적 8-K를 고른다. `P`는 달력 분기 이름이다. 52·53주 회계연도 회사(분기 끝날이 9월 27일 같은 날)도 가장 가까운 달력 분기로 부른다.
 3. **exhibit 받기**: `edgar.py exhibits T --accession A`. EX-99 문서마다 `.txt`가 생긴다. 표는 cell이 tab, row가 줄이다. 보도자료(EX-99.1)와 supplemental(EX-99.2)이 따로 있으면 둘 다 읽는다. supplemental이 8-K에 없으면 회사 IR의 supplemental PDF를 웹에서 찾아 `pdftotext -layout`으로 읽고 `source`를 `web:<URL>`로 쓴다.
-4. **facts 초안**: `edgar.py xbrl T --period P`가 `$INVEST_DATA_DIR/tickers/<T>/facts/<P>.json`을 만들고 XBRL에 있는 값을 채운다. 이미 있는 파일이면 빈 칸만 채운다. exit 2는 아직 빈 칸이 있다는 뜻이다.
+4. **facts 초안**: `edgar.py xbrl T --period P`가 `$INVEST_DATA_DIR/tickers/<T>/facts/<P>.json`을 만들고 XBRL에 있는 값을 채운다. 이미 있는 파일이면 빈 칸만 채운다. exit 2는 아직 빈 칸이 있다는 뜻이다. `filing`은 그 분기 끝날 뒤 120일 안의 첫 실적 8-K다. SEC companyfacts에 그 분기 10-Q가 아직 없으면 초안이 0칸일 수 있다. 그러면 모든 칸을 Ex.99에서 채운다.
 5. **값 읽어 적기**: facts 파일을 열어 빈 칸을 `.txt`에서 읽은 값으로 채운다. 형식과 칸의 뜻은 `<skill 폴더>/references/facts-schema.md`에 있다.
    - 값마다 `source`와 `locator`(text 파일 이름, 줄 번호, 표 이름, 원문 숫자)를 쓴다. 없으면 script가 그 값을 버린다.
    - 분기 값은 three months 열에서 읽는다. 단위(`USD thousands` 등)는 표 머리에 적힌 대로 쓴다.
    - XBRL로 채운 값은 Ex.99 표의 같은 줄과 맞춰 보고, 맞으면 `note`에 그 줄을 적는다. 다르면 Ex.99 값을 쓰고 이유를 `note`에 적는다.
    - FFO 표의 줄은 하나도 빼지 않는다. 회사 표에 그 줄이 없으면 0과 "회사 표에 이 줄이 없음", 못 찾았으면 missing과 이유다.
+   - FFO 표가 보통주 귀속이 아닌 연결 순이익에서 시작하면(NCI·우선주를 FFO 아래에서 뺌) `net_income_common`에 그 시작 값을, `ffo_reported`에 같은 기준의 FFO를 적고 `note`에 기준을 쓴다. 기준을 맞추려고 agent가 더하거나 빼지 않는다. 숫자는 script만 계산하기 때문이다.
+   - 회사 net debt 표가 이미 현금을 뺀 값만 내면 `total_debt`에 그 값, `cash`에 0과 "이미 빠짐"을 적는다. 회사가 연환산 EBITDAre를 따로 내지 않으면 `ebitdare_annualized`를 missing으로 두면 script가 분기×4(estimated)로 가정한다.
+   - 만기 표가 날짜별 줄이면 줄마다 `period`(연도)를 붙여 옮긴다. script가 해마다 더한다.
    - AFFO reconciliation은 `affo_bridge`에 줄마다 옮긴다. 회사 정의를 그대로 따른다.
    - 만기 사다리(`series.debt_maturities`), 상위 임차인(`series.top_tenants`), 섹터 지표(`sector_kpis`, `references/sector-kpis.md`)도 옮긴다.
 6. **배당 history**: `edgar.py dividends T --facts <facts 파일>`. XBRL 10-K 연간 주당 배당을 넣는다. `frequency_hint`는 참고만 하고, `dividend_frequency`는 보도자료 문장(예: "monthly dividends")에서 적는다.
@@ -107,13 +110,81 @@ facts: <경로>, metrics: <경로>, 공시: <form> <accession> (<제출일>). �
 - 회사가 낸 non-GAAP 값(AFFO, EBITDAre, NOI)은 회사 정의라고 적는다.
 - consensus·2차 자료 가격처럼 `estimated`인 값으로 한 해석에는 그 status를 문장에 붙인다.
 
-## 다른 mode
+## compare mode (같은 섹터 종목 비교)
 
-- compare(같은 섹터 종목 비교), earnings(직전 분기와 diff), 일반 배당주(REIT가 아닌 종목) 경로는 아직 없다. 요청받으면 deep mode를 종목마다 돌릴 수 있다고 알린다.
+"PLD, REXR, EGP 비교해줘"처럼 여러 종목을 견주는 요청이다.
+
+1. 종목마다 최신 분기 metrics가 있는지 본다(`$INVEST_DATA_DIR/tickers/<T>/metrics/<P>.json`). 없거나 그 뒤 실적 8-K가 나왔으면 deep mode 1~9단계로 만든다. 종목마다 facts 채우기는 서로 독립이라 subagent가 있으면 종목마다 나눠 맡긴다(Claude Code는 Agent 도구, Codex는 subagent). 지시문에는 이 SKILL.md 경로, ticker, 분기만 준다. subagent가 없으면 종목마다 차례로 한다. subagent의 보고는 증명이 아니다. metrics를 받으면 `ffo_tie_out` check와 데이터 구멍을 직접 연다.
+2. **표**: `python3 <skill 폴더>/scripts/reit_calc.py compare --metrics <M1> <M2> ... --out $INVEST_DATA_DIR/compare/<날짜>-<T1>-<T2>-....json`. 같은 지표를 종목마다 한 줄에 놓고 이 종목들끼리의 median을 낸다.
+   - REITWatch subsector가 다수와 다른 종목은 `columns[].warning`에 경고가 붙고 stderr에 "경고:"가 나온다. REIT와 일반 배당주를 섞거나 분기가 다르면 `warnings`에 오른다. 경고가 있으면 보고서 요약 첫 줄에 쓴다. 다른 섹터의 P/FFO·cap rate는 같은 기준이 아니기 때문이다.
+   - exit 0: 경고가 없고 모든 종목 metrics가 다 찼다. exit 2: 경고가 있거나 어떤 종목 metrics에 missing·check 실패가 있다(`summary.incomplete`). exit 1: 종목이 하나이거나 같은 종목이 두 번이거나 metrics 형식이 틀렸다.
+3. **보고서**: 아래 모양으로 `$INVEST_DATA_DIR/compare/<날짜>-<T1>-<T2>-....md`를 쓴다.
+
+```md
+# <T1>·<T2>·... <P> 비교 (<subsector>, <날짜>)
+
+compare: <JSON 경로> (exit), metrics: <경로들>, 공시: <종목마다 form accession (제출일)>. 판단 재료일 뿐 매수·매도 권유가 아니다.
+
+## 요약
+<경고, FFO tie-out 결과, flag 차이, 가격 status, 눈에 띄는 차이 3~5줄>
+
+## FFO tie-out
+<종목마다 재계산, 회사 값, 차이, 회사 표의 기준(보통주 귀속인지, NCI 차감 전인지). AFFO bridge 결과>
+
+## 비교 표
+<지표 줄 × 종목 칸 + median. P/FFO(분모가 무엇인지), REITWatch P/FFO·history·peer, yield·spread, 배당 CAGR·컷, leverage·coverage·고정금리·만기 최대, occupancy·same store·임차인 집중도, implied cap rate, AFFO payout. flag 표. 섹터 지표는 회사마다 정의가 달라 종목별 목록으로>
+
+## 읽을 때
+<분모·기준이 다른 지표, 같은 출처끼리 견줄 줄, 사실로 쓴 차이>
+
+## 다시 볼 조건
+
+## 데이터 구멍
+<종목마다 metrics의 data_gaps, 웹 채우기 출처와 status, 기준을 맞추지 못한 칸>
+```
+
+## earnings mode (실적 뒤 점검)
+
+"O 실적 나왔는데 봐줘"처럼 새 분기가 나온 뒤의 요청이다.
+
+1. 새 분기 `P2`를 deep mode 1~9단계로 만든다. 직전 분기 `P1` metrics가 없으면 그 분기도 만든다(`edgar.py xbrl T --period P1`이 그 분기의 실적 8-K를 고른다). 직전 분기를 나중에 만들 때는 두 분기에 같은 가격(오늘 가격)을 넣고 보고서에 적는다. 그래야 가격이 든 지표의 변화가 배당·FFO·NOI 변화만 담는다.
+2. **diff**: `python3 <skill 폴더>/scripts/reit_calc.py diff --prev <P1 metrics> --curr <P2 metrics> --out $INVEST_DATA_DIR/tickers/<T>/reports/<날짜>-earnings.json`. 지표마다 전후 값, 변화(`%` 지표는 %p, 나머지는 같은 단위와 상대 변화 %), status 변화, flag 변화, check 전후를 낸다. `worse.status`·`worse.flags`가 나빠진 것이다.
+   - exit 0: 두 분기 값이 다 있다. exit 2: 한쪽이 missing인 지표가 있다. exit 1: ticker가 다르거나 prev가 curr보다 앞선 분기가 아니다.
+3. **보고서**: `$INVEST_DATA_DIR/tickers/<T>/reports/<날짜>-earnings.md`.
+
+```md
+# <T> <회사 이름> <P2> 실적 뒤 점검 (<P1> → <P2>, <날짜>)
+
+diff: <JSON 경로> (exit), metrics: <두 경로>, 공시: <두 8-K>. 판단 재료일 뿐 매수·매도 권유가 아니다.
+
+## 요약
+<바뀐 지표 수, 나빠진 status·flag(없으면 없다고), tie-out, 주당 FFO·AFFO·guidance·payout 변화>
+
+## 바뀐 지표
+<changed가 true인 줄: 지표, P1, P2, 변화, 비고. 만기 사다리는 해마다 비중>
+
+## flag와 check
+<flag 전후와 change, check 전후>
+
+## 다시 볼 조건
+
+## 데이터 구멍
+<두 분기의 가격 출처, 한쪽이 missing인 지표, estimated 항목>
+```
+
+## 일반 배당주 경로 (SIC가 6798이 아님)
+
+"JNJ 배당 괜찮아?"처럼 REIT가 아닌 종목이다. deep mode 차례를 따르되 칸과 지표가 다르다.
+
+- `edgar.py xbrl`이 일반 배당주 칸으로 초안을 만든다: 분기 순이익·diluted EPS·분기 주당 배당, 회계연도 누적(YTD) 영업현금흐름·설비투자·보통주 배당 지급. 10-Q 현금흐름표는 누적 값만 내기 때문에 FCF payout도 누적끼리 본다.
+- agent가 채울 칸: `eps_guidance_low/high`(연간 EPS guidance. adjusted면 `note`에 회사 정의라고 쓴다), `dividend_regular_latest`·`dividend_frequency`(최근 배당 공지 문장), `price`. 배당 공지가 8-K에 없으면 회사 IR 보도자료를 웹에서 찾아 `source: web:<URL>`, `locator`에 원문 문장을 쓴다.
+- `reit_calc.py metrics`가 경로를 스스로 고른다(`path: dividend`). 지표: `eps_fy`(guidance 가운데 → 분기×4 estimated), forward dividend·yield, `eps_payout_forward`·`eps_payout_quarter`, `fcf_ytd`·`fcf_payout_ytd`, 배당 CAGR 3·5년·컷, `chowder_number`(yield + 5년 배당 CAGR)와 `chowder_threshold`(utility SIC 49xx 8, yield 3% 미만 15, 그 외 12), `p_e`, `yield_trap_signals`.
+- flag: `eps_payout`(75% watch·100% alert), `fcf_payout`(80%·100%), `chowder`(기준 미만 watch), `yield_trap`(신호 1개 watch, 2개 이상 alert). 기준은 `assets/thresholds.json`의 경험칙이다. 분기 GAAP EPS가 일회성 비용으로 작아 분기 payout이 100%를 넘으면 flag note에 남는다. 보고서에 그 비용을 적는다.
+- 보고서는 deep 보고서 모양에서 "FFO → AFFO bridge"를 "배당과 payout", "재무·운영"을 "Chowder rule"과 "yield trap 신호"로 바꿔 `tickers/<T>/reports/<날짜>-deep.md`에 쓴다.
 
 ## 고친 뒤 확인
 
-script나 `assets/thresholds.json`을 고치면 돌린다. network 없이 `tests/fixtures`로 돌고, 기대값은 `tests/expected.json`에 회사 발표값이나 손으로 셈한 값이다.
+script나 `assets/thresholds.json`을 고치면 돌린다. network 없이 `tests/fixtures`로 돌고, 기대값은 `tests/expected.json`에 회사 발표값이나 손으로 셈한 값이다. diff·compare는 `tests/fixtures/metrics/`의 가상 metrics, 일반 배당주는 `tests/fixtures/facts_div_2026q3.json`(가상)으로 확인한다.
 
 ```bash
 python3 <skill 폴더>/scripts/reit_calc.py --check   # exit 0이면 통과

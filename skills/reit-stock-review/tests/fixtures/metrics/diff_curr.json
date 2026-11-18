@@ -1,0 +1,117 @@
+{
+ "schema": "reit-metrics/1",
+ "path": "reit",
+ "ticker": "TEST",
+ "period": "2026Q3",
+ "period_end": "2026-09-30",
+ "note": "(가상) compare·diff check fixture",
+ "metrics": {
+  "affo_payout_forward": {
+   "metric": "affo_payout_forward",
+   "unit": "%",
+   "value": 88.0,
+   "status": "derived",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "net_debt_to_ebitdare": {
+   "metric": "net_debt_to_ebitdare",
+   "unit": "x",
+   "value": 6.2,
+   "status": "derived",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "p_affo": {
+   "metric": "p_affo",
+   "unit": "x",
+   "value": 11.0,
+   "status": "estimated",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "forward_yield": {
+   "metric": "forward_yield",
+   "unit": "%",
+   "value": null,
+   "status": "missing",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "occupancy_pct": {
+   "metric": "occupancy_pct",
+   "unit": "%",
+   "value": 97.5,
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "interest_coverage": {
+   "metric": "interest_coverage",
+   "unit": "x",
+   "value": 4.0,
+   "status": "derived",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "dividend_cuts": {
+   "metric": "dividend_cuts",
+   "unit": "years",
+   "value": [],
+   "status": "derived",
+   "as_of": "2026-09-30",
+   "note": ""
+  },
+  "subsector": {
+   "metric": "subsector",
+   "unit": "",
+   "value": "Industrial (가상)",
+   "status": "estimated",
+   "note": ""
+  },
+  "sector_kpis": {
+   "rent_recapture_rate_pct": {
+    "metric": "rent_recapture_rate_pct",
+    "unit": "%",
+    "value": 101.0,
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "note": ""
+   }
+  }
+ },
+ "checks": [
+  {
+   "check": "ffo_tie_out",
+   "pass": false
+  }
+ ],
+ "flags": [
+  {
+   "flag": "affo_payout",
+   "level": "watch"
+  },
+  {
+   "flag": "net_debt_to_ebitdare",
+   "level": "watch"
+  },
+  {
+   "flag": "interest_coverage",
+   "level": "ok"
+  },
+  {
+   "flag": "maturity_concentration",
+   "level": "ok"
+  }
+ ],
+ "summary": {
+  "metrics_missing": 1,
+  "checks_failed": 1,
+  "flags": {
+   "affo_payout": "watch",
+   "net_debt_to_ebitdare": "watch",
+   "interest_coverage": "ok",
+   "maturity_concentration": "ok"
+  }
+ }
+}

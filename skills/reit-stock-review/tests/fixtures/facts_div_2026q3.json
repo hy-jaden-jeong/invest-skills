@@ -1,0 +1,183 @@
+{
+ "schema": "reit-facts/1",
+ "ticker": "DIVCO",
+ "period": "2026Q3",
+ "period_end": "2026-09-27",
+ "company": {
+  "cik": "0000000002",
+  "name": "DIVCO (가상)",
+  "sic": "2834",
+  "sic_description": "Pharmaceutical Preparations",
+  "is_reit": false
+ },
+ "filing": {
+  "form": "8-K",
+  "accession": "0000000002-26-000001",
+  "filed": "2026-10-14"
+ },
+ "facts": {
+  "net_income_common": {
+   "value": 5100,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "income statement net earnings (가상)",
+   "note": ""
+  },
+  "eps_diluted_quarter": {
+   "value": 2.1,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "EPS diluted three months (가상)",
+   "note": ""
+  },
+  "eps_guidance_low": {
+   "value": 10.8,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "adjusted EPS guidance low (가상)",
+   "note": ""
+  },
+  "eps_guidance_high": {
+   "value": 11.0,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "adjusted EPS guidance high (가상)",
+   "note": ""
+  },
+  "dividend_regular_latest": {
+   "value": 1.3,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "quarterly dividend declared (가상)",
+   "note": ""
+  },
+  "dividend_frequency": {
+   "value": 4,
+   "unit": "per year",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "quarterly dividend (가상)",
+   "note": ""
+  },
+  "dividends_declared_per_share_quarter": {
+   "value": 1.3,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "dividends declared per share three months (가상)",
+   "note": ""
+  },
+  "operating_cash_flow_ytd": {
+   "value": 18000,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "cash flow statement nine months (가상)",
+   "note": ""
+  },
+  "capex_ytd": {
+   "value": 3000,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "additions to property nine months (가상)",
+   "note": ""
+  },
+  "dividends_paid_ytd": {
+   "value": 9300,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "sec:8-K (가상)",
+   "locator": "dividends to shareholders nine months (가상)",
+   "note": ""
+  },
+  "price": {
+   "value": 160.0,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-27",
+   "source": "web:https://example.com (가상)",
+   "locator": "price (가상)",
+   "note": ""
+  }
+ },
+ "series": {
+  "dividend_per_share_annual": [
+   {
+    "value": 4.04,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2020-12-31",
+    "source": "sec:8-K (가상)",
+    "locator": "10-K FY2020 (가상)",
+    "note": "",
+    "period": "2020"
+   },
+   {
+    "value": 4.19,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2021-12-31",
+    "source": "sec:8-K (가상)",
+    "locator": "10-K FY2021 (가상)",
+    "note": "",
+    "period": "2021"
+   },
+   {
+    "value": 4.45,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2022-12-31",
+    "source": "sec:8-K (가상)",
+    "locator": "10-K FY2022 (가상)",
+    "note": "",
+    "period": "2022"
+   },
+   {
+    "value": 4.7,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2023-12-31",
+    "source": "sec:8-K (가상)",
+    "locator": "10-K FY2023 (가상)",
+    "note": "",
+    "period": "2023"
+   },
+   {
+    "value": 4.91,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2024-12-31",
+    "source": "sec:8-K (가상)",
+    "locator": "10-K FY2024 (가상)",
+    "note": "",
+    "period": "2024"
+   },
+   {
+    "value": 5.11,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2025-12-31",
+    "source": "sec:8-K (가상)",
+    "locator": "10-K FY2025 (가상)",
+    "note": "",
+    "period": "2025"
+   }
+  ]
+ }
+}

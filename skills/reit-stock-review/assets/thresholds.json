@@ -13,5 +13,13 @@
   "affo_bridge_tolerance_pct": 0.5,
   "price_max_age_days": 5,
   "macro_max_age_days": 7,
-  "history_min_points": 12
+  "history_min_points": 12,
+  "eps_payout_pct": {"watch": 75, "alert": 100, "direction": "above",
+                     "source": "이 skill의 경험칙: 일반 배당주 EPS payout이 75%를 넘으면 배당을 늘릴 여유가 줄고, 100%를 넘으면 이익보다 많이 준다"},
+  "fcf_payout_pct": {"watch": 80, "alert": 100, "direction": "above",
+                     "source": "이 skill의 경험칙: 배당이 FCF의 80%를 넘으면 여유가 적고, 100%를 넘으면 빚이나 현금으로 메운다"},
+  "chowder": {"low_yield_pct": 3.0, "min_low_yield": 15, "min_default": 12, "min_utility": 8, "utility_sic_range": [4900, 4999],
+              "source": "Chowder rule(배당 투자자 경험칙): yield + 5년 배당 CAGR이 yield 3% 미만이면 15, 그 외 12, utility는 8 이상"},
+  "yield_trap": {"high_yield_pct": 8.0, "cut_lookback_years": 5,
+                 "source": "이 skill의 경험칙: 높은 yield, payout 100% 넘음, 배당 > FCF, 최근 5년 안 컷, 5년 배당 CAGR 0 이하 중 1개면 watch, 2개 이상이면 alert"}
 }
