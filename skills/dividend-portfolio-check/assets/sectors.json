@@ -3,6 +3,7 @@
   "_how": "subsectors: REITWatch subsector 이름 -> macro-check 섹터(sector, 없으면 null)와 금리 민감도 등급(rate, high·medium·low)과 이유(why). 섹터 대응은 reit-sector-scan assets/sector_map.json의 표를 복사했다(skill 하나만 설치해도 돌게). 등급은 경험적 판단이라 portfolio.py가 estimated로 내고 rate_note를 붙인다.",
   "rate_note": "경험칙: 임대 기간이 길고 임대료 인상이 고정된 섹터일수록 채권처럼 금리에 민감하다는 견해가 흔하다. 기간과 금리 국면에 따라 실증 결과가 엇갈려 등급은 estimated다.",
   "price_max_age_days": 5,
+  "reitwatch_max_age_days": 75,
   "aliases": {"Timber": "Timberland", "Infrastructure": "Telecommunications"},
   "subsectors": {
     "Free Standing": {"sector": "net_lease", "rate": "high", "why": "장기 triple-net 임대, 고정 인상률"},

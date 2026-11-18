@@ -414,6 +414,20 @@ def merge_missing(doc, draft):
     return filled
 
 
+def merge_series(have, new):
+    """연간 series를 해(period)마다 합친다. 값과 locator가 있는 해는 덮지 않고, 비었거나 없는 해만 채운다.
+    (합친 series, 새로 채운 해 목록)."""
+    by = {str(e.get("period")): e for e in have}
+    added = []
+    for e in new:
+        cur = by.get(str(e["period"]))
+        if cur and cur.get("value") is not None and cur.get("status") != "missing" and str(cur.get("locator", "")).strip():
+            continue
+        by[str(e["period"])] = e
+        added.append(str(e["period"]))
+    return [by[k] for k in sorted(by)], added
+
+
 # ---------------------------------------------------------------- 명령
 
 def load_company(t, fetch=None):
@@ -438,7 +452,7 @@ def facts_path(t, period):
 def cmd_resolve(args):
     info, _ = load_company(args.ticker)
     write_json(info, os.path.join(filings_dir(args.ticker), "company.json"))
-    print(json.dumps(info, ensure_ascii=False, indent=2))
+    print(json.dumps(info, ensure_ascii=False, indent=2, allow_nan=False))
     if not info["is_reit"]:
         log("SIC %s(%s): REIT(6798)가 아님. FFO 대신 일반 배당주 경로(EPS·FCF payout, Chowder)를 탄다" % (
             info["sic"], info["sic_description"]))
@@ -451,7 +465,7 @@ def cmd_filings(args):
     rows = filing_list(sub, forms, args.limit)
     latest = next((r for r in rows if r["earnings"]), None)
     print(json.dumps({"ticker": info["ticker"], "cik": info["cik"], "latest_earnings_8k": latest, "filings": rows},
-                     ensure_ascii=False, indent=2))
+                     ensure_ascii=False, indent=2, allow_nan=False))
     return 0
 
 
@@ -478,7 +492,7 @@ def cmd_exhibits(args):
         else:
             tpath = None
         out.append(dict(d, path=os.path.join(adir, d["document"]), text_path=tpath, url=base + d["document"]))
-    print(json.dumps({"ticker": info["ticker"], "accession": acc, "exhibits": out}, ensure_ascii=False, indent=2))
+    print(json.dumps({"ticker": info["ticker"], "accession": acc, "exhibits": out}, ensure_ascii=False, indent=2, allow_nan=False))
     return 0
 
 
@@ -519,12 +533,13 @@ def cmd_dividends(args):
     cf = load_companyfacts(args.ticker, info["cik"])
     series, concept, hint = annual_dividends(cf)
     print(json.dumps({"ticker": info["ticker"], "concept": concept, "frequency_hint": hint, "series": series},
-                     ensure_ascii=False, indent=2))
+                     ensure_ascii=False, indent=2, allow_nan=False))
     if args.facts:
         doc = read_json(args.facts)
-        doc.setdefault("series", {})["dividend_per_share_annual"] = series
+        ser = doc.setdefault("series", {})
+        ser["dividend_per_share_annual"], added = merge_series(ser.get("dividend_per_share_annual") or [], series)
         write_json(doc, args.facts)
-        log("facts에 연간 배당 %d년을 넣음: %s" % (len(series), args.facts))
+        log("facts에 연간 배당 %d년을 넣음(이미 값과 locator가 있는 해는 남김): %s" % (len(added), args.facts))
     return 0 if series else 2
 
 
@@ -662,6 +677,14 @@ def run_check():
        "Declared 값이 CashPaid의 절반도 안 되면 CashPaid를 씀(가상: 0.03 vs 4.04)")
     odd["facts"]["us-gaap"]["CommonStockDividendsPerShareDeclared"]["units"]["USD/shares"][0]["val"] = 4.05
     ok(annual_dividends(odd)[1].endswith("Declared"), "Declared가 정상 값이면 Declared를 씀")
+    have = [{"period": "2024", "value": 3.0, "unit": "USD/share", "status": "reported", "source": "sec:8-K (가상)",
+             "locator": "agent가 Ex.99에서 고친 값 (가상)"},
+            {"period": "2023", "value": None, "status": "missing", "note": "가상"}]
+    new = [{"period": y, "value": v, "status": "reported", "source": "sec:xbrl (가상)", "locator": "x (가상)"}
+           for y, v in (("2023", 2.9), ("2024", 3.1), ("2025", 3.2))]
+    merged, added = merge_series(have, new)
+    ok([(e["period"], e["value"]) for e in merged] == [("2023", 2.9), ("2024", 3.0), ("2025", 3.2)]
+       and added == ["2023", "2025"], "dividends --facts는 locator가 있는 해를 덮지 않고 빈 해만 채움")
 
     # 6. network 약속
     old = os.environ.pop("SEC_USER_AGENT", None)

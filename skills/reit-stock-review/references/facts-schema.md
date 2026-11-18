@@ -21,11 +21,11 @@
 
 ## 값 하나
 
-- `value`: 숫자. 공시 표의 부호를 그대로 옮기지 않고 아래 칸의 뜻에 맞춘다. 예: 표에 `(113,865)`로 빼는 매각 이익은 `gain_on_sale_re: 113865`(이익이 양수), `(20,705)`인 NCI 조정은 `nci_ffo_adjustments: -20705`(더하는 값의 부호).
+- `value`: 유한한 숫자(NaN·Infinity는 쓰지 않는다). 공시 표의 부호를 그대로 옮기지 않고 아래 칸의 뜻에 맞춘다. 예: 표에 `(113,865)`로 빼는 매각 이익은 `gain_on_sale_re: 113865`(이익이 양수), `(20,705)`인 NCI 조정은 `nci_ffo_adjustments: -20705`(더하는 값의 부호).
 - `unit`: 돈은 `USD`, `USD thousands`, `USD millions`, `USD billions`. 주식 수는 `shares`, `shares thousands`, `shares millions`. 주당 값 `USD/share`, 비율 `%`, 배수 `x`, 연수 `years`, 연 지급 횟수 `per year`. script가 돈은 thousands로, 주식 수는 thousands로 맞춘다. 맞지 않는 unit은 missing으로 내린다.
 - `status`: `reported`(공시 원문), `estimated`(2차 자료나 가정), `stale`(기준일이 오래됨), `missing`. facts에 `derived`를 직접 쓰지 않는다. 계산은 script가 한다.
 - `source`: `sec:8-K <accession> ex99.1`, `sec:xbrl <form> <accession>`, `web:<URL>`, `finnhub:/quote`.
-- `locator`: 원문 위치. exhibit text 파일 이름과 줄 번호, 표 이름, 원문 숫자를 그대로 쓴다. `reported`·`estimated`·`stale`인데 `source`나 `locator`가 비어 있으면 script가 쓰지 않고(missing) 데이터 구멍에 올린다.
+- `locator`: 원문 위치. exhibit text 파일 이름과 줄 번호, 표 이름, 원문 숫자를 그대로 쓴다. status와 상관없이 값이 있는데 `source`나 `locator`가 비어 있으면 script가 쓰지 않고(missing) 데이터 구멍에 올린다.
 - 회사 표에 그 줄이 없으면 `value: 0`, `status: reported`, `locator`에 표 이름, `note: "회사 표에 이 줄이 없음"`으로 둔다. 값을 못 찾은 것(`missing`)과 줄이 없는 것(0)은 다르다.
 - 못 찾았으면 `{"value": null, "status": "missing", "note": "이유"}`로 둔다. 추측으로 채우지 않는다.
 
@@ -63,7 +63,7 @@
 
 ## series
 
-- `dividend_per_share_annual`: `edgar.py dividends --facts F`가 넣는다. 항목마다 `period`(연도)가 있다.
+- `dividend_per_share_annual`: `edgar.py dividends --facts F`가 넣는다. 항목마다 `period`(연도)가 있다. 다시 돌리면 해마다 합치고, 값과 `locator`가 있는 해(agent가 고친 해)는 덮지 않는다.
 - `debt_maturities`: 만기 사다리. `period`는 연도나 `thereafter`. 같은 기준(pro-rata 또는 consolidated)의 원금 합 열을 쓴다.
 - `top_tenants`: 임대료(ABR) 비중 상위 임차인. 항목마다 `label`(이름)과 `%` 값.
 

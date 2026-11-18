@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""reit-sector-scan: Nareit REITWatch PDF를 받아 파싱하고, subsector 밸류에이션 표와 peer 표를 낸다.
+"""reit-sector-scan: Nareit REITWatch PDF를 받아 파싱하고, subsector valuation 표와 peer 표를 낸다.
 
 명령
   fetch --month YYYY-MM|latest [--backfill]   REITWatch 호를 받아 parsed JSON을 쓴다(PDF는 지운다)
@@ -29,14 +29,14 @@ import urllib.request
 SCHEMA = "reitwatch-parsed/1"
 MACRO_SCHEMA = "macro-snapshot/1"
 URL = "https://www.reit.com/sites/default/files/reitwatch/RW%s.pdf"
-BACKFILL_START = (2015, 1)       # D10: 2015-01부터
-QUARTER_MONTHS = (1, 4, 7, 10)   # D17: 가격 기준일이 분기말인 호
+BACKFILL_START = (2015, 1)       # backfill은 2015-01 호부터
+QUARTER_MONTHS = (1, 4, 7, 10)   # 가격 기준일이 분기말(3·6·9·12월 말)인 호
 RECENT_MONTHS = 12
-MIN_HISTORY = 8                  # D19: 표본이 이보다 적으면 percentile·z-score는 missing
-MIN_ROWS = 50                    # D18: 종목이 이보다 적으면 파싱 실패
-SNAPSHOT_MAX_AGE = 7             # D20: macro snapshot이 이 일수보다 오래되면 stale
-LATEST_LOOKBACK = 3              # D24
-# PDF 종목 표의 숫자 column 23개. ffo_payout·debt_ebitda는 읽기만 하고 parsed에 넣지 않는다(D9).
+MIN_HISTORY = 8                  # 표본(1·4·7·10월 호 + 최신 호)이 이보다 적으면 percentile·z-score는 missing
+MIN_ROWS = 50                    # 종목이 이보다 적으면 파싱 실패(layout이 바뀐 것으로 본다)
+SNAPSHOT_MAX_AGE = 7             # macro snapshot 날짜가 오늘보다 이 일수 넘게 이르면 DGS10은 stale
+LATEST_LOOKBACK = 3              # --month latest는 이번 달부터 세 달 앞까지 거꾸로 본다
+# PDF 종목 표의 숫자 column 23개. ffo_payout·debt_ebitda는 읽기만 하고 parsed에 넣지 않는다(값이 여러 달 같아 멈춰 있다).
 COLS = ["price", "hi52", "lo52", "ffo_fy1", "ffo_fy2", "p_ffo_fy1", "p_ffo_fy2", "ffo_growth", "ffo_payout",
         "debt_ebitda", "tr_1m", "tr_qtd", "tr_ytd", "tr_1y", "tr_3y", "tr_5y", "div_yield", "mkt_cap",
         "implied_mkt_cap", "debt_ratio", "avg_share_vol", "avg_dollar_vol", "rel_liq"]
@@ -82,11 +82,11 @@ def read_json(path):
 
 
 def write_json(obj, path):
+    text = json.dumps(obj, ensure_ascii=False, indent=1, allow_nan=False)  # NaN·Infinity 토큰을 쓰지 않는다
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=1)
-        f.write("\n")
+        f.write(text + "\n")
     os.replace(tmp, path)
 
 
@@ -95,7 +95,7 @@ def emit(obj, out):
         write_json(obj, out)
         print(out)
     else:
-        print(json.dumps(obj, ensure_ascii=False, indent=1))
+        print(json.dumps(obj, ensure_ascii=False, indent=1, allow_nan=False))
 
 
 def parse_month(s):
@@ -133,7 +133,7 @@ def _looks_like_row(tok):
 
 
 def parse_text(text, month, source, min_rows=MIN_ROWS):
-    """pdftotext -layout 출력 → parsed dict (D18)."""
+    """pdftotext -layout 출력 → parsed dict. 숫자 token 수로 row를 읽고, 수가 다른 줄은 unparsed에 남긴다."""
     lines = text.replace("\f", "\n").split("\n")
     as_of, fy = None, (None, None)
     for line in lines:
@@ -198,7 +198,7 @@ def parse_text(text, month, source, min_rows=MIN_ROWS):
 # ---------------------------------------------------------------- 받기
 
 def backfill_months(month):
-    """D10·D17: 2015-01부터 1·4·7·10월 호 + month까지 최근 12개월."""
+    """2015-01부터 1·4·7·10월 호 + month까지 최근 12개월."""
     y, m = parse_month(month)
     end = y * 12 + m - 1
     out = set()
@@ -213,7 +213,7 @@ def backfill_months(month):
 
 
 def network_text(month):
-    """PDF를 받아 pdftotext -layout 결과를 돌려준다. PDF와 txt는 바로 지운다(D10)."""
+    """PDF를 받아 pdftotext -layout 결과를 돌려준다. PDF와 txt는 바로 지운다(Nareit 저작물이고 크다)."""
     if not shutil.which("pdftotext"):
         raise FetchError("pdftotext가 없음(poppler를 설치한다)")
     y, m = parse_month(month)
@@ -342,7 +342,7 @@ def median(xs):
 
 
 def aggregate(doc, aliases=None):
-    """호 하나 → subsector별 median. aliases로 예전 이름을 지금 이름에 잇는다(D25)."""
+    """호 하나 → subsector별 median. aliases로 예전 이름을 지금 이름에 잇는다(Timber → Timberland 등)."""
     aliases = aliases or {}
     by = {}
     for r in doc["rows"]:
@@ -384,7 +384,7 @@ def is_mortgage(sub):
 
 
 def hist_stats(points, latest):
-    """D19: points = 표본 값(최신 포함). percentile·z-score."""
+    """points = 표본 값(1·4·7·10월 호 + 최신 호). percentile은 최신값 이하 비율, z는 (최신값 − 평균) / 표본 표준편차."""
     xs = [x for x in points if x is not None]
     if latest is None:
         return None, None, "최신값이 없음"
@@ -419,7 +419,7 @@ def macro_entry(snap, sid):
 
 
 def structural(snap, snap_note, macro_sector, smap):
-    """D23: 섹터 수요·공급 지표와 구조적 하락 신호."""
+    """섹터 수요·공급 지표와 구조적 하락 신호(demand 절반 이상 나빠짐 + supply 하나라도 늘어남이면 watch)."""
     if macro_sector is None:
         return {"flag": "review", "note": "대응하는 macro-check 섹터가 없음", "indicators": []}
     if snap is None:
@@ -483,7 +483,7 @@ def build_sectors(docs, snap, snap_path, snap_note, smap, today):
     table, excluded, missing = [], [], 0
     for sub in sorted(cur):
         if is_mortgage(sub):
-            excluded.append({"subsector": sub, "reason": "mortgage REIT이라 REITWatch에 FFO가 없음(D21)"})
+            excluded.append({"subsector": sub, "reason": "mortgage REIT이라 REITWatch에 FFO가 없어 P/FFO를 견줄 수 없음"})
             continue
         a = cur[sub]
         loc = "종목 표 %s %d개 row의 median" % (sub, a["n"])
@@ -495,7 +495,7 @@ def build_sectors(docs, snap, snap_path, snap_note, smap, today):
             hloc = "같은 subsector의 1·4·7·10월 호와 최신 호 median"
             row[key + "_pctile"] = val(pct, "Percent", "derived", as_of, "reitwatch:parsed", hloc, why)
             row[key + "_z"] = val(z, "z", "derived", as_of, "reitwatch:parsed", hloc, why)
-        # spread (D20)
+        # 배당수익률 − 10년물 spread(%p)
         if a["div_yield"] is None or dgs["value"] is None:
             row["spread_dgs10"] = val(None, "Percent points", "missing", as_of, "", "",
                                       dgs["note"] if dgs["value"] is None else "배당수익률 median이 없음")
@@ -504,7 +504,7 @@ def build_sectors(docs, snap, snap_path, snap_note, smap, today):
                                       "stale" if dgs["status"] == "stale" else "derived", as_of,
                                       "derived:" + src + " - DGS10", "div_yield_median - DGS10",
                                       "배당수익률 기준일 %s, DGS10 기준일 %s" % (as_of, dgs["as_of"]))
-        # 상대 성과 (D22)
+        # 3·5년 상대 성과: subsector median − equity 전체 median(%p)
         for key, base in (("tr_3y", all3), ("tr_5y", all5)):
             if a[key] is None or base is None:
                 row["rel_" + key] = val(None, "Percent points", "missing", as_of, src, "", "3·5년 수익률이 있는 row가 없음")

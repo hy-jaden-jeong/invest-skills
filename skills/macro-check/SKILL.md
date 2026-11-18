@@ -1,6 +1,6 @@
 ---
 name: macro-check
-description: 미국 매크로 지표(금리, credit spread, 물가, 고용, 성장, 주택, 건설)를 FRED에서 받아 지표마다 최신값, 1·3·12개월 변화, YoY, 10년 percentile을 담은 snapshot JSON을 쓰고, 그것을 읽어 매크로 보고서를 쓴다. 섹터 이름(office, industrial, retail, residential, healthcare, data_center, lodging, self_storage, net_lease)을 주면 그 섹터의 수요·공급 지표를 함께 받는다. FRED에 없는 값(ISM PMI, FedWatch)은 출처 URL과 원문 문장을 달아 웹에서 채운다. "매크로 점검해줘", "금리·고용 요즘 어때", "오피스 섹터 매크로 봐줘" 요청에 쓴다. 다른 skill(reit-sector-scan 등)은 이 skill의 snapshot을 읽기만 한다. 섹터 밸류에이션과 종목 분석은 하지 않는다. 매수·매도 판단은 내리지 않는다.
+description: 미국 매크로 지표(금리, credit spread, 물가, 고용, 성장, 주택, 건설)를 FRED에서 받아 지표마다 최신값, 1·3·12개월 변화, YoY, 10년 percentile을 담은 snapshot JSON을 쓰고, 그것을 읽어 매크로 보고서를 쓴다. 섹터 이름(office, industrial, retail, residential, healthcare, data_center, lodging, self_storage, net_lease)을 주면 그 섹터의 수요·공급 지표를 함께 받는다. FRED에 없는 값(ISM PMI, FedWatch)은 출처 URL과 원문 문장을 달아 웹에서 채운다. "매크로 점검해줘", "금리·고용 요즘 어때", "오피스 섹터 매크로 봐줘" 요청에 쓴다. 다른 skill(reit-sector-scan 등)은 이 skill의 snapshot을 읽기만 한다. 섹터 valuation과 종목 분석은 하지 않는다. 매수·매도 판단은 내리지 않는다.
 ---
 
 # 매크로 점검
@@ -54,7 +54,7 @@ exit code: 0이면 FRED series를 다 받았다. 2면 일부 series가 missing�
   - `yoy_pct`: (최신값 / 12개월 전 값 − 1) × 100. 단위가 Percent인 series(금리, spread, 실업률)는 계산하지 않고 `chg_12m`을 본다.
   - `pctile_10y`: 최신일 10년 전 초과부터 최신일까지 관측 중 최신값 이하인 비율(%). 100이면 10년 중 가장 높다. history가 10년보다 짧으면 null이다.
 - `sectors`의 id는 `series`나 `web` 중 한쪽에 있다.
-- 같은 날 다시 받으면 새로 받은 series만 바뀌고 다른 섹터와 웹 값은 남는다. 그래서 하루에 snapshot 파일은 하나다.
+- 같은 날 다시 받으면 새로 받은 series만 바뀌고 다른 섹터와 웹 값은 남는다. `sectors`의 목록은 앞 목록에 새 id를 더한다(`--group`으로 좁혀 받아도 지워지지 않는다). 그래서 하루에 snapshot 파일은 하나다.
 
 series 목록과 섹터 대응은 `<skill 폴더>/assets/series.json`에 있다. 섹터 대응은 경험적 판단이라 보고서에 "대리 지표"라고 쓴다.
 
@@ -68,12 +68,16 @@ series 목록과 섹터 대응은 `<skill 폴더>/assets/series.json`에 있다.
 4. `web` 명령으로 넣는다. URL이나 원문 문장이 없으면 script가 거절한다. 출처 없는 숫자가 들어가지 않게 하려는 것이다.
 
 ```bash
+# 2026-10 ISM 발표문(1차 자료)의 실제 값과 원문 문장이다
 python3 <skill 폴더>/scripts/macro.py web ISM_MFG_PMI --value 55.5 --as-of 2026-10 \
-  --url https://www.ismworld.org/... --quote "The Manufacturing PMI® registered 55.5 percent."
+  --url https://www.ismworld.org/globalassets/pub/research-and-surveys/rob/pmi/r4in202610pmi.pdf \
+  --quote "The Manufacturing PMI® registered 55.5 percent."
 python3 <skill 폴더>/scripts/macro.py web FEDWATCH_NEXT_FOMC --missing "CME page가 응답하지 않음"
 ```
 
-- 1차 자료는 `reported`, `--secondary`는 `estimated`가 된다. 기준일이 `max_lag_days`를 넘으면 `stale`이 된다.
+- 1차 자료는 `reported`, `--secondary`는 `estimated`가 된다. 기준일이 `max_lag_days`를 넘으면 1차 자료는 `stale`이 되고, 2차 자료는 더 나쁜 `estimated`를 지키고 나이를 `note`에 쓴다.
+- `--value`가 NaN·무한대이거나 `--as-of`가 오늘보다 늦으면 script가 거절한다(exit 1).
+- `--missing`은 앞서 넣은 값을 지우지 않는다. 값이 없던 항목만 missing과 이유를 쓴다. 어느 쪽이든 exit 2다.
 - FedWatch는 다음 FOMC 회의에서 가장 확률이 높은 target range의 확률(%)을 넣고, 회의 날짜와 range를 `--quote`의 원문에 담는다.
 - 못 찾으면 `--missing "이유"`로 둔다. 기억이나 추측으로 숫자를 넣지 않는다.
 

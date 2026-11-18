@@ -1,6 +1,6 @@
 ---
 name: reit-stock-review
-description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 하나의 최신 실적 8-K Ex.99(보도자료·supplemental)와 XBRL을 SEC EDGAR에서 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. compare mode는 같은 섹터 여러 종목을 한 표에 놓고 subsector가 다르면 경고하며, earnings mode는 새 분기 metrics를 직전 분기와 diff해 바뀐 지표와 나빠진 status·flag를 보고한다. REIT가 아닌 배당주(SIC 6798이 아님)는 FFO 대신 EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호로 본다. 주가는 FINNHUB_API_KEY가 있으면 Finnhub, 없으면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 밸류에이션과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 매수·매도 판단은 내리지 않는다.
+description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 하나의 최신 실적 8-K Ex.99(보도자료·supplemental)와 XBRL을 SEC EDGAR에서 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. compare mode는 같은 섹터 여러 종목을 한 표에 놓고 subsector가 다르면 경고하며, earnings mode는 새 분기 metrics를 직전 분기와 diff해 바뀐 지표와 나빠진 status·flag를 보고한다. REIT가 아닌 배당주(SIC 6798이 아님)는 FFO 대신 EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호로 본다. 주가는 FINNHUB_API_KEY가 있으면 Finnhub, 없으면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 valuation과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 매수·매도 판단은 내리지 않는다.
 ---
 
 # 종목 공시 분석 (deep·compare·earnings)
@@ -52,8 +52,9 @@ python3 <skill 폴더>/scripts/quote.py web O --period 2026Q3 --missing "시세 
 ```
 
 - URL이나 원문 문장이 없으면 script가 거절한다. 출처 없는 숫자가 들어가지 않게 하려는 것이다.
-- 1차 자료는 `reported`, `--secondary`는 `estimated`, 기준일이 5일(`assets/thresholds.json`의 `price_max_age_days`)을 넘으면 `stale`이다.
-- 못 찾으면 `--missing "이유"`로 둔다. 기억이나 추측으로 가격을 넣지 않는다.
+- 1차 자료는 `reported`, `--secondary`는 `estimated`다. 기준일이 5일(`assets/thresholds.json`의 `price_max_age_days`)을 넘으면 1차 자료는 `stale`이 되고, 2차 자료는 더 나쁜 `estimated`를 지키고 나이를 `note`에 쓴다.
+- `--value`가 0 이하·NaN·무한대이거나 `--as-of`가 오늘보다 늦으면 script가 거절한다(exit 1).
+- 못 찾으면 `--missing "이유"`로 둔다(exit 2). 앞서 넣은 가격이 있으면 지우지 않는다. 기억이나 추측으로 가격을 넣지 않는다.
 
 ## 읽는 데이터 (다른 skill의 snapshot)
 
@@ -66,6 +67,7 @@ python3 <skill 폴더>/scripts/quote.py web O --period 2026Q3 --missing "시세 
 
 - macro snapshot이 가격 기준일보다 7일 넘게 앞서면 DGS10이 stale로 표시된다. 오늘 snapshot이 없으면 갱신한다.
 - REITWatch는 월간이라 최신 달이 지난달이면 그대로 쓴다. consensus는 애널리스트 추정이라 `estimated`다.
+- 최신 호의 가격 기준일이 facts 가격 기준일보다 75일(`assets/thresholds.json`의 `reitwatch_max_age_days`) 넘게 앞서면 그 호에서 온 값의 `note`와 데이터 구멍(`reitwatch`)에 나이가 붙는다. 그러면 reit-sector-scan의 `fetch --month latest`로 갱신하고 다시 계산한다.
 - 갱신이 실패해도(exit 1) 그 칸을 missing으로 두고 계속한다.
 
 ## 보고서

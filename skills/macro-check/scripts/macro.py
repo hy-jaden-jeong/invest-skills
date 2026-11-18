@@ -15,6 +15,7 @@ import csv
 import datetime as dt
 import io
 import json
+import math
 import os
 import sys
 import tempfile
@@ -28,6 +29,8 @@ GROUPS = ["rates", "credit", "inflation", "labor", "growth", "housing", "constru
 SECTORS = ["office", "industrial", "retail", "residential", "healthcare", "data_center",
            "lodging", "self_storage", "net_lease"]
 FREQS = ["daily", "weekly", "monthly", "quarterly"]
+STATUSES = ["reported", "derived", "stale", "estimated", "missing"]  # 뒤로 갈수록 나쁘다(다른 skill과 같은 순서)
+RANK = {s: i for i, s in enumerate(STATUSES)}
 SOURCES = ["fred", "web"]
 FIELDS = ["id", "name", "group", "sectors", "core", "source", "unit", "freq", "max_lag_days"]
 CACHE_SECONDS = 24 * 3600
@@ -53,6 +56,19 @@ def log(msg):
 
 def parse_date(s):
     return dt.date(*[int(x) for x in s[:10].split("-")])
+
+
+def worst(statuses):
+    """가장 나쁜 status. 모르는 status는 missing으로 본다."""
+    return max((s if s in RANK else "missing" for s in statuses), key=RANK.get)
+
+
+def to_float(v):
+    """유한한 숫자만 받는다. NaN·무한대는 ValueError."""
+    x = float(v)
+    if not math.isfinite(x):
+        raise ValueError("유한한 숫자가 아님: %r" % v)
+    return x
 
 
 def add_months(d, n):
@@ -124,7 +140,8 @@ def parse_fredgraph_csv(text, sid):
         if len(r) < 2 or not r[0]:
             continue
         v = r[1].strip()
-        obs.append((parse_date(r[0]), None if v in ("", ".") else float(v)))
+        x = None if v in ("", ".") else float(v)
+        obs.append((parse_date(r[0]), x if x is not None and math.isfinite(x) else None))
     if not any(v is not None for _, v in obs):
         raise FetchError("값이 하나도 없음")
     return obs
@@ -132,8 +149,11 @@ def parse_fredgraph_csv(text, sid):
 
 def parse_fred_api_json(text):
     data = json.loads(text)
-    return [(parse_date(o["date"]), None if o["value"] in ("", ".") else float(o["value"]))
-            for o in data["observations"]]
+    out = []
+    for o in data["observations"]:
+        x = None if o["value"] in ("", ".") else float(o["value"])
+        out.append((parse_date(o["date"]), x if x is not None and math.isfinite(x) else None))
+    return out
 
 
 def to_csv(obs, sid):
@@ -337,24 +357,27 @@ def merge_snapshot(old, new):
     for sid, e in new["web"].items():
         web.setdefault(sid, e)
     sectors = dict(old.get("sectors", {}))
-    sectors.update(new["sectors"])
+    for sec, ids in new["sectors"].items():  # --group으로 좁혀 받은 목록이 앞 목록을 덮지 않게 합친다
+        prev = list(sectors.get(sec, []))
+        sectors[sec] = prev + [i for i in ids if i not in prev]
     out.update({"series": series, "web": web, "sectors": sectors})
     out["summary"] = summarize(out)
     return out
 
 
 def write_snapshot(snap, path):
+    text = json.dumps(snap, ensure_ascii=False, indent=2, allow_nan=False)  # NaN·Infinity 토큰을 쓰지 않는다
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(snap, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+        f.write(text + "\n")
     os.replace(tmp, path)
 
 
 # ---------------------------------------------------------------- 웹 채우기
 
 def web_set(path, spec, today, value=None, as_of=None, url=None, quote=None, secondary=False, missing=None):
+    """웹 채우기 값을 snapshot에 넣는다. exit: 0 = 넣음, 2 = missing(앞서 넣은 값은 지우지 않음), 1 = 거절."""
     if not os.path.exists(path):
         log("snapshot이 없음: %s (먼저 fetch를 돌린다)" % path)
         return 1
@@ -365,6 +388,10 @@ def web_set(path, spec, today, value=None, as_of=None, url=None, quote=None, sec
         if not missing.strip():
             log("--missing에는 이유를 쓴다")
             return 1
+        cur = snap.get("web", {}).get(spec["id"]) or {}
+        if cur.get("value") is not None:
+            log("%s: 새 값이 missing이라 앞서 넣은 값(%s, %s)을 남김" % (spec["id"], cur["value"], cur.get("status")))
+            return 2
         e.update({"value": None, "status": "missing", "as_of": None, "source": "", "locator": "",
                   "note": missing.strip()})
     else:
@@ -375,17 +402,20 @@ def web_set(path, spec, today, value=None, as_of=None, url=None, quote=None, sec
             log("--quote(원문 문장)가 없음. 원문 문장이 없으면 --missing으로 둔다")
             return 1
         try:
-            v = float(value)
+            v = to_float(value)
             d = parse_date(as_of + "-01" if len(as_of or "") == 7 else as_of)
         except (TypeError, ValueError):
-            log("--value는 숫자, --as-of는 YYYY-MM 또는 YYYY-MM-DD")
+            log("--value는 유한한 숫자, --as-of는 YYYY-MM 또는 YYYY-MM-DD")
+            return 1
+        if d > today:
+            log("--as-of 날짜(%s)가 오늘(%s)보다 늦음" % (d.isoformat(), today.isoformat()))
             return 1
         kind = "2차 자료" if secondary else "1차 자료"
         status = "estimated" if secondary else "reported"
         note = kind
         age = (today - d).days
         if age > spec["max_lag_days"]:
-            status = "stale"
+            status = worst([status, "stale"])  # 2차 자료는 오래돼도 더 나쁜 estimated를 지킨다
             note += "; 기준일이 %d일 전(허용 %d일)" % (age, spec["max_lag_days"])
         e.update({"value": v, "status": status, "as_of": d.isoformat(), "source": "web:" + url,
                   "locator": quote.strip(), "note": note})
@@ -393,7 +423,7 @@ def web_set(path, spec, today, value=None, as_of=None, url=None, quote=None, sec
     snap["summary"] = summarize(snap)
     write_snapshot(snap, path)
     log("%s: %s %s" % (spec["id"], e["status"], "" if e["value"] is None else e["value"]))
-    return 0
+    return 2 if e["value"] is None else 0
 
 
 # ---------------------------------------------------------------- CLI
@@ -592,11 +622,32 @@ def run_check():
         web_set(path, spec, today, value="48.7", as_of="2026-10", url="https://news.example.com/x (가상)",
                 quote="PMI came in at 48.7 (가상)", secondary=True)
         ok(read_json(path)["web"]["ISM_MFG_PMI"]["status"] == "estimated", "2차 자료 웹 값은 estimated")
+        e4 = web_set(path, spec, today, value="48.7", as_of="2026-08", url="https://news.example.com/x (가상)",
+                     quote="PMI came in at 48.7 (가상)", secondary=True)
+        w = read_json(path)["web"]["ISM_MFG_PMI"]
+        ok(e4 == 0 and w["status"] == "estimated" and "허용" in w["note"],
+           "오래된 2차 자료는 estimated를 지킨다(estimated가 stale보다 나쁨), note에 나이")
         web_set(path, spec, today, value="48.7", as_of="2026-08", url="https://www.ismworld.org/ (가상)", quote="q (가상)")
         ok(read_json(path)["web"]["ISM_MFG_PMI"]["status"] == "stale", "오래된 웹 값은 stale")
-        web_set(path, spec, today, missing="ISM 발표문을 찾지 못함")
+        e5 = web_set(path, spec, today, missing="ISM 발표문을 찾지 못함")
         w = read_json(path)["web"]["ISM_MFG_PMI"]
-        ok(w["value"] is None and w["status"] == "missing" and w["note"] == "ISM 발표문을 찾지 못함", "--missing")
+        ok(e5 == 2 and w["value"] == 48.7 and w["status"] == "stale", "--missing은 앞서 넣은 값을 지우지 않고 exit 2")
+        ok(all(web_set(path, spec, today, value=v, as_of="2026-10", url="https://www.ismworld.org/ (가상)",
+                       quote="q (가상)") == 1 for v in ("nan", "inf")), "NaN·무한대 웹 값은 거절")
+        ok(web_set(path, spec, today, value="48.7", as_of="2026-12", url="https://www.ismworld.org/ (가상)",
+                   quote="q (가상)") == 1, "기준일이 오늘보다 늦으면 거절")
+        blank = os.path.join(tmp, "blank.json")
+        write_snapshot(snap, blank)
+        e6 = web_set(blank, spec, today, missing="ISM 발표문을 찾지 못함")
+        w = read_json(blank)["web"]["ISM_MFG_PMI"]
+        ok(e6 == 2 and w["value"] is None and w["status"] == "missing" and w["note"] == "ISM 발표문을 찾지 못함",
+           "--missing: 값이 없던 항목은 이유를 적고 exit 2")
+        try:
+            write_snapshot({"x": float("nan")}, os.path.join(tmp, "n.json"))
+            nan_written = True
+        except ValueError:
+            nan_written = False
+        ok(not nan_written, "JSON에 NaN을 쓰려 하면 멈춤(allow_nan=False)")
         web_set(path, spec, today, value="48.7", as_of="2026-10", url="https://www.ismworld.org/ (가상)", quote="q (가상)")
         again, _ = build_snapshot(select_series(test_list), _fixture_loader(fixtures), today, "fixture",
                                   request={"group": None, "sector": None})
@@ -611,6 +662,16 @@ def run_check():
                                    request={"group": None, "sector": "office"})
         merged = merge_snapshot(merged, failed)
         ok(merged["series"]["USPBS"]["status"] == "reported", "같은 날 받기 실패가 앞서 받은 값을 덮지 않음")
+        narrow, _ = build_snapshot(select_series(test_list, group="rates", sector="office"), _fixture_loader(fixtures),
+                                   today, "fixture", request={"group": "rates", "sector": "office"})
+        ok(merge_snapshot(merged, narrow)["sectors"]["office"] == ["USPBS", "ECOMPCTSA"],
+           "--group으로 좁혀 받아도 같은 날 sectors 목록을 비우지 않고 합침")
+        labor, _ = build_snapshot(select_series(test_list, group="labor", sector="office"), _fixture_loader(fixtures),
+                                  today, "fixture", request={"group": "labor", "sector": "office"})
+        ok(merge_snapshot(dict(merged, sectors={"office": ["ECOMPCTSA"]}), labor)["sectors"]["office"]
+           == ["ECOMPCTSA", "USPBS"], "sectors 목록은 앞 목록 뒤에 새 id를 더함")
+    ok(parse_fredgraph_csv("observation_date,X\n2026-01-01,nan\n2026-02-01,1.5\n", "X")[0][1] is None,
+       "CSV의 NaN은 빈 값으로 본다")
 
     # 6. 입력 오류는 exit 1
     ok(main(["fetch", "--sector", "casino"]) == 1, "모르는 sector는 exit 1")
