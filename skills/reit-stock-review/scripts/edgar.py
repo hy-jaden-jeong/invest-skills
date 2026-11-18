@@ -8,9 +8,15 @@
   xbrl T --period P [--facts F]     XBRL에서 그 분기 값을 facts 초안에 채운다(비어 있는 칸만).
                                     REIT가 아니면 일반 배당주 칸(EPS, 현금흐름 YTD, 배당)
   dividends T [--facts F]           XBRL 연간 주당 배당 history
+  config (--user-agent "이름 이메일" | --show)
+                                    www.sec.gov용 연락처를 $INVEST_DATA_DIR/config.json에 저장·확인한다
   --check                           network 없이 fixture로 확인한다
 
-SEC는 User-Agent에 연락처를 요구한다. 환경 변수 SEC_USER_AGENT로만 받는다(예: "이름 email").
+User-Agent: data.sec.gov(submissions, companyfacts)와 efts.sec.gov(ticker → CIK)는 연락처가 없으면
+기본값 "invest-skills/1.0"(사람·레포·이메일 없음)으로 받는다. www.sec.gov(ticker 목록, Archives의 exhibit)는
+연락처가 든 User-Agent가 아니면 403을 줘서, SEC_USER_AGENT 환경 변수나 config.json의 sec_user_agent가
+있어야 받는다. 둘 다 없으면 그 명령은 exit 1로 멈추고 저장 방법을 안내한다. 이것은 key가 아니라 SEC가
+요구하는 연락처다. 가짜 연락처 기본값은 두지 않는다.
 요청은 초당 10회 아래로 보낸다. 받은 파일은 $INVEST_DATA_DIR/tickers/<T>/filings/에 둔다.
 
 exit: 0 = 다 채움, 2 = 일부 missing, 1 = 입력·network 오류.
@@ -26,6 +32,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +45,8 @@ TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK%s.json"
 COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK%s.json"
 ARCHIVES = "https://www.sec.gov/Archives/edgar/data/%d/%s/"
+EFTS_URL = "https://efts.sec.gov/LATEST/search-index?keysTyped=%s"   # key 없는 회사 검색(ticker → CIK)
+CONFIG_FILE = "config.json"   # $INVEST_DATA_DIR 아래. 레포 밖
 REIT_SIC = "6798"
 
 # facts 칸 ← XBRL concept 후보(앞에서부터). 회사마다 고르는 concept이 달라 Ex.99 표와 맞춰 본다.
@@ -85,6 +94,10 @@ class FetchError(Exception):
     pass
 
 
+class NeedContact(FetchError):
+    """www.sec.gov에 보낼 연락처 User-Agent가 설정돼 있지 않다."""
+
+
 def log(msg):
     print(msg, file=sys.stderr)
 
@@ -118,16 +131,58 @@ def throttle():
     _last[0] = time.monotonic()
 
 
-def user_agent():
-    ua = os.environ.get("SEC_USER_AGENT", "").strip()
-    if not ua:
-        raise FetchError("SEC_USER_AGENT가 없음. SEC는 연락처가 든 User-Agent를 요구한다. "
-                         "예: export SEC_USER_AGENT=\"이름 email@example.com\"")
-    return ua
+DEFAULT_UA = "invest-skills/1.0"  # 식별 정보(사람·레포·이메일)를 넣지 않는다
+CONTACT_HELP = ("www.sec.gov에서 공시 원문을 받으려면 SEC가 요구하는 연락처(이름과 이메일)가 든 User-Agent가 필요하다. "
+                "이것은 API key가 아니다. 사용자에게 이름과 이메일을 한 번 묻고 "
+                "`python3 <skill 폴더>/scripts/edgar.py config --user-agent \"이름 이메일\"`로 저장한 뒤 다시 돈다"
+                "(환경 변수 SEC_USER_AGENT로 줘도 된다)")
+EMAIL_RE = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
+
+
+def config_path():
+    return os.path.join(data_dir(), CONFIG_FILE)
+
+
+def read_config():
+    path = config_path()
+    if not os.path.exists(path):
+        return {}
+    try:
+        doc = read_json(path)
+    except (OSError, ValueError) as e:
+        log("config 읽기 실패(%s): %s" % (e, path))
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def contact_ua():
+    """(값, 어디서). SEC_USER_AGENT 환경 변수 > config.json sec_user_agent > (None, None)."""
+    env = os.environ.get("SEC_USER_AGENT", "").strip()
+    if env:
+        return env, "env:SEC_USER_AGENT"
+    cfg = str(read_config().get("sec_user_agent") or "").strip()
+    if cfg:
+        return cfg, "config:" + config_path()
+    return None, None
+
+
+def user_agent(url=""):
+    """www.sec.gov는 연락처가 있어야 한다(없으면 NeedContact). 나머지는 연락처가 없으면 DEFAULT_UA."""
+    ua, _ = contact_ua()
+    if ua:
+        return ua
+    if "://www.sec.gov/" in url:
+        raise NeedContact("%s 받기 멈춤. %s" % (url, CONTACT_HELP))
+    return DEFAULT_UA
+
+
+def mask_ua(ua):
+    """이메일 local part를 첫 글자만 남기고 가린다(a***@example.com)."""
+    return EMAIL_RE.sub(lambda m: m.group(0)[0] + "***@" + m.group(0).split("@", 1)[1], ua)
 
 
 def http_get(url):
-    ua = user_agent()
+    ua = user_agent(url)
     last = None
     for attempt in range(3):
         throttle()
@@ -139,7 +194,9 @@ def http_get(url):
             if e.code == 404:
                 raise FetchError("HTTP 404 (%s)" % url)
             if e.code == 403:
-                raise FetchError("HTTP 403 (%s): SEC_USER_AGENT에 연락처가 있는지, 요청이 너무 잦지 않은지 본다" % url)
+                hint = (CONTACT_HELP if ua == DEFAULT_UA else
+                        "요청이 너무 잦지 않은지, User-Agent(%s)에 이름과 이메일이 있는지 본다" % mask_ua(ua))
+                raise FetchError("HTTP 403 (%s): %s" % (url, hint))
             last = "HTTP %d (%s)" % (e.code, url)
         except (urllib.error.URLError, OSError) as e:
             last = "network 오류 %s (%s)" % (getattr(e, "reason", e), url)
@@ -174,6 +231,17 @@ def cik_for(tickers_json, ticker):
     for row in tickers_json.values():
         if str(row.get("ticker", "")).upper() == ticker.upper():
             return "%010d" % int(row["cik_str"])
+    return None
+
+
+def cik_from_efts(doc, ticker):
+    """efts 회사 검색 응답에서 tickers 칸에 그 ticker가 정확히 있는 첫 항목의 CIK. 없으면 None."""
+    want = ticker.upper()
+    for h in (doc.get("hits") or {}).get("hits") or []:
+        src = h.get("_source") or {}
+        ticks = [x.strip().upper() for x in str(src.get("tickers") or "").split(",")]
+        if want in ticks and str(h.get("_id", "")).isdigit():
+            return "%010d" % int(h["_id"])
     return None
 
 
@@ -430,12 +498,36 @@ def merge_series(have, new):
 
 # ---------------------------------------------------------------- 명령
 
-def load_company(t, fetch=None):
-    tick = read_json_bytes(cached(os.path.join(data_dir(), "tickers", "_sec", "company_tickers.json"),
-                                  TICKERS_URL, TICKERS_CACHE_SECONDS, fetch))
-    cik = cik_for(tick, t)
+def find_cik(t, fetch=None):
+    """ticker 목록(www.sec.gov, cache 7일) → 전에 resolve한 company.json → efts 회사 검색(key 없음) 순서."""
+    try:
+        tick = read_json_bytes(cached(os.path.join(data_dir(), "tickers", "_sec", "company_tickers.json"),
+                                      TICKERS_URL, TICKERS_CACHE_SECONDS, fetch))
+        cik = cik_for(tick, t)
+        if cik:
+            return cik
+        log("SEC ticker 목록에 %s가 없음, 전에 찾은 CIK나 efts 회사 검색으로 찾는다" % t.upper())
+    except NeedContact:
+        log("연락처가 없어 ticker 목록(www.sec.gov)을 받지 않고, 전에 찾은 CIK나 efts 회사 검색으로 찾는다")
+    except (FetchError, ValueError) as e:
+        log("ticker 목록을 받지 못함(%s), 전에 찾은 CIK나 efts 회사 검색으로 찾는다" % e)
+    prev = os.path.join(filings_dir(t), "company.json")
+    if os.path.exists(prev):
+        try:
+            cik = str(read_json(prev).get("cik") or "")
+            if cik.isdigit():
+                return "%010d" % int(cik)
+        except (OSError, ValueError):
+            pass
+    url = EFTS_URL % urllib.parse.quote(t.upper())
+    cik = cik_from_efts(read_json_bytes((fetch or http_get)(url)), t)
     if not cik:
-        raise FetchError("SEC ticker 목록에 %s가 없음" % t.upper())
+        raise FetchError("efts 회사 검색에 ticker가 정확히 %s인 회사가 없음 (%s)" % (t.upper(), url))
+    return cik
+
+
+def load_company(t, fetch=None):
+    cik = find_cik(t, fetch)
     sub = read_json_bytes(cached(os.path.join(filings_dir(t), "submissions.json"),
                                  SUBMISSIONS_URL % cik, CACHE_SECONDS, fetch))
     return company_info(sub, t), sub
@@ -466,6 +558,29 @@ def cmd_filings(args):
     latest = next((r for r in rows if r["earnings"]), None)
     print(json.dumps({"ticker": info["ticker"], "cik": info["cik"], "latest_earnings_8k": latest, "filings": rows},
                      ensure_ascii=False, indent=2, allow_nan=False))
+    return 0
+
+
+def cmd_config(args):
+    if args.user_agent is not None:
+        ua = " ".join(args.user_agent.split())
+        if not ua or not EMAIL_RE.search(ua) or len(ua.split()) < 2:
+            log("--user-agent는 \"이름 이메일\" 모양이어야 한다(SEC가 연락처를 요구한다)")
+            return 1
+        doc = read_config()
+        doc["sec_user_agent"] = ua
+        write_json(doc, config_path())
+        try:
+            os.chmod(config_path(), 0o600)
+        except OSError:
+            pass
+        log("저장함: %s" % config_path())
+    ua, where = contact_ua()
+    print(json.dumps({"sec_user_agent": mask_ua(ua) if ua else None, "from": where,
+                      "default_for_data_sec_gov": DEFAULT_UA, "config_file": config_path()},
+                     ensure_ascii=False, indent=2))
+    if not ua:
+        log("연락처 설정 없음. " + CONTACT_HELP)
     return 0
 
 
@@ -559,19 +674,24 @@ def main(argv):
             s.add_argument("--period", required=True)
         if name in ("xbrl", "dividends"):
             s.add_argument("--facts")
+    c = sub.add_parser("config")
+    g = c.add_mutually_exclusive_group(required=True)
+    g.add_argument("--user-agent", help="\"이름 이메일\". $INVEST_DATA_DIR/config.json에 저장")
+    g.add_argument("--show", action="store_true")
     try:
         args = p.parse_args(argv)
     except SystemExit as e:
         return 0 if e.code == 0 else 1
     if args.check:
         return run_check()
+    if args.cmd == "config":
+        return cmd_config(args)
     cmds = {"resolve": cmd_resolve, "filings": cmd_filings, "exhibits": cmd_exhibits,
             "xbrl": cmd_xbrl, "dividends": cmd_dividends}
     if args.cmd not in cmds:
         p.print_help(sys.stderr)
         return 1
     try:
-        user_agent()  # cache가 있어도 SEC_USER_AGENT 없이는 돌지 않는다
         return cmds[args.cmd](args)
     except FetchError as e:
         log(str(e))
@@ -692,7 +812,70 @@ def run_check():
     try:
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["INVEST_DATA_DIR"] = tmp
-            ok(main(["resolve", "TEST"]) == 1, "SEC_USER_AGENT가 없으면 exit 1")
+            ok(user_agent("https://data.sec.gov/x") == DEFAULT_UA == "invest-skills/1.0" and "@" not in DEFAULT_UA,
+               "연락처가 없으면 data.sec.gov에는 식별 정보 없는 기본 User-Agent")
+            try:
+                user_agent("https://www.sec.gov/Archives/x")
+                need = None
+            except NeedContact as e:
+                need = str(e)
+            ok(need is not None and "config --user-agent" in need and "key가 아니다" in need,
+               "연락처가 없으면 www.sec.gov 요청 전에 멈추고 config 저장을 안내")
+            import contextlib
+            import io as _io
+            with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(_io.StringIO()):
+                bad_cfg = main(["config", "--user-agent", "nomail"])
+                saved = main(["config", "--user-agent", "Test User test@example.com (가상)"])
+            ok(bad_cfg == 1 and saved == 0 and read_json(config_path())["sec_user_agent"] == "Test User test@example.com (가상)"
+               and config_path().startswith(tmp), "config: 이메일 없는 값은 거절, 저장은 데이터 폴더의 config.json")
+            ok(contact_ua()[1].startswith("config:") and user_agent("https://www.sec.gov/x").startswith("Test User"),
+               "config.json의 sec_user_agent를 www.sec.gov에 씀")
+            os.environ["SEC_USER_AGENT"] = "Env User env@example.com (가상)"
+            ok(contact_ua() == ("Env User env@example.com (가상)", "env:SEC_USER_AGENT"), "순서: 환경 변수 > config")
+            os.environ.pop("SEC_USER_AGENT", None)
+            ok(mask_ua("Test User test@example.com") == "Test User t***@example.com", "config 출력은 이메일 일부를 가림")
+            os.remove(config_path())
+            ok(contact_ua() == (None, None), "둘 다 없으면 연락처 없음")
+
+            # efts 회사 검색(가상 응답): tickers 칸에 정확히 그 ticker가 있는 항목만
+            efts = read_json(os.path.join(fx, "efts_TEST.json"))
+            ok(cik_from_efts(efts, "TEST") == "0000000001" and cik_from_efts(efts, "TES") is None
+               and cik_from_efts(efts, "TST.B") == "0000000003" and cik_from_efts({}, "TEST") is None,
+               "efts 응답: 정확히 일치하는 ticker의 CIK만(앞부분만 같으면 None)")
+
+            # ticker 목록 cache 없이, 연락처 없이 resolve: efts로 CIK를 찾고 data.sec.gov로 submissions (가짜 http_get)
+            global http_get
+            real_get, urls = http_get, []
+            with open(os.path.join(fx, "submissions.json"), "rb") as f:
+                sub_bytes = f.read()
+            with open(os.path.join(fx, "efts_TEST.json"), "rb") as f:
+                efts_bytes = f.read()
+
+            def fake_get(url):
+                user_agent(url)  # 진짜와 같이 www.sec.gov면 NeedContact
+                urls.append(url)
+                if url.startswith("https://efts.sec.gov/"):
+                    return efts_bytes
+                if url.startswith("https://data.sec.gov/submissions/"):
+                    return sub_bytes
+                raise FetchError("HTTP 404 (%s)" % url)
+            try:
+                http_get = fake_get
+                with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(_io.StringIO()):
+                    r1 = main(["resolve", "TEST"])
+                    r2 = main(["resolve", "NOPE"])
+                    r3 = main(["exhibits", "TEST", "--accession", "0000000001-26-000001"])
+                    err = _io.StringIO()
+                with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(err):
+                    main(["exhibits", "TEST", "--accession", "0000000001-26-000001"])
+            finally:
+                http_get = real_get
+            ok(r1 == 0 and urls[0].startswith(EFTS_URL % "TEST") and urls[1] == SUBMISSIONS_URL % "0000000001"
+               and not any("www.sec.gov" in u for u in urls),
+               "연락처·ticker 목록 없이 resolve: efts → CIK → data.sec.gov submissions, exit 0")
+            ok(r2 == 1, "efts에 정확히 일치하는 ticker가 없으면 exit 1")
+            ok(r3 == 1 and "config --user-agent" in err.getvalue() and not any("Archives" in u for u in urls),
+               "연락처 없이 exhibits는 www.sec.gov에 요청하지 않고 exit 1, stderr에 config 안내")
     finally:
         if old is not None:
             os.environ["SEC_USER_AGENT"] = old

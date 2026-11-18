@@ -1,6 +1,6 @@
 ---
 name: reit-stock-review
-description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 하나의 최신 실적 8-K Ex.99(보도자료·supplemental)와 XBRL을 SEC EDGAR에서 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. compare mode는 같은 섹터 여러 종목을 한 표에 놓고 subsector가 다르면 경고하며, earnings mode는 새 분기 metrics를 직전 분기와 diff해 바뀐 지표와 나빠진 status·flag를 보고한다. REIT가 아닌 배당주(SIC 6798이 아님)는 FFO 대신 EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호로 본다. 주가는 FINNHUB_API_KEY가 있으면 Finnhub, 없으면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 valuation과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 매수·매도 판단은 내리지 않는다.
+description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 하나의 최신 실적 8-K Ex.99(보도자료·supplemental)와 XBRL을 SEC EDGAR에서 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. compare mode는 같은 섹터 여러 종목을 한 표에 놓고 subsector가 다르면 경고하며, earnings mode는 새 분기 metrics를 직전 분기와 diff해 바뀐 지표와 나빠진 status·flag를 보고한다. REIT가 아닌 배당주(SIC 6798이 아님)는 FFO 대신 EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호로 본다. API key 없이 돈다. 주가는 key 없는 Yahoo chart의 마지막 거래일 종가, 실패하면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 valuation과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 매수·매도 판단은 내리지 않는다.
 ---
 
 # 종목 공시 분석 (deep·compare·earnings)
@@ -11,8 +11,8 @@ description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 �
 
 ## 준비
 
-- `SEC_USER_AGENT` 환경 변수가 있어야 한다. SEC가 연락처가 든 User-Agent를 요구하기 때문이다. 없으면 사용자에게 "이름 email" 모양의 값을 export해 달라고 하고, 그 값을 파일에 적지 않는다.
-- `FINNHUB_API_KEY`는 있으면 쓰고 없어도 된다(없으면 가격을 웹 채우기로 넣는다).
+- API key 없이 돈다. resolve·filings·xbrl·dividends(data.sec.gov, efts.sec.gov)는 설정 없이 기본 User-Agent `invest-skills/1.0`으로 받는다.
+- 공시 원문(exhibits, www.sec.gov)은 SEC가 요구하는 연락처(이름과 이메일)가 든 User-Agent가 있어야 받는다. `SEC_USER_AGENT` 환경 변수, 없으면 `$INVEST_DATA_DIR/config.json`의 `sec_user_agent`를 쓴다. 없을 때 할 일은 3단계에 있다. `edgar.py config --show`로 지금 값(이메일 일부 가림)을 본다.
 - script는 SEC에 초당 10회 아래로 요청한다. 받은 파일은 `$INVEST_DATA_DIR/tickers/<T>/filings/`에 둔다.
 
 ## 차례
@@ -20,6 +20,7 @@ description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 �
 1. **종목 확인**: `python3 <skill 폴더>/scripts/edgar.py resolve T`. `is_reit`가 false(SIC가 6798이 아님)면 아래 "일반 배당주 경로"를 탄다. FFO가 REIT에만 맞는 지표이기 때문이다.
 2. **실적 공시 찾기**: `edgar.py filings T`. `latest_earnings_8k`(item 2.02가 든 8-K)의 accession과 `report_date`로 분기 `P`를 정한다. 사용자가 분기를 말했으면 그 분기의 실적 8-K를 고른다. `P`는 달력 분기 이름이다. 52·53주 회계연도 회사(분기 끝날이 9월 27일 같은 날)도 가장 가까운 달력 분기로 부른다.
 3. **exhibit 받기**: `edgar.py exhibits T --accession A`. EX-99 문서마다 `.txt`가 생긴다. 표는 cell이 tab, row가 줄이다. 보도자료(EX-99.1)와 supplemental(EX-99.2)이 따로 있으면 둘 다 읽는다. supplemental이 8-K에 없으면 회사 IR의 supplemental PDF를 웹에서 찾아 `pdftotext -layout`으로 읽고 `source`를 `web:<URL>`로 쓴다.
+   - 처음 `exhibits`가 "연락처 설정 없음"(exit 1)이나 HTTP 403으로 멈추면 사용자에게 이름과 이메일을 한 번 묻고 `python3 <skill 폴더>/scripts/edgar.py config --user-agent "이름 이메일"`로 저장한 뒤 다시 돈다. 이것은 key가 아니라 SEC가 요구하는 연락처다. 값은 `$INVEST_DATA_DIR/config.json`에만 두고 레포나 보고서에 적지 않는다.
 4. **facts 초안**: `edgar.py xbrl T --period P`가 `$INVEST_DATA_DIR/tickers/<T>/facts/<P>.json`을 만들고 XBRL에 있는 값을 채운다. 이미 있는 파일이면 빈 칸만 채운다. exit 2는 아직 빈 칸이 있다는 뜻이다. `filing`은 그 분기 끝날 뒤 120일 안의 첫 실적 8-K다. SEC companyfacts에 그 분기 10-Q가 아직 없으면 초안이 0칸일 수 있다. 그러면 모든 칸을 Ex.99에서 채운다.
 5. **값 읽어 적기**: facts 파일을 열어 빈 칸을 `.txt`에서 읽은 값으로 채운다. 형식과 칸의 뜻은 `<skill 폴더>/references/facts-schema.md`에 있다.
    - 값마다 `source`와 `locator`(text 파일 이름, 줄 번호, 표 이름, 원문 숫자)를 쓴다. 없으면 script가 그 값을 버린다.
@@ -32,7 +33,7 @@ description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 �
    - AFFO reconciliation은 `affo_bridge`에 줄마다 옮긴다. 회사 정의를 그대로 따른다.
    - 만기 사다리(`series.debt_maturities`), 상위 임차인(`series.top_tenants`), 섹터 지표(`sector_kpis`, `references/sector-kpis.md`)도 옮긴다.
 6. **배당 history**: `edgar.py dividends T --facts <facts 파일>`. XBRL 10-K 연간 주당 배당을 넣는다. `frequency_hint`는 참고만 하고, `dividend_frequency`는 보도자료 문장(예: "monthly dividends")에서 적는다.
-7. **가격**: `python3 <skill 폴더>/scripts/quote.py price T --period P`. `FINNHUB_API_KEY`가 없거나 실패하면 price가 missing으로 남는다. 그러면 아래 "웹 채우기"로 넣는다.
+7. **가격**: `python3 <skill 폴더>/scripts/quote.py price T --period P`. key 없는 Yahoo chart endpoint에서 마지막으로 끝난 거래일의 종가를 넣는다(`source: yahoo:chart`, `locator`에 URL과 기준일, `status: reported`, 5일 넘으면 `stale`). 문서에 없는 endpoint라 HTTP 오류·형식 변화·빈 값이면 price가 missing으로 남고 exit 2다. 그러면 아래 "웹 채우기"로 넣는다.
 8. **위 단계 snapshot 확인**: 아래 "읽는 데이터"대로 macro snapshot과 REITWatch parsed가 있는지 보고, 없거나 오래됐으면 갱신한다.
 9. **계산**: `python3 <skill 폴더>/scripts/reit_calc.py metrics --facts <facts 파일>`. `$INVEST_DATA_DIR/tickers/<T>/metrics/<P>.json`을 쓰고 경로를 찍는다. stderr에 check, flag, 데이터 구멍 수가 나온다.
    - exit 0: 다 채웠다. exit 2: missing이 있거나 check가 실패했다(이유는 `data_gaps`). exit 1: facts 형식이 틀렸다.
