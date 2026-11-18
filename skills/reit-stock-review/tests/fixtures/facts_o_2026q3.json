@@ -1,0 +1,742 @@
+{
+ "schema": "reit-facts/1",
+ "ticker": "O",
+ "period": "2026Q3",
+ "period_end": "2026-09-30",
+ "company": {
+  "cik": "0000726728",
+  "name": "REALTY INCOME CORP",
+  "sic": "6798"
+ },
+ "filing": {
+  "accession": "0000726728-26-000056",
+  "form": "8-K",
+  "filed": "2026-11-02"
+ },
+ "note": "check fixture: O 2026Q3 공시 값. price만 가상",
+ "facts": {
+  "net_income_common": {
+   "value": 403942,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: Net income available to common stockholders 403,942",
+   "note": ""
+  },
+  "depreciation_amortization": {
+   "value": 647555,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: Depreciation and amortization 647,555",
+   "note": ""
+  },
+  "non_real_estate_depreciation": {
+   "value": 827,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: Depreciation of furniture, fixtures and equipment (827)",
+   "note": ""
+  },
+  "impairment_depreciable_re": {
+   "value": 111645,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: Provisions for impairment of real estate 111,645",
+   "note": ""
+  },
+  "gain_on_sale_re": {
+   "value": 113865,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: Gain on sales of real estate (113,865)",
+   "note": ""
+  },
+  "unconsolidated_jv_ffo_adjustments": {
+   "value": 13281,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: Proportionate share of adjustments for unconsolidated entities 13,281",
+   "note": ""
+  },
+  "nci_ffo_adjustments": {
+   "value": -20705,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: FFO adjustments allocable to noncontrolling interests (20,705)",
+   "note": ""
+  },
+  "other_nareit_adjustments": {
+   "value": 0,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: 표에 다른 Nareit 조정 줄 없음",
+   "note": "회사 FFO 표에 이 줄이 없음"
+  },
+  "ffo_reported": {
+   "value": 1041026,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: FFO available to common stockholders 1,041,026",
+   "note": ""
+  },
+  "normalized_ffo_reported": {
+   "value": 1043720,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: Normalized FFO available to common stockholders 1,043,720",
+   "note": ""
+  },
+  "affo_reported": {
+   "value": 1061097,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.11 AFFO table: AFFO available to common stockholders 1,061,097",
+   "note": ""
+  },
+  "ffo_per_share_diluted": {
+   "value": 1.1,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.10 FFO table, Three months ended September 30, 2026: FFO per common share Diluted $1.10",
+   "note": ""
+  },
+  "affo_per_share_diluted": {
+   "value": 1.12,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.11 AFFO per common share Diluted $1.12",
+   "note": ""
+  },
+  "ffo_guidance_low": {
+   "value": null,
+   "status": "missing",
+   "note": "회사가 FFO guidance를 내지 않음(AFFO만)"
+  },
+  "ffo_guidance_high": {
+   "value": null,
+   "status": "missing",
+   "note": "회사가 FFO guidance를 내지 않음(AFFO만)"
+  },
+  "affo_guidance_low": {
+   "value": 4.45,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-11-02",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.6 Guidance: AFFO per share $4.45 - $4.46 (Revised 2026)",
+   "note": ""
+  },
+  "affo_guidance_high": {
+   "value": 4.46,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-11-02",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.6 Guidance: AFFO per share $4.45 - $4.46 (Revised 2026)",
+   "note": ""
+  },
+  "ffo_consensus_fy1": {
+   "value": null,
+   "status": "missing",
+   "note": "REITWatch에서 읽는다"
+  },
+  "dividend_regular_latest": {
+   "value": 0.2715,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:xbrl 10-Q 0000726728-26-000059",
+   "locator": "us-gaap:DividendsPayableAmountPerShare 2026-09-30",
+   "note": ""
+  },
+  "dividend_frequency": {
+   "value": 12,
+   "unit": "per year",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.1: \"The Monthly Dividend Company\"",
+   "note": ""
+  },
+  "dividends_paid_per_share_quarter": {
+   "value": 0.813,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.9 Cash dividends paid per common share $0.8130",
+   "note": ""
+  },
+  "total_debt": {
+   "value": 31738055,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.31 Reconciliation of net debt: Total debt per the consolidated balance sheet 31,738,055",
+   "note": ""
+  },
+  "cash": {
+   "value": 368534,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.31 Less: Cash and cash equivalents (368,534)",
+   "note": ""
+  },
+  "preferred_equity": {
+   "value": 0,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.32 Capitalization: 우선주 줄 없음",
+   "note": "자본 구성에 우선주 없음"
+  },
+  "fixed_rate_debt": {
+   "value": 30212.7,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.33 Total Fixed Rate Debt Principal (Pro-Rata) $30,212.7",
+   "note": ""
+  },
+  "debt_principal_total": {
+   "value": 32004.1,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.33 Total Debt Principal (Pro-Rata) $32,004.1",
+   "note": ""
+  },
+  "ebitdare_quarter": {
+   "value": 1452572,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.31 Adjusted EBITDAre $1,452,572",
+   "note": ""
+  },
+  "ebitdare_annualized": {
+   "value": 5842889,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.31 Annualized Pro Forma Adjusted EBITDAre $5,842,889",
+   "note": ""
+  },
+  "interest_expense": {
+   "value": 333564,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.9 Income statement: Interest 333,564",
+   "note": ""
+  },
+  "occupancy_pct": {
+   "value": 98.8,
+   "unit": "%",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.3: portfolio occupancy was 98.8%",
+   "note": ""
+  },
+  "wale_years": {
+   "value": 8.5,
+   "unit": "years",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.3: weighted average remaining lease term of approximately 8.5 years",
+   "note": ""
+  },
+  "investment_grade_share_pct": {
+   "value": 34.9,
+   "unit": "%",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.17 Percentage of ABR from IG Clients Q3 2026 34.9%",
+   "note": ""
+  },
+  "same_store_current": {
+   "value": 1162006,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.18 Same Store Rental Revenue Total Q3 2026 $1,162,006",
+   "note": "O는 same store NOI 대신 same store rental revenue를 낸다"
+  },
+  "same_store_prior": {
+   "value": 1149045,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.18 Same Store Rental Revenue Total Q3 2025 $1,149,045",
+   "note": ""
+  },
+  "noi_annualized": {
+   "value": 5761304,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.21 Annualized Pro Forma Cash NOI $5,761,304",
+   "note": ""
+  },
+  "price": {
+   "value": 50.0,
+   "unit": "USD/share",
+   "status": "reported",
+   "as_of": "2026-11-17",
+   "source": "web:https://example.org/quote (가상)",
+   "locator": "Last 50.00 (가상)",
+   "note": "check용 가상 가격"
+  },
+  "common_shares_outstanding": {
+   "value": 950964,
+   "unit": "shares thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.32 Capitalization: Common Stock 950,964",
+   "note": ""
+  },
+  "op_units_outstanding": {
+   "value": 2682,
+   "unit": "shares thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.32 Capitalization: Common Units 2,682",
+   "note": ""
+  }
+ },
+ "series": {
+  "dividend_per_share_annual": [
+   {
+    "value": 2.794,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2020-12-31",
+    "source": "sec:xbrl 10-K 0000726728-23-000044",
+    "locator": "us-gaap:CommonStockDividendsPerShareCashPaid FY2020 (2020-01-01..2020-12-31)",
+    "note": "",
+    "period": "2020"
+   },
+   {
+    "value": 2.833,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2021-12-31",
+    "source": "sec:xbrl 10-K 0000726728-24-000047",
+    "locator": "us-gaap:CommonStockDividendsPerShareCashPaid FY2021 (2021-01-01..2021-12-31)",
+    "note": "",
+    "period": "2021"
+   },
+   {
+    "value": 2.967,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2022-12-31",
+    "source": "sec:xbrl 10-K 0000726728-25-000055",
+    "locator": "us-gaap:CommonStockDividendsPerShareCashPaid FY2022 (2022-01-01..2022-12-31)",
+    "note": "",
+    "period": "2022"
+   },
+   {
+    "value": 3.051,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2023-12-31",
+    "source": "sec:xbrl 10-K 0000726728-26-000011",
+    "locator": "us-gaap:CommonStockDividendsPerShareCashPaid FY2023 (2023-01-01..2023-12-31)",
+    "note": "",
+    "period": "2023"
+   },
+   {
+    "value": 3.1255,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2024-12-31",
+    "source": "sec:xbrl 10-K 0000726728-26-000011",
+    "locator": "us-gaap:CommonStockDividendsPerShareCashPaid FY2024 (2024-01-01..2024-12-31)",
+    "note": "",
+    "period": "2024"
+   },
+   {
+    "value": 3.217,
+    "unit": "USD/share",
+    "status": "reported",
+    "as_of": "2025-12-31",
+    "source": "sec:xbrl 10-K 0000726728-26-000011",
+    "locator": "us-gaap:CommonStockDividendsPerShareCashPaid FY2025 (2025-01-01..2025-12-31)",
+    "note": "",
+    "period": "2025"
+   }
+  ],
+  "debt_maturities": [
+   {
+    "value": 2201.4,
+    "unit": "USD millions",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.34 Debt Maturities, Total Debt Principal 2026 $2201.4",
+    "note": "",
+    "period": "2026"
+   },
+   {
+    "value": 2884.1,
+    "unit": "USD millions",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.34 Debt Maturities, Total Debt Principal 2027 $2884.1",
+    "note": "",
+    "period": "2027"
+   },
+   {
+    "value": 3784.2,
+    "unit": "USD millions",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.34 Debt Maturities, Total Debt Principal 2028 $3784.2",
+    "note": "",
+    "period": "2028"
+   },
+   {
+    "value": 4442.7,
+    "unit": "USD millions",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.34 Debt Maturities, Total Debt Principal 2029 $4442.7",
+    "note": "",
+    "period": "2029"
+   },
+   {
+    "value": 2598.2,
+    "unit": "USD millions",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.34 Debt Maturities, Total Debt Principal 2030 $2598.2",
+    "note": "",
+    "period": "2030"
+   },
+   {
+    "value": 16093.5,
+    "unit": "USD millions",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.34 Debt Maturities, Total Debt Principal thereafter $16093.5",
+    "note": "",
+    "period": "thereafter"
+   }
+  ],
+  "top_tenants": [
+   {
+    "value": 3.3,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: Dollar General 3.3%",
+    "note": "",
+    "label": "Dollar General"
+   },
+   {
+    "value": 3.0,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: 7-Eleven 3.0%",
+    "note": "",
+    "label": "7-Eleven"
+   },
+   {
+    "value": 2.9,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: Walgreens 2.9%",
+    "note": "",
+    "label": "Walgreens"
+   },
+   {
+    "value": 2.5,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: Family Dollar 2.5%",
+    "note": "",
+    "label": "Family Dollar"
+   },
+   {
+    "value": 2.1,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: Life Time Group 2.1%",
+    "note": "",
+    "label": "Life Time Group"
+   },
+   {
+    "value": 2.0,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: (B&Q) Kingfisher 2.0%",
+    "note": "",
+    "label": "(B&Q) Kingfisher"
+   },
+   {
+    "value": 2.0,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: Wynn Resorts 2.0%",
+    "note": "",
+    "label": "Wynn Resorts"
+   },
+   {
+    "value": 1.9,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: EG Group 1.9%",
+    "note": "",
+    "label": "EG Group"
+   },
+   {
+    "value": 1.6,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: Asda 1.6%",
+    "note": "",
+    "label": "Asda"
+   },
+   {
+    "value": 1.6,
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.17 Top 20 clients: Sainsbury's 1.6%",
+    "note": "",
+    "label": "Sainsbury's"
+   }
+  ]
+ },
+ "affo_bridge": {
+  "start": "normalized_ffo_reported",
+  "items": [
+   {
+    "value": 21656,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Amortization of net debt discounts and deferred financing costs",
+    "note": "",
+    "label": "Amortization of net debt discounts and deferred financing costs"
+   },
+   {
+    "value": 1531,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Amortization of acquired interest rate swap value",
+    "note": "",
+    "label": "Amortization of acquired interest rate swap value"
+   },
+   {
+    "value": -2392,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Leasing costs and commissions",
+    "note": "",
+    "label": "Leasing costs and commissions"
+   },
+   {
+    "value": -27,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Recurring capital expenditures",
+    "note": "",
+    "label": "Recurring capital expenditures"
+   },
+   {
+    "value": 14212,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Provisions for credit losses on loans and financing receivables",
+    "note": "",
+    "label": "Provisions for credit losses on loans and financing receivables"
+   },
+   {
+    "value": 6461,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Amortization of share-based compensation",
+    "note": "",
+    "label": "Amortization of share-based compensation"
+   },
+   {
+    "value": -50732,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Straight-line rent and expenses, net",
+    "note": "",
+    "label": "Straight-line rent and expenses, net"
+   },
+   {
+    "value": 17742,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Amortization of above and below-market leases, net",
+    "note": "",
+    "label": "Amortization of above and below-market leases, net"
+   },
+   {
+    "value": 0,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Deferred tax expense",
+    "note": "",
+    "label": "Deferred tax expense"
+   },
+   {
+    "value": 1473,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Executive severance charge",
+    "note": "",
+    "label": "Executive severance charge"
+   },
+   {
+    "value": 4202,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Derivative and unrealized foreign currency loss (gain), net",
+    "note": "",
+    "label": "Derivative and unrealized foreign currency loss (gain), net"
+   },
+   {
+    "value": 2230,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Other adjustments",
+    "note": "",
+    "label": "Other adjustments"
+   },
+   {
+    "value": -987,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Proportionate share of adjustments for unconsolidated entities",
+    "note": "",
+    "label": "Proportionate share of adjustments for unconsolidated entities"
+   },
+   {
+    "value": 2008,
+    "unit": "USD thousands",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.1",
+    "locator": "Ex.99.1 p.11 AFFO table: Adjustments allocable to noncontrolling interests",
+    "note": "",
+    "label": "Adjustments allocable to noncontrolling interests"
+   }
+  ]
+ },
+ "sector_kpis": {
+  "rent_recapture_rate_pct": {
+   "value": 103.5,
+   "unit": "%",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.19 Rent Recapture Rate Re-leasing Totals Q3 2026 103.5 %",
+   "note": ""
+  },
+  "investment_cash_yield_pct": {
+   "value": 6.8,
+   "unit": "%",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.1: Initial Weighted Average Cash Yield of 6.8%",
+   "note": ""
+  }
+ }
+}

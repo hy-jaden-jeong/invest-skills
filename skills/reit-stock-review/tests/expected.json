@@ -1,0 +1,226 @@
+{
+  "note": "기대값은 회사 발표값(Ex.99.1·99.2)이나 계산기로 손계산한 값이다. 코드와 같은 방식으로 다시 만든 값이 아니다.",
+  "reit_calc": {
+    "values": {
+      "ffo_nareit": {
+        "value": 1041026,
+        "status": "derived",
+        "why": "Ex.99.1 p.10 FFO available to common stockholders"
+      },
+      "affo_bridge_sum": {
+        "value": 1061097,
+        "status": "derived",
+        "why": "Ex.99.1 p.11 AFFO available to common stockholders"
+      },
+      "forward_dividend": {
+        "value": 3.258,
+        "status": "derived",
+        "why": "Ex.99.1 p.2 annualized dividend $3.258"
+      },
+      "affo_fy": {
+        "value": 4.455,
+        "status": "derived",
+        "why": "guidance $4.45-$4.46 가운데"
+      },
+      "affo_payout_quarter": {
+        "value": 72.5893,
+        "status": "derived",
+        "why": "Ex.99.1 p.2 72.6% of AFFO per share"
+      },
+      "affo_payout_forward": {
+        "value": 73.1313,
+        "status": "derived",
+        "why": "3.258 / 4.455"
+      },
+      "forward_yield": {
+        "value": 6.516,
+        "status": "derived",
+        "why": "3.258 / 50.00(가상 가격)"
+      },
+      "net_debt": {
+        "value": 31369521,
+        "status": "derived",
+        "why": "Ex.99.2 p.31 Net Debt $31,369,521"
+      },
+      "net_debt_to_ebitdare": {
+        "value": 5.3688,
+        "status": "derived",
+        "why": "Ex.99.2 p.31 5.4x"
+      },
+      "interest_coverage": {
+        "value": 4.3547,
+        "status": "derived",
+        "why": "1,452,572 / 333,564"
+      },
+      "fixed_rate_debt_pct": {
+        "value": 94.4026,
+        "status": "derived",
+        "why": "Ex.99.2 p.33 94.4%"
+      },
+      "maturity_max_year_pct": {
+        "value": 13.8817,
+        "status": "derived",
+        "why": "2029 4,442.7 / 32,004.1"
+      },
+      "top1_tenant_pct": {
+        "value": 3.3,
+        "status": "derived",
+        "why": "Dollar General 3.3%"
+      },
+      "top5_tenant_pct": {
+        "value": 13.8,
+        "status": "derived",
+        "why": "3.3+3.0+2.9+2.5+2.1"
+      },
+      "top10_tenant_pct": {
+        "value": 22.9,
+        "status": "derived",
+        "why": "상위 10개 합"
+      },
+      "same_store_growth_pct": {
+        "value": 1.128,
+        "status": "derived",
+        "why": "Ex.99.2 p.18 1.1%"
+      },
+      "market_cap": {
+        "value": 47682300,
+        "status": "derived",
+        "why": "50 × (950,964 + 2,682) thousand"
+      },
+      "implied_cap_rate": {
+        "value": 7.288,
+        "status": "derived",
+        "why": "5,761,304 / (47,682,300 + 31,369,521)"
+      },
+      "p_affo": {
+        "value": 11.2233,
+        "status": "derived",
+        "why": "50 / 4.455"
+      },
+      "affo_yield": {
+        "value": 8.91,
+        "status": "derived",
+        "why": "4.455 / 50"
+      },
+      "p_ffo": {
+        "value": 11.7647,
+        "status": "estimated",
+        "why": "50 / 4.25(가상 REITWatch consensus)"
+      },
+      "dividend_cagr_5y": {
+        "value": 2.8596,
+        "status": "derived",
+        "why": "(3.217/2.794)^(1/5) − 1"
+      },
+      "dividend_cagr_3y": {
+        "value": 2.7333,
+        "status": "derived",
+        "why": "(3.217/2.967)^(1/3) − 1"
+      },
+      "yield_spread_vs_10y": {
+        "value": 2.016,
+        "status": "derived",
+        "why": "6.516 − 4.50(가상 DGS10)"
+      },
+      "affo_yield_spread_vs_10y": {
+        "value": 4.41,
+        "status": "derived",
+        "why": "8.91 − 4.50"
+      },
+      "p_ffo_vs_peer": {
+        "value": 0.9143,
+        "status": "estimated",
+        "why": "12.8 / 14.0(가상 peer median)"
+      },
+      "occupancy_pct": {
+        "value": 98.8,
+        "status": "reported",
+        "why": "회사 발표값 그대로"
+      }
+    },
+    "flags": {
+      "affo_payout": "ok",
+      "maturity_concentration": "ok",
+      "net_debt_to_ebitdare": "ok",
+      "interest_coverage": "ok"
+    },
+    "cut_series": {
+      "values": [
+        2.794,
+        2.9,
+        2.5,
+        2.6,
+        2.6,
+        2.4
+      ],
+      "cuts": [
+        "2022",
+        "2025"
+      ]
+    }
+  },
+  "edgar": {
+    "cik": "0000000001",
+    "earnings_accessions": [
+      "0000000001-26-000008",
+      "0000000001-26-000006"
+    ],
+    "ex99": [
+      [
+        "EX-99.1",
+        "ex991.htm"
+      ],
+      [
+        "EX-99.2",
+        "supp.htm"
+      ]
+    ],
+    "text_lines": [
+      "Net income available to common stockholders\t$\t1,000\t$\t900",
+      "Gain on sales of real estate\t\t(50)\t\t(10)",
+      "FFO per share was $0.50.",
+      "Next line"
+    ],
+    "xbrl": {
+      "net_income_common": {
+        "value": 1100,
+        "locator": "us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic 2026-07-01..2026-09-30",
+        "why": "3개월 값 중 가장 늦게 낸 값(9개월 3000은 버림)"
+      },
+      "depreciation_amortization": {
+        "value": 700,
+        "locator": "us-gaap:DepreciationAndAmortization",
+        "why": "첫 후보가 없으면 둘째 후보"
+      },
+      "cash": {
+        "value": 500,
+        "locator": "us-gaap:CashAndCashEquivalentsAtCarryingValue 2026-09-30",
+        "why": "instant 값"
+      },
+      "common_shares_outstanding": {
+        "value": 200000,
+        "locator": "us-gaap:CommonStockSharesOutstanding",
+        "why": "instant 값"
+      },
+      "dividends_paid_per_share_quarter": {
+        "value": 0.3,
+        "locator": "us-gaap:CommonStockDividendsPerShareCashPaid 2026-07-01..2026-09-30",
+        "why": "3개월 값(9개월 0.9, 1개월 0.1은 버림)"
+      }
+    },
+    "dividends": [
+      [
+        "2023",
+        1.0
+      ],
+      [
+        "2024",
+        1.06
+      ],
+      [
+        "2025",
+        1.1
+      ]
+    ]
+  }
+}
