@@ -1,0 +1,13 @@
+{
+  "series": [
+    {"id": "DGS10", "name": "Market Yield on U.S. Treasury Securities at 10-Year Constant Maturity, Quoted on an Investment Basis", "group": "rates", "sectors": ["net_lease"], "core": true, "source": "fred", "unit": "Percent", "freq": "daily", "max_lag_days": 10},
+    {"id": "CPIAUCSL", "name": "Consumer Price Index for All Urban Consumers: All Items in U.S. City Average", "group": "inflation", "sectors": [], "core": true, "source": "fred", "unit": "Index 1982-1984=100", "freq": "monthly", "max_lag_days": 80},
+    {"id": "USPBS", "name": "All Employees, Professional and Business Services", "group": "labor", "sectors": ["office"], "core": false, "source": "fred", "unit": "Thousands of Persons", "freq": "monthly", "max_lag_days": 80},
+    {"id": "TESTM", "name": "Test Monthly Series (가상)", "group": "growth", "sectors": [], "core": true, "source": "fred", "unit": "Index (가상)", "freq": "monthly", "max_lag_days": 80},
+    {"id": "RRVRUSQ156N", "name": "Rental Vacancy Rate in the United States", "group": "housing", "sectors": ["residential"], "core": false, "source": "fred", "unit": "Percent", "freq": "quarterly", "max_lag_days": 250},
+    {"id": "ECOMPCTSA", "name": "E-Commerce Retail Sales as a Percent of Total Sales", "group": "growth", "sectors": ["office"], "core": false, "source": "fred", "unit": "Percent", "freq": "quarterly", "max_lag_days": 200, "note": "stale 확인용으로 max_lag_days를 일부러 줄였다(가상 설정)"},
+    {"id": "NOTASERIES", "name": "Not A Series (가상)", "group": "rates", "sectors": [], "core": true, "source": "fred", "unit": "Percent", "freq": "daily", "max_lag_days": 10},
+    {"id": "NOFILE", "name": "No Fixture File (가상)", "group": "credit", "sectors": [], "core": true, "source": "fred", "unit": "Percent", "freq": "daily", "max_lag_days": 10},
+    {"id": "ISM_MFG_PMI", "name": "ISM Manufacturing PMI", "group": "growth", "sectors": ["industrial"], "core": true, "source": "web", "unit": "Index", "freq": "monthly", "max_lag_days": 70}
+  ]
+}

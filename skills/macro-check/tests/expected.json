@@ -1,0 +1,64 @@
+{
+  "_how": "손으로 셈한 값. today=2026-11-18. 변화는 최신값-기준값, YoY는 (최신/12개월 전-1)*100, percentile은 (최신일-10년, 최신일] 관측 중 최신값 이하 비율. 소수 넷째 자리에서 반올림.",
+  "today": "2026-11-18",
+  "series": {
+    "DGS10": {
+      "_why": "1m 목표 2026-10-16(금) 5.09 -> +0.03. 3m 목표 2026-08-16(일) -> 2026-08-14 4.68 -> +0.44. 12m 목표 2025-11-16(일) -> 2025-11-14 4.14 -> +0.98. Percent라 YoY 없음. history 1년 남짓이라 percentile 없음. 관측 2026-11-16, 2일 지나 reported",
+      "value": 5.12, "status": "reported", "as_of": "2026-11-16",
+      "chg_1m": 0.03, "chg_3m": 0.44, "chg_12m": 0.98, "yoy_pct": null, "pctile_10y": null,
+      "ref_1m": "2026-10-16", "ref_3m": "2026-08-14", "ref_12m": "2025-11-14", "derived_status": "derived"
+    },
+    "CPIAUCSL": {
+      "_why": "1m 336.298 -> +1.178. 3m 2026-07 332.813 -> +4.663. 12m 기준 2025-10이 빈 값(셧다운)이라 12m 변화와 YoY 없음. 옆 달로 메우지 않는다",
+      "value": 337.476, "status": "reported", "as_of": "2026-10-01",
+      "chg_1m": 1.178, "chg_3m": 4.663, "chg_12m": null, "yoy_pct": null, "pctile_10y": null,
+      "ref_1m": "2026-09-01", "ref_3m": "2026-07-01", "ref_12m": null, "derived_status": "derived"
+    },
+    "USPBS": {
+      "_why": "22604-22534=70, 22604-22496=108, 22604-22335=269, 269/22335*100=1.20438",
+      "value": 22604, "status": "reported", "as_of": "2026-10-01",
+      "chg_1m": 70, "chg_3m": 108, "chg_12m": 269, "yoy_pct": 1.2044, "pctile_10y": null,
+      "ref_1m": "2026-09-01", "ref_3m": "2026-07-01", "ref_12m": "2025-10-01", "derived_status": "derived"
+    },
+    "TESTM": {
+      "_why": "2015-11~2016-10은 1000, 2016-11부터 1,2,...,119(2026-09), 2026-10은 29.5. 1m 29.5-119=-89.5, 3m 2026-07(117) -87.5, 12m 2025-10(108) -78.5, YoY -78.5/108*100=-72.685. 창 2016-11~2026-10 120개 중 29.5 이하는 1~29와 자신 30개 -> 25.0 (2016-10을 넣으면 30/121=24.79)",
+      "value": 29.5, "status": "reported", "as_of": "2026-10-01",
+      "chg_1m": -89.5, "chg_3m": -87.5, "chg_12m": -78.5, "yoy_pct": -72.6852, "pctile_10y": 25.0,
+      "ref_1m": "2026-09-01", "ref_3m": "2026-07-01", "ref_12m": "2025-10-01", "derived_status": "derived"
+    },
+    "RRVRUSQ156N": {
+      "_why": "분기 자료라 1m 없음. 3m 2026-04 7.3 -> +0.3, 12m 2025-07 7.1 -> +0.5. Percent라 YoY 없음",
+      "value": 7.6, "status": "reported", "as_of": "2026-07-01",
+      "chg_1m": null, "chg_3m": 0.3, "chg_12m": 0.5, "yoy_pct": null, "pctile_10y": null,
+      "ref_1m": null, "ref_3m": "2026-04-01", "ref_12m": "2025-07-01", "derived_status": "derived"
+    },
+    "ECOMPCTSA": {
+      "_why": "관측 2026-04-01에서 2026-11-18까지 231일 > 200 -> stale. 3m 17.1-17.0=0.1, 12m 2025-04 16.3 -> 0.8. derived도 stale을 물려받는다",
+      "value": 17.1, "status": "stale", "as_of": "2026-04-01",
+      "chg_1m": null, "chg_3m": 0.1, "chg_12m": 0.8, "yoy_pct": null, "pctile_10y": null,
+      "ref_1m": null, "ref_3m": "2026-01-01", "ref_12m": "2025-04-01", "derived_status": "stale"
+    },
+    "NOTASERIES": {
+      "_why": "응답이 HTML 오류 page -> missing, value null",
+      "value": null, "status": "missing", "as_of": null,
+      "chg_1m": null, "chg_3m": null, "chg_12m": null, "yoy_pct": null, "pctile_10y": null,
+      "ref_1m": null, "ref_3m": null, "ref_12m": null, "derived_status": "missing"
+    },
+    "NOFILE": {
+      "_why": "받기 실패 -> missing",
+      "value": null, "status": "missing", "as_of": null,
+      "chg_1m": null, "chg_3m": null, "chg_12m": null, "yoy_pct": null, "pctile_10y": null,
+      "ref_1m": null, "ref_3m": null, "ref_12m": null, "derived_status": "missing"
+    }
+  },
+  "web_placeholder": {"ISM_MFG_PMI": {"value": null, "status": "missing"}},
+  "exit_code": 2,
+  "select": {
+    "_why": "core만: DGS10 CPIAUCSL TESTM NOTASERIES NOFILE ISM_MFG_PMI. --sector office: core + USPBS ECOMPCTSA. --group rates: core 중 rates만. --sector residential --group housing: RRVRUSQ156N",
+    "default": ["DGS10", "CPIAUCSL", "TESTM", "NOTASERIES", "NOFILE", "ISM_MFG_PMI"],
+    "sector_office": ["DGS10", "CPIAUCSL", "USPBS", "TESTM", "ECOMPCTSA", "NOTASERIES", "NOFILE", "ISM_MFG_PMI"],
+    "group_rates": ["DGS10", "NOTASERIES"],
+    "sector_residential_group_housing": ["RRVRUSQ156N"]
+  },
+  "api_parse": {"_why": "공식 API JSON의 '.'은 빈 관측(None)으로 둔다", "dates": ["2026-11-11", "2026-11-12", "2026-11-13", "2026-11-16"], "values": [null, 5.10, 5.15, 5.12]}
+}
