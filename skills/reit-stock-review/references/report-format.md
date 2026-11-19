@@ -17,13 +17,17 @@ python3 <skill 폴더>/scripts/report.py compare --metrics <M1> <M2> ... --narra
 # 실적 뒤 점검: reit_calc.py diff 출력(--out으로 쓴 JSON)
 python3 <skill 폴더>/scripts/report.py earnings --diff <earnings.json> --narrative <narrative.json> \
   --out-dir $INVEST_DATA_DIR/tickers/<T>/reports
+
+# PDF: build·compare가 쓴 view model로 A4 PDF
+python3 <skill 폴더>/scripts/report.py pdf --report-dir <build·compare의 --out-dir> [--report <이름>] [--out <pdf>]
 ```
 
 `--date YYYY-MM-DD`로 파일 이름의 날짜를 정한다(기본 오늘).
 
 | 종료 코드 | 뜻 | 할 일 |
 | --- | --- | --- |
-| 0 | 다 만들었다 | md를 처음부터 끝까지 읽고 장표 PNG를 연다 |
+| 0 | 다 만들었다(pdf는 PDF를 구웠다) | md를 처음부터 끝까지 읽고 장표 PNG를 연다. PDF는 쪽마다 연다 |
+| 1 | pdf: Chrome이 없다, view model이 없다 | 인쇄용 HTML은 남아 있다. Chrome을 설치하거나 `CHROME_PATH`를 넣는다 |
 | 1 | 입력 오류(파일 없음, schema가 다름, 일반 배당주 metrics) | 메시지대로 고친다 |
 | 2 | 풀이 글이 없다 | 숫자만으로 만든 보고서에 "풀이 글 없음"이 적혀 있다. 풀이 글을 써서 다시 돌린다 |
 | 2 | 풀이 글 검사에 걸렸다 | 아무 파일도 쓰지 않았다. stderr의 문제(금지어, 길이, 칸 이름, 보고서에 없는 숫자, 모르는 칸)를 고친다 |
@@ -62,6 +66,14 @@ python3 <skill 폴더>/scripts/report.py earnings --diff <earnings.json> --narra
 - 3~6개는 matrix에 축마다·지표마다 순위를 괄호로 붙인다(같으면 공동). 등급 순위는 넉넉이 1, valuation은 낮은 편이 1이다. AFFO가 없어 FFO로 대신한 값은 순위에서 뺀다.
 - subsector가 섞이면 valuation 줄은 종목끼리 견주지 않고 각자 subsector 기준과의 거리(P/FFO / peer median, 자기 history percentile, 명목 cap rate − Tracker)로 바꾸고 첫 줄에 섞였다고 쓴다. 나머지 네 축은 그대로 견준다.
 - 어느 종목을 고르라는 말은 쓰지 않는다.
+
+## PDF (`pdf`)
+
+- `--report`가 없으면 그 폴더에서 가장 늦게 쓴 `<이름>.view.json`(실적 뒤 점검은 빼고)을 쓴다. `<이름>.print.html`(인쇄용 HTML)을 쓰고 Chrome headless `--print-to-pdf`로 `<이름>.pdf`를 굽는다.
+- 단일 PDF: 읽는 보고서 본문 + 차트(만기 사다리, payout, 8분기 추세 선) + 부록(FFO 재계산, AFFO bridge, 만기, covenant, cap rate 다리, 데이터 구멍, 사건 원문, 출처) + 용어 표.
+- 비교 PDF: 비교 본문 + 차트(2x2 또는 맞대기, 최대 임차인) + 종목마다 한 쪽 요약(등급, 핵심 숫자, 사건) + 종목별 부록 + 용어 표.
+- 차트는 장표 PNG(어두운 배경)를 넣지 않고 script가 밝은 배경 SVG로 따로 그린다. 인쇄에 맞추기 위해서다. 숫자 글자는 본문과 같은 view model에서 온다.
+- Chrome을 `CHROME_PATH`, 기본 설치 위치, PATH 차례로 찾는다. 없으면 exit 1과 안내를 내고 인쇄용 HTML만 남긴다(브라우저에서 A4로 인쇄해도 된다). 한글 글꼴은 Apple SD Gothic Neo, Noto Sans KR, Malgun Gothic 차례로 쓴다.
 
 ## 풀이 글 (narrative.json)
 

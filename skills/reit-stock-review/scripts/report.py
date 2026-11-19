@@ -10,6 +10,9 @@
       slides/. 2개는 맞대기, 3~6개는 matrix + 순위, 7개 이상은 exit 2(reit-sector-scan screening으로)
   report.py earnings --diff E [--narrative N] --out-dir D [--date YYYY-MM-DD]
       실적 뒤 점검: <날짜>-earnings.md. E는 reit_calc.py diff의 출력. 두 metrics는 E의 files에서 읽는다
+  report.py pdf --report-dir D [--report <이름>] [--out <pdf>]
+      build·compare가 쓴 view model로 A4 PDF(본문 + 밝은 배경 SVG 차트 + 부록 + 용어). <이름>.print.html을 쓰고
+      Chrome headless --print-to-pdf로 굽는다. Chrome이 없으면 exit 1(인쇄용 HTML은 남긴다)
   report.py --check
       network 없이 tests/fixtures로 확인한다
 
@@ -566,6 +569,24 @@ def grade_names():
 
 # ---------------------------------------------------------------- 단일 보고서 view model (B1, B2, B4, B28)
 
+def key_number_rows(doc, glossed):
+    """핵심 숫자 줄. Tracker와 견줄 수 없는 subsector는 명목 implied cap rate를 대신 둔다."""
+    keys = []
+    for k in KEY_ROWS:
+        e = menv(doc, k)
+        row = {"metric": k, "name": mname(k), "text": plain(e, k), "status": sword(e) if e else "없음",
+               "why": reason(e.get("note"))}
+        if k == "implied_cap_rate_vs_tracker" and e.get("not_comparable"):
+            ic = menv(doc, "implied_cap_rate")
+            row.update(metric="implied_cap_rate", name=mname("implied_cap_rate"), text=plain(ic, "implied_cap_rate"),
+                       status=sword(ic), why="Tracker 값과 견줄 수 없음(회계 기준이 다른 subsector)")
+            k = "implied_cap_rate"
+        row["gloss"] = "" if k in glossed else short(k)
+        glossed.add(k)
+        keys.append(row)
+    return keys
+
+
 def build_single_view(main, peers, trend, nar, date, facts, facts_path):
     T, P = main.get("ticker"), main.get("period")
     root = data_root_of(main)
@@ -583,20 +604,7 @@ def build_single_view(main, peers, trend, nar, date, facts, facts_path):
         if ax["binding_metric"]:
             glossed.add(ax["binding_metric"])
 
-    keys = []
-    for k in KEY_ROWS:
-        e = menv(main, k)
-        row = {"metric": k, "name": mname(k), "text": plain(e, k), "status": sword(e) if e else "없음",
-               "why": reason(e.get("note"))}
-        if k == "implied_cap_rate_vs_tracker" and e.get("not_comparable"):
-            ic = menv(main, "implied_cap_rate")
-            row.update(metric="implied_cap_rate", name=mname("implied_cap_rate"), text=plain(ic, "implied_cap_rate"),
-                       status=sword(ic), why="Tracker 값과 견줄 수 없음(회계 기준이 다른 subsector)")
-            k = "implied_cap_rate"
-        row["gloss"] = "" if k in glossed else short(k)
-        glossed.add(k)
-        keys.append(row)
-
+    keys = key_number_rows(main, glossed)
     peer_view = single_peers(main, peers, glossed)
     tview = trend_view(trend) if trend else None
     events = event_rows([main])
@@ -938,7 +946,7 @@ def single_charts(main, peers, axes):
             e, label = menv(d, "ffo_payout_forward"), "FFO"
         if e.get("value") is not None:
             pay.append({"label": d.get("ticker") + ("" if d is main else " " + lab()["depth"].get(d.get("depth") or "deep")) + (
-                " FFO 기준" if label == "FFO" else ""),
+                " FFO 기준" if label == "FFO" else "") + (" " + sword(e) if skey(e) in ("estimated", "stale") else ""),
                         "value": e["value"], "status": skey(e), "mark": "hl" if d is main else ""})
     pth = (main.get("thresholds") or {}).get("affo_payout_pct") or {}
     return {"maturity": bars, "maturity_omitted": omitted, "maturity_watch": th.get("watch"), "payout": pay, "payout_watch": pth.get("watch"),
@@ -1301,6 +1309,9 @@ def cmd_build(args):
                      "view": os.path.join(out, stem + ".view.json")}
     failed = write_slides(single_slides(view), out, "%s-%s" % (date, view["ticker"]), view)
     md = render_single_md(view, out)
+    view["glossary"] = glossary("\n".join(body_lines(md)))
+    view["peer_line"] = next((l for l in md.split("\n") if "경쟁 종목에는 등급을" in l or l.startswith("경쟁 종목 없음")), "")
+    view["trend_line"] = next((l for l in md.split("\n") if "SEC XBRL 분기 값" in l), "")
     write_text(view["files"]["report"], md)
     write_text(view["files"]["audit"], render_audit_md(view, out))
     write_text(view["files"]["view"], json.dumps(view, ensure_ascii=False, indent=1) + "\n")
@@ -1481,8 +1492,7 @@ def build_compare_view(docs, nar, date, facts_list, cmpdoc):
     for d, f, r, ax in zip(docs, facts_list, roots, axes_by):
         summaries.append({"ticker": d.get("ticker"), "company": (f.get("company") or {}).get("name") or d.get("ticker"),
                           "subsector": menv(d, "subsector").get("value"), "depth": d.get("depth") or "deep",
-                          "axes": ax, "key_numbers": [{"name": mname(k), "text": plain(menv(d, k), k), "status": sword(menv(d, k)),
-                                                       "why": reason(menv(d, k).get("note"))} for k in KEY_ROWS],
+                          "axes": ax, "key_numbers": key_number_rows(d, set()),
                           "events": event_rows([d], limit=4), "filing": "%s %s(%s 제출)" % (
                               (f.get("filing") or {}).get("form", ""), (f.get("filing") or {}).get("accession", ""),
                               (f.get("filing") or {}).get("filed", ""))})
@@ -1745,6 +1755,7 @@ def cmd_compare(args):
                   "view": os.path.join(out, stem + ".view.json"), "json": os.path.join(out, stem + ".json")}
     failed = write_slides(compare_slides(v), out, stem, v)
     md = render_compare_md(v, out)
+    v["glossary"] = glossary("\n".join(body_lines(md)))
     write_text(v["files"]["report"], md)
     write_text(v["files"]["audit"], render_compare_audit(v, out))
     write_text(v["files"]["view"], json.dumps(v, ensure_ascii=False, indent=1) + "\n")
@@ -1777,6 +1788,11 @@ def build_earnings_view(diff, prev, curr, nar, date):
         r0, r1 = grade_rank(b.get("grade")), grade_rank(a.get("grade"))
         if r0 is not None and r1 is not None and r0 != r1:
             row["change"] = "%d단계 %s" % (abs(r1 - r0), "나빠짐" if r1 > r0 else "좋아짐")
+            had = {e.get("metric") for e in b.get("evidence") or [] if e.get("value") is not None}
+            gone = [mname(e.get("metric"), e.get("name")) for e in a.get("evidence") or []
+                    if e.get("role") == "core" and e.get("value") is not None and e.get("metric") not in had]
+            if gone:  # 앞 분기에 없던 핵심 지표로 매긴 등급이면 같은 잣대가 아니다
+                row["change"] += "(%s엔 %s 없음)" % (diff.get("prev_period"), "·".join(gone))
             (worse if r1 > r0 else better).append(dict(row, order=0, size=abs(r1 - r0)))
         elif a.get("key") == "valuation" and b.get("grade") != a.get("grade"):
             row["change"] = "위치 바뀜"
@@ -1797,13 +1813,17 @@ def build_earnings_view(diff, prev, curr, nar, date):
             worse.append(dict(item, change="상태 %s → %s" % (lab()["status"].get(r["prev"].get("status"), ""),
                                                              lab()["status"].get(r["curr"].get("status"), "")), size=0.5))
             continue
-        if meta.get("bad") and isinstance(r.get("change"), (int, float)) and r["change"] != 0:
-            up = r["change"] > 0
+        if meta.get("bad") and isinstance(pv, (int, float)) and isinstance(cv, (int, float)):
+            dv = round(round(cv, 2) - round(pv, 2), 2)  # 보이는 두 값의 차라 읽는 사람이 되짚을 수 있다
+            if dv == 0:
+                continue
+            up = dv > 0
             bad = (up and meta["bad"] == "high") or (not up and meta["bad"] == "low")
-            ch = fval(r["change"], "%p" if r.get("change_unit") == "%p" else unit, k)
-            if r.get("change_unit") != "%p" and r.get("change_pct") is not None:
-                ch = ("+" if r["change"] > 0 else "") + ch + " (%s%s%%)" % ("+" if r["change_pct"] > 0 else "", fnum(r["change_pct"]))
-            size = abs(r["change_pct"]) / 100 if r.get("change_pct") is not None else abs(r["change"]) / 10
+            ch = fval(dv, "%p" if r.get("change_unit") == "%p" else unit, k)
+            pct = dv / abs(round(pv, 2)) * 100 if round(pv, 2) else None
+            if r.get("change_unit") != "%p" and pct is not None:
+                ch = ("+" if dv > 0 else "") + ch + " (%s%s%%)" % ("+" if pct > 0 else "", fnum(pct))
+            size = abs(pct) / 100 if pct is not None else abs(dv) / 10
             (worse if bad else better).append(dict(item, change=ch, size=size))
     key = lambda x: (x["order"], -x["size"])
     worse.sort(key=key)
@@ -1876,6 +1896,333 @@ def cmd_earnings(args):
     return 2 if (why or probs) else 0
 
 
+# ---------------------------------------------------------------- PDF (B6, B34)
+
+PDF_CSS = """
+@page { size: A4; margin: 14mm 13mm 15mm 13mm;
+  @bottom-right { content: counter(page) " / " counter(pages); font-size: 7.5pt; color: #8a8f99; } }
+:root { --ink:#1d2129; --soft:#4d5562; --dim:#8a8f99; --line:#d9dde3; --head:#f3f5f8; --hl:#2f6fdb; --bad:#c0392b; }
+html { background:#ffffff; }
+body { margin:0; color:var(--ink); background:#ffffff; font-size:9.3pt; line-height:1.45;
+  font-family:"Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR","Malgun Gothic","NanumGothic",sans-serif; }
+h1 { font-size:16pt; margin:0 0 2mm; letter-spacing:-0.2px; }
+h2 { font-size:11.5pt; margin:5mm 0 2mm; padding-bottom:1mm; border-bottom:1.2px solid var(--ink); }
+h3 { font-size:10pt; margin:4mm 0 1.5mm; }
+.meta { color:var(--soft); font-size:8pt; margin:0 0 3mm; }
+.mixed { border-left:3px solid var(--bad); padding:1.5mm 3mm; background:#fdf3f2; margin:0 0 2mm; font-size:9pt; }
+.conclusion { border-left:3px solid var(--hl); background:#f2f6fd; padding:2.5mm 3.5mm; font-size:10.5pt; font-weight:600; margin:0 0 3mm; }
+table { border-collapse:collapse; width:100%; margin:1mm 0 2mm; font-size:8.2pt; page-break-inside:auto; }
+tr { page-break-inside:avoid; }
+th, td { border:0.6px solid var(--line); padding:1.2mm 1.6mm; vertical-align:top; text-align:left;
+  word-break:keep-all; overflow-wrap:anywhere; }
+thead th { background:var(--head); font-weight:700; }
+td.num, th.num { text-align:right; white-space:nowrap; }
+.note { color:var(--soft); font-size:8pt; margin:0 0 2mm; }
+.chip { display:inline-block; padding:0.2mm 2mm; border-radius:2mm; font-weight:700; white-space:nowrap; }
+.g-ample { background:#e3edf9; color:#1f4e8c; } .g-moderate { background:#eef0f3; color:#333a45; }
+.g-tight { background:#fdf0e1; color:#8a5300; } .g-risk { background:#fbe3e3; color:#a12626; }
+.g-unknown { background:#f4f4f4; color:#888; } .g-low,.g-mid,.g-high { background:#eef0f7; color:#3b4256; }
+.charts { display:flex; gap:5mm; flex-wrap:wrap; margin:1mm 0 2mm; }
+.chart { flex:1 1 80mm; } .chart .cap { font-size:8pt; color:var(--soft); margin:0 0 1mm; font-weight:700; }
+svg text { font-family:inherit; }
+.page-break { page-break-before:always; }
+.ticker-page { page-break-before:always; }
+.appendix h2 { border-bottom-color:var(--dim); }
+.appendix table { font-size:7.4pt; }
+.small { font-size:7.6pt; color:var(--soft); }
+ul { margin:1mm 0 2mm 4mm; padding:0; } li { margin:0 0 0.8mm; }
+"""
+
+
+def esc(x):
+    return html.escape(str(x if x is not None else ""))
+
+
+def h_table(head, rows, num_cols=()):
+    out = ["<table><thead><tr>%s</tr></thead><tbody>" % "".join(
+        "<th%s>%s</th>" % (" class=\"num\"" if i in num_cols else "", esc(h)) for i, h in enumerate(head))]
+    for r in rows:
+        out.append("<tr>%s</tr>" % "".join("<td%s>%s</td>" % (" class=\"num\"" if i in num_cols else "", c if isinstance(c, Raw) else esc(c))
+                                          for i, c in enumerate(r)))
+    out.append("</tbody></table>")
+    return "".join(out)
+
+
+class Raw(str):
+    """이미 HTML인 칸."""
+
+
+def md_inline(t):
+    """md의 **굵게**만 HTML로."""
+    return Raw(re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", esc(t)))
+
+
+def chip(grade, name):
+    return Raw("<span class=\"chip g-%s\">%s %s</span>" % (esc(grade or "unknown"), GRADE_MARK.get(grade, "?"), esc(name)))
+
+
+def svg_hbar(bars, unit="%", ref=None, ref_label="", width=330, row=17):
+    """밝은 배경 가로 막대. bars: label, value, mark(hl·bad)."""
+    if not bars:
+        return ""
+    lw = 92
+    top = max([b["value"] for b in bars] + ([ref] if ref is not None else []) + [1e-9])
+    x0, x1 = lw + 4, width - 46
+    h = row * len(bars) + 16
+    parts = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" viewBox=\"0 0 %d %d\">" % (width, h, width, h)]
+    for i, b in enumerate(bars):
+        y = 12 + i * row
+        w = max(1, (b["value"] / top) * (x1 - x0))
+        fill = {"hl": "#2f6fdb", "bad": "#c0392b"}.get(b.get("mark"), "#9aa3b2")
+        parts.append("<text x=\"%d\" y=\"%d\" font-size=\"7.5\" text-anchor=\"end\" fill=\"#333\">%s</text>" % (
+            lw, y + 10, esc(b["label"])))
+        parts.append("<rect x=\"%d\" y=\"%d\" width=\"%.1f\" height=\"%d\" fill=\"%s\" rx=\"1.5\"/>" % (x0, y + 2, w, row - 6, fill))
+        parts.append("<text x=\"%.1f\" y=\"%d\" font-size=\"7.5\" fill=\"#1d2129\">%s</text>" % (
+            x0 + w + 3, y + 10, esc(fnum(b["value"]) + unit)))
+    if ref is not None:
+        x = x0 + (ref / top) * (x1 - x0)
+        parts.append("<line x1=\"%.1f\" y1=\"10\" x2=\"%.1f\" y2=\"%d\" stroke=\"#c0392b\" stroke-dasharray=\"3,2\" stroke-width=\"0.8\"/>" % (x, x, h - 2))
+        parts.append("<text x=\"%.1f\" y=\"8\" font-size=\"6.5\" fill=\"#c0392b\" text-anchor=\"%s\">%s</text>" % (
+            x + (3 if x < width - 60 else -3), "start" if x < width - 60 else "end", esc("%s %s%s" % (ref_label, fthr(ref), unit))))
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def svg_line(row, quarters, width=165, height=62):
+    vals = row["values"]
+    nums = [v for v in vals if isinstance(v, (int, float))]
+    if len(nums) < 2:
+        return ""
+    lo, hi = min(nums), max(nums)
+    span = (hi - lo) or abs(hi) or 1
+    lo, hi = lo - span * 0.15, hi + span * 0.15
+    xs = [8 + i * (width - 16) / max(1, len(vals) - 1) for i in range(len(vals))]
+    pts = [(x, 12 + (1 - (v - lo) / (hi - lo)) * (height - 26)) for x, v in zip(xs, vals) if isinstance(v, (int, float))]
+    path = " ".join("%s%.1f,%.1f" % ("M" if i == 0 else "L", x, y) for i, (x, y) in enumerate(pts))
+    parts = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" viewBox=\"0 0 %d %d\">" % (width, height, width, height),
+             "<text x=\"2\" y=\"8\" font-size=\"7\" font-weight=\"700\" fill=\"#333\">%s %s</text>" % (esc(row["name"]), esc(row["change_text"])),
+             "<path d=\"%s\" fill=\"none\" stroke=\"#2f6fdb\" stroke-width=\"1.3\"/>" % path]
+    for x, y in pts:
+        parts.append("<circle cx=\"%.1f\" cy=\"%.1f\" r=\"1.6\" fill=\"#2f6fdb\"/>" % (x, y))
+    firsti = next(i for i, v in enumerate(vals) if isinstance(v, (int, float)))
+    lasti = max(i for i, v in enumerate(vals) if isinstance(v, (int, float)))
+    parts.append("<text x=\"%.1f\" y=\"%d\" font-size=\"6\" fill=\"#666\">%s %s</text>" % (2, height - 2, esc(quarters[firsti]), esc(row["cells"][firsti])))
+    parts.append("<text x=\"%d\" y=\"%d\" font-size=\"6\" fill=\"#666\" text-anchor=\"end\">%s %s</text>" % (
+        width - 2, height - 2, esc(quarters[lasti]), esc(row["cells"][lasti])))
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def svg_scatter(pts, width=330, height=210):
+    if len(pts) < 2:
+        return ""
+    xs, ys = [p["x"] for p in pts], [p["y"] for p in pts]
+    x0, x1 = math.floor(min(xs)) - 0.5, math.ceil(max(xs)) + 0.5
+    y0, y1 = math.floor(min(ys)) - 0.5, math.ceil(max(ys)) + 0.5
+    L, R, T, B = 34, 10, 8, 24
+    parts = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" viewBox=\"0 0 %d %d\">" % (width, height, width, height),
+             "<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#c9ced6\" stroke-width=\"0.6\"/>" % (
+                 L, T, width - L - R, height - T - B),
+             "<text x=\"%d\" y=\"%d\" font-size=\"7\" fill=\"#555\">net debt/EBITDAre %sx</text>" % (L, height - 6, fnum(x0)),
+             "<text x=\"%d\" y=\"%d\" font-size=\"7\" fill=\"#555\" text-anchor=\"end\">%sx</text>" % (width - R, height - 6, fnum(x1)),
+             "<text x=\"2\" y=\"%d\" font-size=\"7\" fill=\"#555\">%s%%</text>" % (height - B, fnum(y0)),
+             "<text x=\"2\" y=\"%d\" font-size=\"7\" fill=\"#555\">%s%%</text>" % (T + 6, fnum(y1)),
+             "<text x=\"2\" y=\"%d\" font-size=\"6.5\" fill=\"#555\">배당수익률</text>" % ((height - B + T) / 2)]
+    for p in pts:
+        cx = L + (p["x"] - x0) / (x1 - x0) * (width - L - R)
+        cy = T + (1 - (p["y"] - y0) / (y1 - y0)) * (height - T - B)
+        col = "#c0392b" if p["bad"] else "#2f6fdb"
+        parts.append("<circle cx=\"%.1f\" cy=\"%.1f\" r=\"3\" fill=\"%s\"/>" % (cx, cy, col))
+        anchor = "end" if cx > width * 0.65 else "start"
+        dx = -5 if anchor == "end" else 5
+        parts.append("<text x=\"%.1f\" y=\"%.1f\" font-size=\"7\" fill=\"%s\" text-anchor=\"%s\">%s</text>" % (
+            cx + dx, cy + 2.5, col, anchor, esc(p["label"])))
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def chart_box(cap, svg):
+    return "<div class=\"chart\"><p class=\"cap\">%s</p>%s</div>" % (esc(cap), svg) if svg else ""
+
+
+def pdf_grades(axes):
+    if any(a.get("note") for a in axes):
+        return h_table(["축", "등급", "근거(굵은 것이 가장 약한 고리)", "풀이"],
+                       [[a["name"], chip(a["grade"], a["grade_name"]), md_inline(a["evidence_md"]), a.get("note", "")] for a in axes])
+    return h_table(["축", "등급", "근거(굵은 것이 가장 약한 고리)", "한 단계 나빠지는 곳"],
+                   [[a["name"], chip(a["grade"], a["grade_name"]), md_inline(a["evidence_md"]), a.get("edge") or "–"] for a in axes])
+
+
+def pdf_audit(a, level="h2"):
+    h = lambda t: "<%s>%s</%s>" % (level, esc(t), level)
+    out = [h("FFO 재계산(Nareit, 분기)"),
+           h_table(["줄", "값", "단위", "상태", "출처 위치"], [[r["name"], r["value"], r["unit"], r["status"], r["locator"]] for r in a["ffo"]["rows"]], (1,)),
+           "<p class=\"note\">재계산 %s · 회사 FFO %s · 차이 %s → %s</p>" % (esc(a["ffo"]["recomputed"]), esc(a["ffo"]["reported"]), esc(a["ffo"]["diff"]),
+                                                                    {True: "맞음(0.5% 안)", False: "다름(0.5% 넘음)", None: "재지 않음"}[a["ffo"]["pass"]])]
+    if a["bridge"]["rows"]:
+        out += [h("AFFO bridge(회사 정의)"), h_table(["줄", "종류", "값", "출처 위치"], [[r["name"], r["category"], r["value"], r["locator"]]
+                                                                              for r in a["bridge"]["rows"]], (2,)),
+                "<p class=\"note\">합 %s · 회사 AFFO %s · 차이 %s</p>" % (esc(a["bridge"]["sum"]), esc(a["bridge"]["reported"]), esc(a["bridge"]["diff"]))]
+    out += [h("만기 사다리(원금, 천 달러)"), h_table(["해", "원금", "비중"], [[r["period"], r["value"], r["pct"]] for r in a["ladder"]], (1, 2))
+            if a["ladder"] else "<p class=\"note\">만기 사다리가 없다</p>"]
+    out += [h("covenant(회사 정의)"), h_table(["covenant", "방향", "한도", "실제", "headroom"], [[r["name"], r["dir"], r["limit"], r["actual"], r["headroom"]]
+                                                                                       for r in a["covenants"]], (2, 3, 4))
+            if a["covenants"] else "<p class=\"note\">covenant 표가 없다. %s</p>" % esc(a["covenant_note"])]
+    out += [h("cap rate 기준선과 economic EV 다리"), h_table(["칸", "값", "상태", "메모"], [[r["name"], r["value"], r["status"], r["note"]] for r in a["cap"]], (1,))]
+    out += [h("데이터 구멍"), h_table(["항목", "상태", "이유"], [[g["item"], g["status"], g["reason"]] for g in a["gaps"]]) if a["gaps"] else "<p>없음</p>"]
+    out += [h("사건 원문"), h_table(["날짜", "사건", "원문", "출처", "위치"], [[e["date"], e["title"], e["quote"], e["source"], e["url"] or e["locator"]]
+                                                                     for e in a["events"]]) if a["events"] else "<p class=\"note\">facts에 적힌 사건이 없다</p>"]
+    out += [h("facts 출처 위치"), h_table(["칸", "값", "출처", "위치"], [[r["name"], r["value"], r["source"], r["locator"]] for r in a["sources"]])]
+    return "".join(out)
+
+
+def pdf_glossary(rows):
+    return "<h2>용어</h2>" + h_table(["용어", "뜻"], rows) if rows else ""
+
+
+def pdf_single(v):
+    T = v["ticker"]
+    o = ["<h1>%s · %s · %s</h1>" % (esc(T), esc(v["company"]), esc(v["period"])),
+         "<p class=\"meta\">%s 작성 · %s · 주가 %s(%s 종가) · 시총 %s · subsector %s · %s 봄 · 경험칙 등급이며 판단 재료일 뿐 매수·매도 권유가 아니다</p>" % (
+             esc(v["date"]), esc(v["filing"]), esc(v["price"]), esc(v["price_as_of"]), esc(v["market_cap"]), esc(v["subsector"] or "모름"),
+             esc(lab()["depth"].get(v["depth"], v["depth"]))),
+         "<div class=\"conclusion\">%s</div>" % esc(v["conclusion"]),
+         "<h2>축별 등급</h2>", pdf_grades(v["axes"]),
+         "<h2>핵심 숫자</h2>", h_table(["지표", "값", "상태", "뜻"], [[r["name"], r["text"], r["status"] + (" · " + r["why"] if r["why"] else ""),
+                                                                 r["gloss"]] for r in v["key_numbers"]], (1,))]
+    ch = v["charts"]
+    o.append("<div class=\"charts\">%s%s</div>" % (
+        chart_box("만기 사다리(원금 비중)" + (" · " + ch["maturity_omitted"] if ch.get("maturity_omitted") else ""),
+                  svg_hbar(ch["maturity"], "%", ch["maturity_watch"], "주의")),
+        chart_box("배당 여력: forward payout(경쟁 종목은 숫자만)", svg_hbar(ch["payout"], "%", ch["payout_watch"], "주의"))))
+    pv = v["peers"]
+    head = ["지표"] + ["%s %s · %s" % (c["ticker"], c["depth_name"], c["market_cap"]) for c in pv["columns"]] + ["%s 순위" % T, "subsector median"]
+    o += ["<h2>동종 대비 위치</h2>", h_table(head, [[r["name"]] + r["cells"] + [r["rank"] or "–", r["median"] or "–"] for r in pv["rows"]],
+                                         tuple(range(1, len(head)))),
+          "<p class=\"note\">%s</p>" % esc(v.get("peer_line", ""))]
+    tv = v["trend"]
+    if tv and tv["rows"]:
+        o += ["<h2>8분기 추세</h2>", h_table(["지표"] + tv["head"] + ["처음→끝"], [[r["name"]] + r["cells"] + [r["change_text"]] for r in tv["rows"]],
+                                         tuple(range(1, len(tv["head"]) + 2))),
+              "<div class=\"charts\">%s</div>" % "".join(svg_line(r, tv["head"]) for r in tv["rows"]),
+              "<p class=\"note\">%s</p>" % esc(v.get("trend_line", ""))]
+    o.append("<h2>주요 사건</h2>")
+    o.append("<ul>%s</ul>" % "".join("<li>%s · %s · %s (%s)</li>" % (esc(e["date"]), esc(e["type_name"]), esc(e["title"]), esc(e["source"]))
+                                       for e in v["events"]) if v["events"] else "<p class=\"note\">facts에 적힌 사건이 없다</p>")
+    o += ["<h2>위험과 다시 볼 조건</h2>", h_table(["위험", "다시 볼 조건"], [[r["risk"], r["trigger"]] for r in v["risks"]])]
+    if v["narrative_missing"]:
+        o.append("<p class=\"note\">풀이 글 없음: 숫자로 만들 수 있는 부분만 채웠다</p>")
+    o += ["<div class=\"appendix page-break\"><h1>부록: 계산 검증과 출처</h1>",
+          "<p class=\"meta\">metrics: %s · facts: %s</p>" % (esc(v["sources"]["metrics"]), esc(v["sources"]["facts"])),
+          pdf_audit(v["audit"]), "</div>", pdf_glossary(v.get("glossary") or [])]
+    return "".join(o)
+
+
+def pdf_compare(v):
+    T = v["tickers"]
+    o = ["<h1>%s %s 비교</h1>" % (esc("·".join(T)), esc(v["period"]))]
+    if v["mixed_line"]:
+        o.append("<div class=\"mixed\">%s</div>" % esc(v["mixed_line"]))
+    o += ["<p class=\"meta\">%s 작성 · 가격 %s 종가 · 깊이 %s · 경험칙 등급이며 어느 종목을 고르라는 말이 아니다(판단 재료)</p>" % (
+              esc(v["date"]), esc("·".join(v["prices"])), esc(", ".join("%s %s" % (t, lab()["depth"].get(d, d)) for t, d in zip(T, v["depths"])))),
+          "<div class=\"conclusion\">%s</div>" % esc(v["conclusion"]), "<h2>등급 matrix</h2>"]
+    rows = [[m["name"]] + [Raw("%s %s" % (chip(c["grade"], c["grade_name"]), esc(c["rank"]))) for c in m["cells"]] for m in v["matrix"]]
+    rows += [["강점"] + v["strengths"], ["약점"] + v["weaknesses"]]
+    o.append(h_table(["축"] + T, rows))
+    o.append("<h2>핵심 지표</h2>")
+    if v["n"] == 2:
+        o.append(h_table(["지표"] + T + ["차이(%s − %s)" % (T[0], T[1])], [[r["name"]] + r["cells"] + [r["diff"]] for r in v["rows"]], (1, 2, 3)))
+    else:
+        o.append(h_table(["지표"] + T, [[r["name"]] + r["cells"] for r in v["rows"]], tuple(range(1, len(T) + 1))))
+    ch = v["charts"]
+    o.append("<div class=\"charts\">%s%s</div>" % (
+        chart_box("배당수익률 × net debt/EBITDAre(빨강은 부채 축 위험)", svg_scatter(ch["quadrant"])) if v["n"] >= 3 else
+        chart_box("핵심 지표 맞대기(%)", svg_hbar(ch["pair"], "%")),
+        chart_box("최대 임차인 비중", svg_hbar(ch["tenants"], "%", 20, "위험 경계"))))
+    o += ["<h2>차이를 만든 원인</h2>", "<ul>%s</ul>" % "".join("<li><b>%s</b>: %s <span class=\"small\">(근거: %s)</span></li>" % (
+        esc(c["name"]), esc(c["text"]), esc(c["evidence"] or "없음")) for c in v["causes"]),
+          "<h2>금리 민감도</h2>", h_table(["지표"] + T, [[r["name"]] + r["cells"] for r in v["rate"]], tuple(range(1, len(T) + 1))),
+          "<p class=\"note\">%s(차환·변동금리 줄은 가정이 든 추정이다)</p>" % esc(v["rate_note"] + " " if v["rate_note"] else ""),
+          "<h2>주요 사건</h2>", "<ul>%s</ul>" % "".join("<li>%s · %s · %s · %s (%s)</li>" % (
+              esc(e["date"]), esc(e["ticker"]), esc(e["type_name"]), esc(e["title"]), esc(e["source"])) for e in v["events"])]
+    for s in v["summaries"]:
+        o += ["<div class=\"ticker-page\"><h1>%s · %s</h1>" % (esc(s["ticker"]), esc(s["company"])),
+              "<p class=\"meta\">%s · subsector %s · %s 봄</p>" % (esc(s["filing"]), esc(s["subsector"] or "모름"),
+                                                               esc(lab()["depth"].get(s["depth"], s["depth"]))),
+              "<h2>축별 등급</h2>", pdf_grades(s["axes"]), "<h2>핵심 숫자</h2>",
+              h_table(["지표", "값", "상태"], [[r["name"], r["text"], r["status"] + (" · " + r["why"] if r["why"] else "")] for r in s["key_numbers"]], (1,)),
+              "<h2>주요 사건</h2>", "<ul>%s</ul>" % "".join("<li>%s · %s · %s (%s)</li>" % (
+                  esc(e["date"]), esc(e["type_name"]), esc(e["title"]), esc(e["source"])) for e in s["events"]) if s["events"] else
+              "<p class=\"note\">facts에 적힌 사건이 없다</p>", "</div>"]
+    o.append("<div class=\"appendix page-break\"><h1>부록: 종목별 계산 검증과 출처</h1>")
+    for a in v["audits"]:
+        o += ["<h2>%s</h2>" % esc(a["ticker"]), pdf_audit(a["audit"], level="h3")]
+    o += ["</div>", pdf_glossary(v.get("glossary") or [])]
+    return "".join(o)
+
+
+def pdf_html(v):
+    body = pdf_compare(v) if v["kind"] == "compare" else pdf_single(v)
+    title = "%s %s" % ("·".join(v.get("tickers") or [v.get("ticker", "")]), v.get("period", ""))
+    return ("<!doctype html>\n<html lang=\"ko\"><head><meta charset=\"utf-8\"><title>%s</title>\n<style>%s</style></head>\n"
+            "<body>%s</body></html>\n") % (esc(title), PDF_CSS, body)
+
+
+def print_pdf(chrome, html_path, pdf_path):
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="report-pdf-") as prof:
+        cmd = [chrome, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--use-mock-keychain",
+               "--user-data-dir=" + prof, "--no-pdf-header-footer", "--virtual-time-budget=4000",
+               "--print-to-pdf=" + pdf_path, "file://" + os.path.abspath(html_path)]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return "Chrome을 실행하지 못했다: %s" % e
+    try:
+        with open(pdf_path, "rb") as f:
+            if f.read(4) != b"%PDF":
+                return "PDF가 아닌 파일이 나왔다"
+    except OSError:
+        return "PDF를 만들지 못했다: %s" % ((r.stderr or "").strip().split("\n")[-1:] or [""])[0]
+    return None
+
+
+def cmd_pdf(args):
+    d = os.path.abspath(args.report_dir)
+    if args.report:
+        vp = os.path.join(d, args.report + ".view.json")
+    else:
+        cands = [os.path.join(d, n) for n in os.listdir(d) if n.endswith(".view.json")] if os.path.isdir(d) else []
+        cands = [c for c in cands if not c.endswith("-earnings.view.json")]
+        if not cands:
+            log("view model(<이름>.view.json)이 없다: %s. report.py build나 compare를 먼저 돌린다" % d)
+            return 1
+        vp = max(cands, key=os.path.getmtime)
+    try:
+        v = read_doc(vp, VIEW_SCHEMA)
+    except InputError as e:
+        log(str(e))
+        return 1
+    if v.get("kind") not in ("single", "compare"):
+        log("PDF는 단일·비교 보고서만 만든다(%s)" % v.get("kind"))
+        return 1
+    stem = os.path.basename(vp)[:-len(".view.json")]
+    hp = os.path.join(d, stem + ".print.html")
+    write_text(hp, pdf_html(v))
+    out = os.path.abspath(args.out) if args.out else os.path.join(d, stem + ".pdf")
+    chrome = find_chrome()
+    if not chrome:
+        log("Chrome(또는 Chromium·Edge)을 찾지 못해 PDF를 굽지 않았다. 설치하거나 CHROME_PATH 환경 변수에 실행 파일 경로를 넣는다. "
+            "인쇄용 HTML은 %s에 있다(브라우저에서 열어 A4로 인쇄해도 된다)" % hp)
+        return 1
+    err = print_pdf(chrome, hp, out)
+    if err:
+        log(err)
+        return 1
+    print(out)
+    return 0
+
+
 # ---------------------------------------------------------------- CLI
 
 def main(argv):
@@ -1894,6 +2241,10 @@ def main(argv):
     c.add_argument("--narrative")
     c.add_argument("--out-dir", required=True)
     c.add_argument("--date")
+    pd = sub.add_parser("pdf", help="단일·비교 보고서를 A4 PDF로(본문 + 차트 + 부록 + 용어)")
+    pd.add_argument("--report-dir", required=True)
+    pd.add_argument("--report", help="<이름>.view.json의 이름(기본: 그 폴더에서 가장 늦게 쓴 것)")
+    pd.add_argument("--out", help="기본: <report-dir>/<이름>.pdf")
     e = sub.add_parser("earnings", help="실적 뒤 점검(reit_calc.py diff 출력)")
     e.add_argument("--diff", required=True)
     e.add_argument("--narrative")
@@ -1911,6 +2262,8 @@ def main(argv):
         return cmd_earnings(args)
     if args.cmd == "compare":
         return cmd_compare(args)
+    if args.cmd == "pdf":
+        return cmd_pdf(args)
     p.print_help(sys.stderr)
     return 1
 
@@ -2125,6 +2478,32 @@ def run_check():
     ok(err[0] == 2 and "reit-sector-scan" in err[1] and not os.path.exists(out7), "B31 7개 이상이면 exit 2와 screening 안내, 파일 없음")
     err = capture(lambda: run(["compare", "--metrics", docs["AAA"], "--out-dir", out7], no_ds))
     ok(err[0] == 1 and not os.path.exists(out7), "B31 1개면 exit 1")
+
+    # B6·B34: PDF(인쇄용 HTML은 늘 쓰고, 굽기는 Chrome이 있을 때만)
+    nochrome = dict(no_ds, CHROME_PATH=os.path.join(work, "no-chrome"))
+    err = capture(lambda: run(["pdf", "--report-dir", out1], nochrome))
+    ph = read(os.path.join(out1, "2026-11-19-deep.print.html"))
+    ok(err[0] == 1 and "Chrome" in err[1] and ph, "B6 Chrome이 없으면 exit 1과 안내, 인쇄용 HTML은 남김 (got %s)" % err[0])
+    for s in exp["pdf_single_has"]:
+        ok(s in ph, "B6 PDF HTML에 %r" % s)
+    ok(ph.count("<svg") >= 3 and "size: A4" in ph, "B6 A4, 밝은 배경 차트 SVG 3개 이상(만기·payout·추세) (got %d)" % ph.count("<svg"))
+    ok(ph.count("<rect") >= 9 and ph.count("<path") >= 4, "B6 만기·payout 막대(6 + 3)와 추세 선(4) (got %d, %d)" % (
+        ph.count("<rect"), ph.count("<path")))
+    nums = sorted(set(re.findall(r"[+-]?\d+(?:\.\d+)?(?:%p|%|x)", body)))
+    ok(nums and not [x for x in nums if x not in ph], "B6 본문의 숫자가 PDF HTML에 그대로 있다 %s" % [x for x in nums if x not in ph][:5])
+    err = capture(lambda: run(["pdf", "--report-dir", cmp4], nochrome))
+    pc = read(os.path.join(cmp4, "2026-11-19-AAA-DDD-EEE-FFF.print.html"))
+    ok(err[0] == 1 and pc.count("class=\"ticker-page\"") == 4, "B34 비교 PDF: 종목마다 한 쪽 요약 (got %d)" % pc.count("class=\"ticker-page\""))
+    ok(pc.count("FFO 재계산") >= 4 and pc.count("<svg") >= 2, "B34 종목별 부록(FFO 재계산)과 차트")
+    for s in exp["pdf_compare_has"]:
+        ok(s in pc, "B34 비교 PDF HTML에 %r" % s)
+    if find_chrome():
+        pdf = os.path.join(work, "single.pdf")
+        code = run(["pdf", "--report-dir", out1, "--out", pdf])
+        head = open(pdf, "rb").read(4) if os.path.isfile(pdf) else b""
+        ok(code == 0 and head == b"%PDF", "B6 Chrome이 있으면 A4 PDF를 굽는다 (got %s %r)" % (code, head))
+    else:
+        log("SKIP B6 굽기: Chrome이 없다")
 
     log("report.py --check: %s" % ("실패 %d" % len(fails) if fails else "통과"))
     return 1 if fails else 0
