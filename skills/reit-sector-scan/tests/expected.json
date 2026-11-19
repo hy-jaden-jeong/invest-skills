@@ -41,6 +41,43 @@
       "macro_sector": "industrial", "structural": "review"
     }
   },
+  "tracker_parse": {
+    "_why": "fixtures/tracker_xlsx(가상). 머리줄 B..P = 2023.1..2026.3(15개). 0인 칸은 빈 값. Implied Cap Rate block의 Data Centers 줄은 칸이 없어도 block이 이어져 Specialty를 읽는다. Secured Debt·Change in NOI block은 읽지 않는다. cap_rate_4q·debt_to_market_assets·payout block은 없다. dev% = pipeline/holdings*100: Office 100/1000 = 10, Industrial 300/2000 = 15, Retail 50/4000 = 1.25",
+    "quarter": "2026Q3", "as_of": "2026-09-30", "n_quarters": 15, "first": "2023Q1", "sheet": "Data Q3 2026",
+    "missing_blocks": ["cap_rate_4q", "debt_to_market_assets", "payout"],
+    "names": ["Office", "Industrial", "Retail", "Free Standing", "All Equity REITs", "Timberland", "Specialty"],
+    "Office": {"implied_cap_rate": 6.5, "ss_noi_yoy": -0.5, "occupancy": 90.0, "debt_to_ebitda": 6.0, "dev_pipeline_pct_assets": 10.0},
+    "Industrial": {"implied_cap_rate": 4.5, "dev_pipeline_pct_assets": 15.0},
+    "Free Standing": {"implied_cap_rate": 6.8, "ss_noi_yoy": null, "occupancy": null, "dev_pipeline_pct_assets": null},
+    "Specialty": {"implied_cap_rate": 8.0},
+    "Timberland": {"dev_pipeline": null},
+    "office_cap_cell": "P43", "office_cap_history_n": 15, "industrial_cap_history_n": 6
+  },
+  "tracker_sectors": {
+    "_why": "DGS10 4.25, BAA10Y 2.0 -> Baa 6.25. Office cap 표본 15개 [5.0..7.6 0.2 간격 14개, 6.5]: 6.5 이하 9개/15 = 60.0. Free Standing 표본 [7.0 x13, 6.0, 6.8]: 6.8 이하 2/15 = 13.3333. Industrial 표본 6개 < 8 -> missing. Office SS NOI 최근 4분기 [1,1,0.5,-0.5] 평균 0.5, 최신 -0.5 -> 최신만 음수라 아님. Office occupancy 90 - 90.5 = -0.5, 90 - 89 = +1.0 -> 하나만 음수라 아님. Industrial SS NOI [-1,-2,0.5,-0.5] 평균 -0.75, 최신 -0.5 -> 나빠짐. Industrial occupancy 95 - 96 = -1, 95 - 97 = -2 -> 나빠짐. Free Standing SS NOI·occupancy·dev는 Retail(parent) 값 estimated: SS NOI 2.5, 평균 (2+2+2+2.5)/4 = 2.125, occupancy 96, 96-95.5 = 0.5, 96-94 = 2.0, dev 1.25. Office 구조 신호: macro demand 2개 중 1개(USPBS) + Tracker 2개 중 0개 = 4개 중 1개 나빠짐 < 절반 -> ok(Tracker가 없으면 macro만 2개 중 1개라 watch). Free Standing: Tracker 값이 parent라 판정에 넣지 않음 -> RSXFS 1개 중 1개, supply 없음 -> ok",
+    "Office": {"implied_cap_rate": 6.5, "implied_cap_rate_pctile": 60.0, "cap_spread_dgs10": 2.25, "cap_spread_baa": 0.25,
+               "ss_noi_yoy": -0.5, "ss_noi_yoy_avg_4q": 0.5, "occupancy": 90.0, "occupancy_chg_1q": -0.5, "occupancy_chg_4q": 1.0,
+               "dev_pipeline_pct_assets": 10.0},
+    "Industrial": {"implied_cap_rate": 4.5, "implied_cap_rate_pctile": null, "cap_spread_dgs10": 0.25, "cap_spread_baa": -1.75,
+                   "ss_noi_yoy": -0.5, "ss_noi_yoy_avg_4q": -0.75, "occupancy": 95.0, "occupancy_chg_1q": -1.0, "occupancy_chg_4q": -2.0,
+                   "dev_pipeline_pct_assets": 15.0},
+    "Free Standing": {"implied_cap_rate": 6.8, "implied_cap_rate_pctile": 13.3333, "cap_spread_dgs10": 2.55, "cap_spread_baa": 0.55,
+                      "ss_noi_yoy": 2.5, "ss_noi_yoy_avg_4q": 2.125, "occupancy": 96.0, "occupancy_chg_1q": 0.5, "occupancy_chg_4q": 2.0,
+                      "dev_pipeline_pct_assets": 1.25},
+    "status": {"Office.implied_cap_rate": "reported", "Office.implied_cap_rate_pctile": "derived", "Office.cap_spread_baa": "derived",
+               "Free Standing.implied_cap_rate": "reported", "Free Standing.ss_noi_yoy": "estimated", "Free Standing.occupancy_chg_4q": "estimated",
+               "Free Standing.dev_pipeline_pct_assets": "estimated", "Industrial.implied_cap_rate_pctile": "missing"},
+    "judged": {"Office": {"tracker:ss_noi_yoy": "아님", "tracker:occupancy": "아님"}, "Industrial": {"tracker:ss_noi_yoy": "나빠짐", "tracker:occupancy": "나빠짐"}},
+    "structural": {"Office": "ok", "Free Standing": "ok", "Industrial": "review"},
+    "dbaa_spread_fs": 0.8, "stale_today": "2027-03-15"
+  },
+  "revision": {
+    "_why": "최신 2026-10 호 FFO FY1 1.5·FY2 1.6(FSE FY1 없음), 2026-07 호(fy1 2026) FSA 1.6, FSB 1.2, FSC 1.25, FSD 0(0 이하라 빈 값). 1.5/1.6-1 = -6.25%, 1.5/1.2-1 = 25.0%, 1.5/1.25-1 = 20.0%. FSD는 앞 호 값이 0이고 FSE는 FY1이 없어 빈 값. median 20.0. FY2/FY1 = 1.6/1.5-1 = 6.6667%(FSE 뺌). FY 교체: 2026-04 호(fy1 2026) A 2.2와 2026-01 호(fy1 2025, fy2 2026) A FY2 2.0 -> +10.0 (FY1 1.9와 견주면 15.7895)",
+    "vs_month": "2026-07",
+    "peers": {"FSA": -6.25, "FSB": 25.0, "FSC": 20.0, "FSD": null, "FSE": null},
+    "fs_rev_median": 20.0, "fs_growth_median": 6.6667, "office_rev": null,
+    "fy_roll": 10.0
+  },
   "excluded": ["Home Financing"],
   "exit_code": 2,
   "peers_free_standing": ["FSA", "FSB", "FSC", "FSD", "FSE"]

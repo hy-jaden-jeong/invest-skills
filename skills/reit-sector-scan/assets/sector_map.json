@@ -21,9 +21,30 @@
     "Data Centers": "data_center",
     "Diversified": null,
     "Timberland": null,
-        "Telecommunications": null,
+    "Telecommunications": null,
     "Gaming": null,
     "Specialty": null
+  },
+  "tracker": {
+    "_how": "REITWatch subsector 이름 -> Nareit REIT Industry Tracker의 row 이름(name)과 그 위 sector(parent). Tracker가 그 subsector 값을 내지 않으면 parent 값을 estimated로 쓰고(구조 신호에는 세지 않는다), parent도 없으면 missing. name이 null이면 Tracker에 그 subsector row가 없다",
+    "Office": {"name": "Office", "parent": null},
+    "Industrial": {"name": "Industrial", "parent": null},
+    "Shopping Centers": {"name": "Shopping Centers", "parent": "Retail"},
+    "Regional Malls": {"name": "Regional Malls", "parent": "Retail"},
+    "Free Standing": {"name": "Free Standing", "parent": "Retail"},
+    "Apartments": {"name": "Apartments", "parent": "Residential"},
+    "Manufactured Homes": {"name": "Manufactured Homes", "parent": "Residential"},
+    "Single Family Homes": {"name": "Single Family Homes", "parent": "Residential"},
+    "Student Housing": {"name": null, "parent": "Residential"},
+    "Health Care": {"name": "Health Care", "parent": null},
+    "Lodging/Resorts": {"name": "Lodging/Resorts", "parent": null},
+    "Self Storage": {"name": "Self Storage", "parent": null},
+    "Data Centers": {"name": "Data Centers", "parent": null},
+    "Diversified": {"name": "Diversified", "parent": null},
+    "Timberland": {"name": "Timberland", "parent": null},
+    "Telecommunications": {"name": "Telecommunications", "parent": null},
+    "Gaming": {"name": "Gaming", "parent": null},
+    "Specialty": {"name": "Specialty", "parent": null}
   },
   "indicators": {
     "office": [
