@@ -13,7 +13,7 @@
   "form": "8-K",
   "filed": "2026-11-02"
  },
- "note": "check fixture: O 2026Q3 공시 값. price만 가상",
+ "note": "check fixture: O 2026Q3 공시 값. price, unencumbered_assets·unencumbered_noi, principal_amortization만 가상",
  "facts": {
   "net_income_common": {
    "value": 403942,
@@ -344,6 +344,141 @@
    "source": "sec:8-K 0000726728-26-000056 ex99.2",
    "locator": "Ex.99.2 p.32 Capitalization: Common Units 2,682",
    "note": ""
+  },
+  "total_assets": {
+   "value": 77950414,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.11 Consolidated Balance Sheets: Total assets $77,950,414",
+   "note": ""
+  },
+  "accumulated_depreciation": {
+   "value": 9808131,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.11 Consolidated Balance Sheets: Less accumulated depreciation and amortization (9,808,131)",
+   "note": ""
+  },
+  "secured_debt": {
+   "value": 36745,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.11 Consolidated Balance Sheets: Mortgages payable, net 36,745",
+   "note": ""
+  },
+  "unencumbered_assets": {
+   "value": 80000000,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "web:https://example.org/unencumbered (가상)",
+   "locator": "unencumbered assets 80,000,000 (가상)",
+   "note": "O는 금액을 내지 않음. check용 가상 값"
+  },
+  "unencumbered_noi": {
+   "value": 5700000,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "web:https://example.org/unencumbered (가상)",
+   "locator": "unencumbered NOI annualized 5,700,000 (가상)",
+   "note": "check용 가상 값"
+  },
+  "capitalized_interest": {
+   "value": 3.2,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.29 Development Activity (3) Capitalized interest was $3.2 million for the three months ended September 30, 2026",
+   "note": ""
+  },
+  "preferred_dividends": {
+   "value": 0,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.9 Consolidated Statements of Income: preferred stock dividends 줄 없음",
+   "note": "회사 표에 이 줄이 없음"
+  },
+  "principal_amortization": {
+   "value": 1000,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "web:https://example.org/amortization (가상)",
+   "locator": "scheduled principal amortization 1,000 (가상)",
+   "note": "O는 내지 않음. check용 가상 값"
+  },
+  "wam_years": {
+   "value": 5.1,
+   "unit": "years",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.33 Debt Summary: Total Debt Principal Weighted Average Years To Maturity 5.1 (Pro-Rata)",
+   "note": ""
+  },
+  "weighted_avg_rate_pct": {
+   "value": 3.83,
+   "unit": "%",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.34 Debt Maturities: Total Blended Rate 3.83% (Pro-Rata)",
+   "note": ""
+  },
+  "floating_rate_debt": {
+   "value": 1791.4,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.33 Debt Summary: Total Variable Rate Debt Principal $1,791.4 (Pro-Rata)",
+   "note": ""
+  },
+  "revolver_available": {
+   "value": 5485.1,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.32 Liquidity: Availability under credit facilities 5,485.1",
+   "note": "commercial paper(1,540.7)는 빼지 않은 값. CP는 2026 만기에 들어 있음"
+  },
+  "dev_remaining_spend": {
+   "value": 681751,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.29 Development Activity (Pro-Rata): Forecasted Remaining Investment Total $681,751",
+   "note": ""
+  },
+  "liquidity_cash": {
+   "value": 355.8,
+   "unit": "USD millions",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.32 Liquidity: Cash and cash equivalents $355.8 (Pro-Rata)",
+   "note": ""
+  },
+  "diluted_shares_weighted": {
+   "value": 948797,
+   "unit": "shares thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.1",
+   "locator": "Ex.99.1 p.11 Weighted average number of common shares used for AFFO: Diluted 948,797",
+   "note": ""
   }
  },
  "series": {
@@ -572,6 +707,56 @@
     "note": "",
     "label": "Sainsbury's"
    }
+  ],
+  "covenants": [
+   {
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.35 Debt Covenants: Limitation on incurrence of total debt ≤ 60% of adjusted assets 41.5%",
+    "note": "",
+    "name": "Limitation on incurrence of total debt",
+    "limit": 60,
+    "actual": 41.5,
+    "direction": "max"
+   },
+   {
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.35 Debt Covenants: Limitation on incurrence of secured debt ≤ 40% of adjusted assets 0.3%",
+    "note": "",
+    "name": "Limitation on incurrence of secured debt",
+    "limit": 40,
+    "actual": 0.3,
+    "direction": "max"
+   },
+   {
+    "unit": "x",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.35 Debt Covenants: Debt service and fixed charge coverage (trailing 12 months) ≥ 1.5x 4.6x",
+    "note": "",
+    "name": "Debt service and fixed charge coverage",
+    "limit": 1.5,
+    "actual": 4.6,
+    "direction": "min"
+   },
+   {
+    "unit": "%",
+    "status": "reported",
+    "as_of": "2026-09-30",
+    "source": "sec:8-K 0000726728-26-000056 ex99.2",
+    "locator": "Ex.99.2 p.35 Debt Covenants: Maintenance of total unencumbered assets ≥ 150% of unsecured debt 242.2%",
+    "note": "",
+    "name": "Maintenance of total unencumbered assets",
+    "limit": 150,
+    "actual": 242.2,
+    "direction": "min"
+   }
   ]
  },
  "affo_bridge": {
@@ -585,7 +770,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Amortization of net debt discounts and deferred financing costs",
     "note": "",
-    "label": "Amortization of net debt discounts and deferred financing costs"
+    "label": "Amortization of net debt discounts and deferred financing costs",
+    "category": "non_cash"
    },
    {
     "value": 1531,
@@ -595,7 +781,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Amortization of acquired interest rate swap value",
     "note": "",
-    "label": "Amortization of acquired interest rate swap value"
+    "label": "Amortization of acquired interest rate swap value",
+    "category": "non_cash"
    },
    {
     "value": -2392,
@@ -605,7 +792,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Leasing costs and commissions",
     "note": "",
-    "label": "Leasing costs and commissions"
+    "label": "Leasing costs and commissions",
+    "category": "leasing_cost"
    },
    {
     "value": -27,
@@ -615,7 +803,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Recurring capital expenditures",
     "note": "",
-    "label": "Recurring capital expenditures"
+    "label": "Recurring capital expenditures",
+    "category": "recurring_capex"
    },
    {
     "value": 14212,
@@ -625,7 +814,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Provisions for credit losses on loans and financing receivables",
     "note": "",
-    "label": "Provisions for credit losses on loans and financing receivables"
+    "label": "Provisions for credit losses on loans and financing receivables",
+    "category": "non_cash"
    },
    {
     "value": 6461,
@@ -635,7 +825,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Amortization of share-based compensation",
     "note": "",
-    "label": "Amortization of share-based compensation"
+    "label": "Amortization of share-based compensation",
+    "category": "non_cash"
    },
    {
     "value": -50732,
@@ -645,7 +836,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Straight-line rent and expenses, net",
     "note": "",
-    "label": "Straight-line rent and expenses, net"
+    "label": "Straight-line rent and expenses, net",
+    "category": "straight_line"
    },
    {
     "value": 17742,
@@ -655,7 +847,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Amortization of above and below-market leases, net",
     "note": "",
-    "label": "Amortization of above and below-market leases, net"
+    "label": "Amortization of above and below-market leases, net",
+    "category": "non_cash"
    },
    {
     "value": 0,
@@ -665,7 +858,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Deferred tax expense",
     "note": "",
-    "label": "Deferred tax expense"
+    "label": "Deferred tax expense",
+    "category": "other"
    },
    {
     "value": 1473,
@@ -675,7 +869,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Executive severance charge",
     "note": "",
-    "label": "Executive severance charge"
+    "label": "Executive severance charge",
+    "category": "other"
    },
    {
     "value": 4202,
@@ -685,7 +880,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Derivative and unrealized foreign currency loss (gain), net",
     "note": "",
-    "label": "Derivative and unrealized foreign currency loss (gain), net"
+    "label": "Derivative and unrealized foreign currency loss (gain), net",
+    "category": "other"
    },
    {
     "value": 2230,
@@ -695,7 +891,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Other adjustments",
     "note": "",
-    "label": "Other adjustments"
+    "label": "Other adjustments",
+    "category": "other"
    },
    {
     "value": -987,
@@ -705,7 +902,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Proportionate share of adjustments for unconsolidated entities",
     "note": "",
-    "label": "Proportionate share of adjustments for unconsolidated entities"
+    "label": "Proportionate share of adjustments for unconsolidated entities",
+    "category": "other"
    },
    {
     "value": 2008,
@@ -715,7 +913,8 @@
     "source": "sec:8-K 0000726728-26-000056 ex99.1",
     "locator": "Ex.99.1 p.11 AFFO table: Adjustments allocable to noncontrolling interests",
     "note": "",
-    "label": "Adjustments allocable to noncontrolling interests"
+    "label": "Adjustments allocable to noncontrolling interests",
+    "category": "other"
    }
   ]
  },

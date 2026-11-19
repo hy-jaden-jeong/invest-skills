@@ -1,6 +1,6 @@
 ---
 name: reit-stock-review
-description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 하나의 최신 실적 8-K Ex.99(보도자료·supplemental)와 XBRL을 SEC EDGAR에서 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. compare mode는 같은 섹터 여러 종목을 한 표에 놓고 subsector가 다르면 경고하며, earnings mode는 새 분기 metrics를 직전 분기와 diff해 바뀐 지표와 나빠진 status·flag를 보고한다. REIT가 아닌 배당주(SIC 6798이 아님)는 FFO 대신 EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호로 본다. API key 없이 돈다. 주가는 key 없는 Yahoo chart의 마지막 거래일 종가, 실패하면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 valuation과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 매수·매도 판단은 내리지 않는다.
+description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 하나의 최신 실적 8-K Ex.99(보도자료·supplemental)와 XBRL을 SEC EDGAR에서 받고, agent가 표의 값을 위치(locator)와 함께 facts에 적으면, script가 Nareit FFO 재계산(회사 값과 0.5% 넘게 다르면 실패), AFFO bridge, forward yield, AFFO·FFO payout, 배당 CAGR, net debt/EBITDAre, coverage, 만기 집중도, 신용 지표(gross assets 대비 부채, fixed-charge coverage, covenant headroom), 리파이낸싱·유동성, 임차인 집중도, P/FFO·P/AFFO, implied cap rate를 계산해 보고서를 쓴다. compare mode는 같은 섹터 여러 종목을 한 표에 놓고 subsector가 다르면 경고하며, earnings mode는 새 분기 metrics를 직전 분기와 diff해 바뀐 지표와 나빠진 status·flag를 보고한다. REIT가 아닌 배당주(SIC 6798이 아님)는 FFO 대신 EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호로 본다. API key 없이 돈다. 주가는 key 없는 Yahoo chart의 마지막 거래일 종가, 실패하면 출처를 단 웹 채우기로 넣는다. "O 분석해줘", "이 리츠 배당 괜찮아?", "PLD, REXR, EGP 비교해줘", "O 실적 나왔는데 봐줘", "JNJ 배당 괜찮아?" 요청에 쓴다. 매크로 지표는 macro-check, 섹터 valuation과 종목 screening 표는 reit-sector-scan이 맡고 이 skill은 그 snapshot을 읽기만 한다. 매수·매도 판단은 내리지 않는다.
 ---
 
 # 종목 공시 분석 (deep·compare·earnings)
@@ -21,7 +21,7 @@ description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 �
 2. **실적 공시 찾기**: `edgar.py filings T`. `latest_earnings_8k`(item 2.02가 든 8-K)의 accession과 `report_date`로 분기 `P`를 정한다. 사용자가 분기를 말했으면 그 분기의 실적 8-K를 고른다. `P`는 달력 분기 이름이다. 52·53주 회계연도 회사(분기 끝날이 9월 27일 같은 날)도 가장 가까운 달력 분기로 부른다.
 3. **exhibit 받기**: `edgar.py exhibits T --accession A`. EX-99 문서마다 `.txt`가 생긴다. 표는 cell이 tab, row가 줄이다. 보도자료(EX-99.1)와 supplemental(EX-99.2)이 따로 있으면 둘 다 읽는다. supplemental이 8-K에 없으면 회사 IR의 supplemental PDF를 웹에서 찾아 `pdftotext -layout`으로 읽고 `source`를 `web:<URL>`로 쓴다.
    - 처음 `exhibits`가 "연락처 설정 없음"(exit 1)이나 HTTP 403으로 멈추면 사용자에게 이름과 이메일을 한 번 묻고 `python3 <skill 폴더>/scripts/edgar.py config --user-agent "이름 이메일"`로 저장한 뒤 다시 돈다. 이것은 key가 아니라 SEC가 요구하는 연락처다. 값은 `$INVEST_DATA_DIR/config.json`에만 두고 레포나 보고서에 적지 않는다.
-4. **facts 초안**: `edgar.py xbrl T --period P`가 `$INVEST_DATA_DIR/tickers/<T>/facts/<P>.json`을 만들고 XBRL에 있는 값을 채운다. 이미 있는 파일이면 빈 칸만 채운다. exit 2는 아직 빈 칸이 있다는 뜻이다. `filing`은 그 분기 끝날 뒤 120일 안의 첫 실적 8-K다. SEC companyfacts에 그 분기 10-Q가 아직 없으면 초안이 0칸일 수 있다. 그러면 모든 칸을 Ex.99에서 채운다.
+4. **facts 초안**: `edgar.py xbrl T --period P`가 `$INVEST_DATA_DIR/tickers/<T>/facts/<P>.json`을 만들고 XBRL에 있는 값을 채운다. 이미 있는 파일이면 빈 칸만 채우고, 그 파일을 만든 뒤에 더한 칸(신용·리파이낸싱 칸 등)은 빈 칸으로 더한다. exit 2는 아직 빈 칸이 있다는 뜻이다. `filing`은 그 분기 끝날 뒤 120일 안의 첫 실적 8-K다. SEC companyfacts에 그 분기 10-Q가 아직 없으면 초안이 0칸일 수 있다. 그러면 모든 칸을 Ex.99에서 채운다.
 5. **값 읽어 적기**: facts 파일을 열어 빈 칸을 `.txt`에서 읽은 값으로 채운다. 형식과 칸의 뜻은 `<skill 폴더>/references/facts-schema.md`에 있다.
    - 값마다 `source`와 `locator`(text 파일 이름, 줄 번호, 표 이름, 원문 숫자)를 쓴다. 없으면 script가 그 값을 버린다.
    - 분기 값은 three months 열에서 읽는다. 단위(`USD thousands` 등)는 표 머리에 적힌 대로 쓴다.
@@ -30,8 +30,11 @@ description: 미국 REIT 종목을 공시로 분석한다. deep mode는 종목 �
    - FFO 표가 보통주 귀속이 아닌 연결 순이익에서 시작하면(NCI·우선주를 FFO 아래에서 뺌) `net_income_common`에 그 시작 값을, `ffo_reported`에 같은 기준의 FFO를 적고 `note`에 기준을 쓴다. 기준을 맞추려고 agent가 더하거나 빼지 않는다. 숫자는 script만 계산하기 때문이다.
    - 회사 net debt 표가 이미 현금을 뺀 값만 내면 `total_debt`에 그 값, `cash`에 0과 "이미 빠짐"을 적는다. 회사가 연환산 EBITDAre를 따로 내지 않으면 `ebitdare_annualized`를 missing으로 두면 script가 분기×4(estimated)로 가정한다.
    - 만기 표가 날짜별 줄이면 줄마다 `period`(연도)를 붙여 옮긴다. script가 해마다 더한다.
-   - AFFO reconciliation은 `affo_bridge`에 줄마다 옮긴다. 회사 정의를 그대로 따른다.
+   - AFFO reconciliation은 `affo_bridge`에 줄마다 옮긴다. 회사 정의를 그대로 따른다. 줄마다 `category`(straight_line, recurring_capex, leasing_cost, non_cash, other)를 단다(`references/facts-schema.md`).
+   - 주당 AFFO를 내지 않는 회사는 AFFO 총액과 같은 기준의 분기 가중평균 희석 주식 수를 `diluted_shares_weighted`에 적는다. 같은 기준이 없으면 가장 가까운 값을 `estimated`로 두고 기준 차이를 note에 쓴다. 주식 수를 더하거나 빼서 맞추지 않는다.
    - 만기 사다리(`series.debt_maturities`), 상위 임차인(`series.top_tenants`), 섹터 지표(`sector_kpis`, `references/sector-kpis.md`)도 옮긴다.
+   - 리파이낸싱·유동성 칸: debt summary의 WAM·가중평균 금리·변동금리 원금(swap 반영), liquidity 표의 현금·revolver 잔여(commercial paper를 이미 뺐는지 note에), 개발 표의 남은 개발비. 만기 사다리와 같은 기준(consolidated·pro-rata)을 고른다.
+   - 신용 칸: balance sheet의 총자산·감가상각 누계·담보부 부채, 회사 fixed charge 표나 손익계산서·개발 표 주석의 자본화 이자·우선주 배당·정기 원금 상환, unencumbered 자산(또는 NOI). 회사 debt covenant 표는 줄마다 `series.covenants`에 한도·실제·방향과 함께 옮긴다(`references/facts-schema.md`). covenant 표가 없으면 빈 목록으로 둔다. 손익계산서에 우선주 배당 줄이 없으면 0과 "회사 표에 이 줄이 없음", 정기 원금 상환처럼 회사가 내지 않는 값은 missing과 이유다.
 6. **배당 history**: `edgar.py dividends T --facts <facts 파일>`. XBRL 10-K 연간 주당 배당을 넣는다. `frequency_hint`는 참고만 하고, `dividend_frequency`는 보도자료 문장(예: "monthly dividends")에서 적는다.
 7. **가격**: `python3 <skill 폴더>/scripts/quote.py price T --period P`. key 없는 Yahoo chart endpoint에서 마지막으로 끝난 거래일의 종가를 넣는다(`source: yahoo:chart`, `locator`에 URL과 기준일, `status: reported`, 5일 넘으면 `stale`). 문서에 없는 endpoint라 HTTP 오류·형식 변화·빈 값이면 price가 missing으로 남고 exit 2다. 그러면 아래 "웹 채우기"로 넣는다.
 8. **위 단계 snapshot 확인**: 아래 "읽는 데이터"대로 macro snapshot과 REITWatch parsed가 있는지 보고, 없거나 오래됐으면 갱신한다.
@@ -63,10 +66,10 @@ python3 <skill 폴더>/scripts/quote.py web O --period 2026Q3 --missing "시세 
 
 | 데이터 | 경로 | 쓰는 곳 | 없을 때 |
 | --- | --- | --- | --- |
-| macro snapshot | `$INVEST_DATA_DIR/macro/snapshots/<날짜>.json`(가장 최근) | DGS10과 yield spread | macro-check가 설치돼 있으면 `python3 <skills 폴더>/macro-check/scripts/macro.py fetch`. 아니면 spread가 missing |
+| macro snapshot | `$INVEST_DATA_DIR/macro/snapshots/<날짜>.json`(가장 최근) | DGS10과 yield spread, DGS10 + BAA10Y(시장 차입금리 추정) | macro-check가 설치돼 있으면 `python3 <skills 폴더>/macro-check/scripts/macro.py fetch`. 아니면 spread가 missing |
 | REITWatch parsed | `$INVEST_DATA_DIR/reitwatch/parsed/<YYYY-MM>.json` | subsector, consensus FFO, 자기 P/FFO history, peer median | reit-sector-scan이 설치돼 있으면 그 skill의 fetch를 돌린다. 아니면 그 칸이 missing |
 
-- macro snapshot이 가격 기준일보다 7일 넘게 앞서면 DGS10이 stale로 표시된다. 오늘 snapshot이 없으면 갱신한다.
+- macro snapshot이 가격 기준일보다 7일 넘게 앞서면 DGS10·BAA10Y가 stale로 표시된다. 오늘 snapshot이 없으면 갱신한다.
 - REITWatch는 월간이라 최신 달이 지난달이면 그대로 쓴다. consensus는 애널리스트 추정이라 `estimated`다.
 - 최신 호의 가격 기준일이 facts 가격 기준일보다 75일(`assets/thresholds.json`의 `reitwatch_max_age_days`) 넘게 앞서면 그 호에서 온 값의 `note`와 데이터 구멍(`reitwatch`)에 나이가 붙는다. 그러면 reit-sector-scan의 `fetch --month latest`로 갱신하고 다시 계산한다.
 - 갱신이 실패해도(exit 1) 그 칸을 missing으로 두고 계속한다.
@@ -84,13 +87,19 @@ facts: <경로>, metrics: <경로>, 공시: <form> <accession> (<제출일>). �
 <3~5줄. FFO tie-out 결과, flag, 눈에 띄는 변화와 데이터 구멍>
 
 ## FFO → AFFO bridge
-<Nareit 재계산 표(입력 줄, 재계산, 회사 값, 차이 %), AFFO bridge(시작 값, 줄, 합, 회사 AFFO), 주당 FFO·AFFO, 연간 AFFO(guidance)>
+<Nareit 재계산 표(입력 줄, 재계산, 회사 값, 차이 %), AFFO bridge(시작 값, 줄과 category, 합, 회사 AFFO), 주당 FFO·AFFO(총액 / 희석 주식 수로 냈으면 그렇다고), 연간 AFFO(guidance), recurring capex/NOI, straight-line rent/FFO>
 
 ## 배당 지속성
-<forward dividend, forward yield, AFFO payout(forward, 분기), 배당 CAGR 3·5년, 컷 이력, flag와 기준(경험칙)>
+<forward dividend, forward yield, AFFO payout(forward, 분기), FFO payout(참고, flag 없음), 배당 CAGR 3·5년, 컷 이력, flag와 기준(경험칙)>
 
 ## 재무
 <net debt, net debt/EBITDAre, interest coverage, 고정금리 비중, 만기 사다리 표(해마다 금액·비중), 가장 큰 만기 해, flag>
+
+## 신용·자본구조
+<gross assets(회사 GAV와 맞는지), debt(+우선주)/gross assets, secured debt/gross assets, unencumbered 비율(자산·NOI 중 무엇인지), fixed-charge coverage(S&P식, 회사 covenant의 coverage와 식이 다름)와 S&P 구간, covenant 표(줄마다 한도·실제·headroom), 최소 headroom과 flag. 신용평가사 등급이 공시에 있으면 출처와 함께 적는다>
+
+## 리파이낸싱·유동성
+<WAM, 가중평균 금리, 24개월 안 만기(셋째 해를 나눴는지), 시장 차입금리 추정(DGS10 + BAA10Y, 기준일), refi 이자 증가와 AFFO 대비, 변동금리 100bp 충격/AFFO, liquidity sources(현금·revolver 잔여·유보 현금흐름)와 uses(만기·남은 개발비), 24개월 liquidity coverage. 모두 가정이 든 estimated라고 문장에 적는다>
 
 ## 운영
 <occupancy, WALE, 상위 1·5·10 임차인 비중, 투자등급 임차인 비중, same store 성장률(무슨 지표인지), 섹터 지표>
@@ -135,7 +144,7 @@ compare: <JSON 경로> (exit), metrics: <경로들>, 공시: <종목마다 form 
 <종목마다 재계산, 회사 값, 차이, 회사 표의 기준(보통주 귀속인지, NCI 차감 전인지). AFFO bridge 결과>
 
 ## 비교 표
-<지표 줄 × 종목 칸 + median. P/FFO(분모가 무엇인지), REITWatch P/FFO·history·peer, yield·spread, 배당 CAGR·컷, leverage·coverage·고정금리·만기 최대, occupancy·same store·임차인 집중도, implied cap rate, AFFO payout. flag 표. 섹터 지표는 회사마다 정의가 달라 종목별 목록으로>
+<지표 줄 × 종목 칸 + median. P/FFO(분모가 무엇인지), REITWatch P/FFO·history·peer, yield·spread, 배당 CAGR·컷, leverage·coverage·고정금리·만기 최대, 리파이낸싱(refi 영향/AFFO, 변동금리 충격/AFFO, liquidity coverage), 신용(debt+우선주/gross assets, secured/gross assets, unencumbered 비율, fixed-charge coverage, 최소 covenant headroom), occupancy·same store·임차인 집중도, implied cap rate, AFFO payout(주당 값이 총액에서 나왔는지)·FFO payout(참고), recurring capex/NOI, straight-line rent/FFO. flag 표. 섹터 지표는 회사마다 정의가 달라 종목별 목록으로. covenant 줄은 회사마다 정의가 달라 최소 headroom만 한 줄에 놓는다>
 
 ## 읽을 때
 <분모·기준이 다른 지표, 같은 출처끼리 견줄 줄, 사실로 쓴 차이>

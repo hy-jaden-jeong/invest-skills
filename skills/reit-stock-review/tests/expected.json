@@ -136,13 +136,119 @@
         "value": 98.8,
         "status": "reported",
         "why": "회사 발표값 그대로"
+      },
+      "gross_assets": {
+        "value": 87758545,
+        "status": "derived",
+        "why": "77,950,414 + 9,808,131 = 회사 Total GAV $87,759M(Ex.99.2 p.7)"
+      },
+      "debt_pref_to_gross_assets": {
+        "value": 36.4684,
+        "status": "derived",
+        "why": "(32,004,100 + 0) / 87,758,545 × 100"
+      },
+      "secured_debt_to_gross_assets": {
+        "value": 0.0419,
+        "status": "derived",
+        "why": "36,745 / 87,758,545 × 100"
+      },
+      "unencumbered_pct": {
+        "value": 91.1592,
+        "status": "derived",
+        "why": "80,000,000(가상) / 87,758,545 × 100"
+      },
+      "fixed_charge_coverage": {
+        "value": 4.3006,
+        "status": "derived",
+        "why": "1,452,572 / (333,564 + 3,200 + 0 + 1,000(가상))"
+      },
+      "covenant_headroom_min_pct": {
+        "value": 30.8333,
+        "status": "derived",
+        "why": "총부채 (1 − 41.5/60) × 100"
+      },
+      "wam_years": {
+        "value": 5.1,
+        "status": "reported",
+        "why": "회사 발표값 그대로"
+      },
+      "weighted_avg_rate_pct": {
+        "value": 3.83,
+        "status": "reported",
+        "why": "회사 발표값 그대로"
+      },
+      "market_borrowing_rate_est": {
+        "value": 6.0,
+        "status": "estimated",
+        "why": "DGS10 4.50 + BAA10Y 1.50(가상)"
+      },
+      "maturities_24m": {
+        "value": 7923650,
+        "status": "estimated",
+        "why": "2,201.4 + 2,884.1 + 3,784.2 × 9/12 = 7,923.65M"
+      },
+      "affo_annualized": {
+        "value": 4244388,
+        "status": "estimated",
+        "why": "1,061,097 × 4"
+      },
+      "refi_cost_24m": {
+        "value": 171943.205,
+        "status": "estimated",
+        "why": "7,923,650 × (6.00 − 3.83) / 100"
+      },
+      "refi_impact_affo_pct": {
+        "value": 4.0511,
+        "status": "estimated",
+        "why": "171,943.205 / 4,244,388 × 100"
+      },
+      "floating_rate_shock_affo_pct": {
+        "value": 0.4221,
+        "status": "estimated",
+        "why": "1,791,400 × 1% / 4,244,388 × 100"
+      },
+      "retained_cash_flow_24m": {
+        "value": 2274818.664,
+        "status": "estimated",
+        "why": "2 × (4,244,388 − 3.258 × (950,964 + 2,682))"
+      },
+      "liquidity_sources_24m": {
+        "value": 8115718.664,
+        "status": "estimated",
+        "why": "355,800 + 5,485,100 + 2,274,818.664"
+      },
+      "liquidity_uses_24m": {
+        "value": 8605401,
+        "status": "estimated",
+        "why": "7,923,650 + 681,751"
+      },
+      "liquidity_coverage_24m": {
+        "value": 0.9431,
+        "status": "estimated",
+        "why": "8,115,718.664 / 8,605,401"
+      },
+      "recurring_capex_to_noi_pct": {
+        "value": 0.1679,
+        "status": "derived",
+        "why": "(2,392 + 27) × 4 / 5,761,304 × 100"
+      },
+      "straight_line_to_ffo_pct": {
+        "value": 4.8733,
+        "status": "derived",
+        "why": "50,732 / 1,041,026 × 100"
+      },
+      "ffo_payout_forward": {
+        "value": 76.6588,
+        "status": "estimated",
+        "why": "3.258 / 4.25(가상 REITWatch consensus) × 100"
       }
     },
     "flags": {
       "affo_payout": "ok",
       "maturity_concentration": "ok",
       "net_debt_to_ebitdare": "ok",
-      "interest_coverage": "ok"
+      "interest_coverage": "ok",
+      "covenant_headroom": "ok"
     },
     "cut_series": {
       "values": [
@@ -318,6 +424,30 @@
         ],
         "flag": "alert"
       }
+    },
+    "credit": {
+      "note": "O 2026Q3 covenant 표(Ex.99.2 p.35). headroom은 bc로 손계산했다",
+      "headroom": {
+        "Limitation on incurrence of total debt": 30.8333,
+        "Limitation on incurrence of secured debt": 99.25,
+        "Debt service and fixed charge coverage": 67.3913,
+        "Maintenance of total unencumbered assets": 38.0677
+      },
+      "unencumbered_noi_pct": 98.9359,
+      "breach_headroom": -7.1429,
+      "watch_headroom": 13.3333
+    },
+    "refi": {
+      "note": "bc 손계산",
+      "maturities_24m_year_end": 8869700,
+      "coverage_1_8": 1.8157
+    },
+    "affo": {
+      "note": "bc 손계산. 주당 AFFO가 없을 때 1,061,097 / 948,797 = 1.11836 → metrics 규칙대로 4자리 1.1184로 반올림해 이어 계산",
+      "per_share": 1.1184,
+      "payout_quarter": 72.6931,
+      "affo_fy_run": 4.4736,
+      "payout_forward_run": 72.8273
     }
   },
   "edgar": {
@@ -367,6 +497,36 @@
         "value": 0.3,
         "locator": "us-gaap:CommonStockDividendsPerShareCashPaid 2026-07-01..2026-09-30",
         "why": "3개월 값(9개월 0.9, 1개월 0.1은 버림)"
+      },
+      "total_assets": {
+        "value": 90000,
+        "locator": "us-gaap:Assets 2026-09-30",
+        "why": "instant 값(분기 끝날)"
+      },
+      "accumulated_depreciation": {
+        "value": 12000,
+        "locator": "us-gaap:RealEstateInvestmentPropertyAccumulatedDepreciation",
+        "why": "instant 값"
+      },
+      "secured_debt": {
+        "value": 3000,
+        "locator": "us-gaap:SecuredDebt",
+        "why": "instant 값"
+      },
+      "capitalized_interest": {
+        "value": 40,
+        "locator": "us-gaap:InterestCostsCapitalized 2026-07-01..2026-09-30",
+        "why": "3개월 값(9개월 110은 버림)"
+      },
+      "preferred_dividends": {
+        "value": 25,
+        "locator": "us-gaap:DividendsPreferredStock",
+        "why": "첫 후보(PreferredStockDividendsIncomeStatementImpact)가 없으면 둘째 후보"
+      },
+      "diluted_shares_weighted": {
+        "value": 205000,
+        "locator": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding 2026-07-01..2026-09-30",
+        "why": "3개월 가중평균(9개월 203,000은 버림)"
       }
     },
     "dividends": [

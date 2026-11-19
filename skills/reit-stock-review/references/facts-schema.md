@@ -45,6 +45,7 @@
 | `other_nareit_adjustments` | 위에 없는 Nareit 조정(change of control 손익 등) | FFO 표 |
 | `ffo_reported`, `normalized_ffo_reported`, `affo_reported` | 회사 발표 FFO·Normalized(Core) FFO·AFFO, 보통주 귀속 | FFO·AFFO 표 |
 | `ffo_per_share_diluted`, `affo_per_share_diluted` | 분기 희석 주당 값 | 같은 표 |
+| `diluted_shares_weighted` | 분기 가중평균 희석 주식 수. AFFO 총액과 같은 기준(OP unit 포함 여부)을 고른다. 같은 기준이 없으면 가장 가까운 값을 `estimated`와 기준 차이 note로 | per share 계산 표, XBRL `WeightedAverageNumberOfDilutedSharesOutstanding` |
 | `ffo_guidance_low/high`, `affo_guidance_low/high` | 연간 guidance 범위 | Guidance 표. 내지 않으면 missing |
 | `ffo_consensus_fy1` | consensus FFO FY1 | 비워 두면 REITWatch parsed에서 읽는다 |
 | `dividend_regular_latest` | 최근 정기 배당 1회분 | 배당 공지, XBRL `DividendsPayableAmountPerShare` |
@@ -55,6 +56,17 @@
 | `fixed_rate_debt`, `debt_principal_total` | 고정금리 원금, 원금 합(같은 기준) | debt summary |
 | `ebitdare_quarter`, `ebitdare_annualized` | 분기 adjusted EBITDAre, 연환산(pro forma) | EBITDAre 표 |
 | `interest_expense` | 분기 이자비용 | 손익계산서 |
+| `total_assets`, `accumulated_depreciation` | 기말 총자산, 부동산 감가상각 누계(양수). 합이 gross assets(감가상각 전 장부가)다 | balance sheet, XBRL `Assets`·`RealEstateInvestmentPropertyAccumulatedDepreciation` |
+| `secured_debt` | 기말 담보부 부채(mortgage 등). gross assets와 같은 기준(대개 consolidated) | balance sheet "Mortgages payable", XBRL `SecuredDebt` |
+| `unencumbered_assets`, `unencumbered_noi` | 담보로 잡히지 않은 자산(감가상각 전), 그 자산의 연환산 NOI(`noi_annualized`와 같은 기준). 회사가 내는 쪽만 채운다 | supplemental debt metrics·covenant 주석 |
+| `capitalized_interest` | 분기 자본화 이자(개발 중 자산에 얹은 이자) | 개발 표 주석, 현금흐름표 주석, XBRL `InterestCostsCapitalized` |
+| `preferred_dividends` | 분기 우선주 배당 | 손익계산서, XBRL `PreferredStockDividendsIncomeStatementImpact` |
+| `principal_amortization` | 분기 정기 원금 상환(scheduled amortization. 만기 일시 상환은 넣지 않는다) | 회사 fixed charge coverage 표 |
+| `wam_years`, `weighted_avg_rate_pct` | 부채 가중평균 잔여 만기, 가중평균 금리(swap 반영). 만기 사다리와 같은 기준 | debt summary |
+| `floating_rate_debt` | 변동금리 원금(swap으로 고정한 부분은 뺀 회사 값). 비율만 내면 missing | debt summary |
+| `revolver_available` | credit facility 남은 한도. commercial paper를 이미 뺀 값이면 note에 적는다 | liquidity 표 |
+| `dev_remaining_spend` | 개발 중 자산에 앞으로 들어갈 돈(cost to complete, remaining investment) | 개발 표 |
+| `liquidity_cash` | 유동성 계산용 현금·현금성 자산. net debt 표 때문에 `cash`가 0인 회사(D47)도 실제 현금을 적는다 | liquidity 표, balance sheet |
 | `occupancy_pct`, `wale_years`, `investment_grade_share_pct` | 점유율, 가중평균 잔여 임대기간, 투자등급 임차인 비중 | 보도자료, supplemental |
 | `same_store_current`, `same_store_prior` | same store NOI(없으면 회사의 same store 지표), 이번·전년 같은 기간 | supplemental |
 | `noi_annualized` | 연환산 (cash) NOI | supplemental NOI 표 |
@@ -66,10 +78,33 @@
 - `dividend_per_share_annual`: `edgar.py dividends --facts F`가 넣는다. 항목마다 `period`(연도)가 있다. 다시 돌리면 해마다 합치고, 값과 `locator`가 있는 해(agent가 고친 해)는 덮지 않는다.
 - `debt_maturities`: 만기 사다리. `period`는 연도나 `thereafter`. 같은 기준(pro-rata 또는 consolidated)의 원금 합 열을 쓴다.
 - `top_tenants`: 임대료(ABR) 비중 상위 임차인. 항목마다 `label`(이름)과 `%` 값.
+- `covenants`: 회사가 낸 debt covenant 표의 줄. `value` 대신 `limit`(한도)과 `actual`(실제)을 둔다. 한도가 여러 문서(indenture, credit facility)에 따로 있으면 줄마다 `name`에 어느 쪽인지 쓴다.
+
+```json
+{"name": "Limitation on incurrence of total debt", "limit": 60, "actual": 41.5, "direction": "max", "unit": "%",
+ "status": "reported", "as_of": "2026-09-30", "source": "sec:8-K 0000726728-26-000056 ex99.2",
+ "locator": "realtyincomeq32026supple.txt L36 (p.35) ... ≤ 60% of adjusted assets 41.5%", "note": ""}
+```
+
+  - `direction`: 실제가 한도 아래여야 하면(부채/자산 ≤ 60%) `max`, 위여야 하면(coverage ≥ 1.5x, unencumbered ≥ 150%) `min`.
+  - `unit`: `%` 또는 `x`. `limit`은 양수, `actual`은 0 이상이다. 어기면 그 줄만 missing과 데이터 구멍이다.
+  - 회사가 covenant 표를 내지 않으면 빈 목록으로 둔다. 그러면 headroom은 missing, flag는 review다.
 
 ## affo_bridge
 
 회사 AFFO reconciliation을 줄마다 옮긴다. `start`는 `ffo_reported`나 `normalized_ffo_reported`(표가 시작하는 값), `items`는 그 아래 줄들이다. 부호는 더하는 값 기준이다. 표의 소계 줄(예: "Cumulative adjustments")은 넣지 않는다.
+
+줄마다 `category`를 단다. 회사 정의가 달라도 줄의 성격으로 견주기 위해서다.
+
+| category | 줄 | 예 |
+| --- | --- | --- |
+| `straight_line` | straight-line rent(현금이 아닌 임대료) | Straight-line rent and expenses, net |
+| `recurring_capex` | 유지 설비투자(maintenance capex) | Recurring capital expenditures, Property improvements |
+| `leasing_cost` | 2nd generation TI·LC, turnover cost | Leasing costs and commissions, Turnover costs |
+| `non_cash` | 그 밖의 비현금 항목 | 주식 보상, 부채 할인 상각, above/below-market lease 상각 |
+| `other` | 위에 없는 것 | 일회성 비용, NCI·JV 조정, 우선주 배당 |
+
+다섯 가지가 아닌 category는 쓰지 않고 데이터 구멍에 오른다. category가 없는 줄은 bridge 합에만 들어간다.
 
 ## 일반 배당주 칸 (SIC가 6798이 아님)
 

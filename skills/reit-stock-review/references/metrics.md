@@ -22,7 +22,10 @@
 | check `ffo_tie_out` | (재계산 − 회사 FFO) / 회사 FFO | 0.5%(`ffo_tie_out_tolerance_pct`)를 넘으면 실패, exit 2, 데이터 구멍. facts를 잘못 옮겼거나 회사 정의가 Nareit과 다르다는 뜻이다 |
 | AFFO | 회사 정의를 따른다 | 표준이 없다. FFO에서 maintenance capex·leasing cost·straight-line rent·비현금 항목을 빼고 더하는 방식이 회사마다 다르다. 회사 reconciliation 줄을 그대로 `affo_bridge`에 옮긴다 |
 | check `affo_bridge` | 시작 값(FFO 또는 Normalized FFO) + bridge 줄 합 vs 회사 AFFO | 0.5%를 넘으면 실패. 빠진 줄이나 부호 실수를 잡는다 |
+| `affo_per_share_diluted` | 회사 발표값, 없으면 AFFO 총액 / 분기 가중평균 희석 주식 수(derived) | PLD·REXR처럼 총액만 내는 회사도 payout을 낸다. 주식 수가 AFFO 총액과 다른 기준이면 facts에서 estimated로 내려온다 |
 | `affo_fy`, `ffo_fy` | 연간 주당 값 | AFFO: guidance 가운데 → 분기×4(estimated). FFO: guidance 가운데 → consensus FFO FY1(REITWatch, estimated) → 분기×4(estimated) |
+| `recurring_capex_to_noi_pct` | −(bridge의 recurring_capex + leasing_cost 줄, 분기) × 4 / 연환산 NOI × 100 | 부동산을 유지하는 데 드는 돈(maintenance capex + TI·LC)이 NOI의 몇 %인지(Green Street의 capex reserve 방식). 그 category 줄이 없으면 missing |
+| `straight_line_to_ffo_pct` | −(bridge의 straight_line 줄, 분기) / 분기 FFO × 100 | FFO 중 현금이 아닌 임대료 몫 |
 
 ## 배당 지속성
 
@@ -32,6 +35,7 @@
 | `forward_yield` | forward dividend / price × 100 | |
 | `affo_payout_forward` | forward dividend / 연간 AFFO per share × 100 | flag `affo_payout`의 기준 |
 | `affo_payout_quarter` | 분기 지급 배당 / 분기 AFFO per share × 100 | 회사가 보고서에 내는 payout과 맞춰 볼 수 있다 |
+| `ffo_payout_forward` | forward dividend / 연간 FFO per share × 100 | 참고 줄. flag와 기준값이 없다. AFFO를 내지 않는 회사(EGP)도 값이 나온다. `ffo_fy`가 Core FFO guidance면 회사 정의다 |
 | `dividend_cagr_3y`, `_5y` | (마지막 해 / n년 전)^(1/n) − 1 | XBRL 10-K 연간 주당 배당 |
 | `dividend_cuts` | 연간 배당이 전년보다 줄어든 해 | 연간 값이라 한 해 안의 컷과 회복은 놓칠 수 있다 |
 
@@ -44,6 +48,37 @@
 | `interest_coverage` | 분기 EBITDAre / 분기 interest expense | covenant의 fixed charge coverage와 식이 다르다 |
 | `fixed_rate_debt_pct` | fixed rate debt / debt principal × 100 | swap으로 고정한 부분은 회사 표를 따른다 |
 | `maturity_ladder`, `maturity_max_year_pct` | 해마다 만기 원금 / 만기 원금 합 | 연도 칸 중 최대값이 flag `maturity_concentration`의 기준. "thereafter"는 비중만 낸다 |
+
+## 신용·자본구조
+
+신용평가사가 REIT를 볼 때 쓰는 축이다. S&P "Key Credit Factors For The Real Estate Industry"(2018)는 debt/EBITDA, EBITDA/interest, fixed-charge coverage를 core ratio로 두고 secured debt가 감가상각 전 자산의 35%를 넘으면 무담보 채권 등급을 한 단계 내린다고 적는다. Moody's REIT scorecard(2021 방법론)는 leverage·coverage 항목에 total debt + 우선주 / gross assets, net debt/EBITDA, secured debt / gross assets, fixed-charge coverage를, 유동성 항목에 unencumbered assets / gross assets를 둔다. 아래 식은 그 정의를 공시 값으로 옮긴 것이고 신용평가사의 조정(리스 부채, hybrid 등)은 하지 않는다.
+
+| 지표 | 식 | 메모 |
+| --- | --- | --- |
+| `gross_assets` | total assets + 부동산 감가상각 누계 | 감가상각 전 장부가. 회사가 GAV를 내면 맞춰 본다(O 87,758,545천 = Total GAV $87,759M) |
+| `debt_pref_to_gross_assets` | (debt principal + 우선주) / gross assets × 100 | debt는 `debt_principal_total`(원금 합)이다. `total_debt`는 회사가 현금을 뺀 net debt일 수 있다. 가까운 S&P 보조 비율 debt/(debt + equity, 감가상각 전 장부가)의 구간(같은 식은 아니다): 30% 미만 minimal, 40~55% intermediate, 70% 넘으면 highly leveraged |
+| `secured_debt_to_gross_assets` | secured debt / gross assets × 100 | S&P는 35% 넘으면 무담보 채권 notch down |
+| `unencumbered_pct` | unencumbered assets / gross assets × 100, 없으면 unencumbered NOI / 연환산 NOI × 100 | 앞쪽은 Moody's, 뒤쪽은 S&P가 보는 비율. formula에 어느 쪽인지 적힌다 |
+| `fixed_charge_coverage` | 분기 EBITDAre / (이자비용 + 자본화 이자 + 우선주 배당 + 정기 원금 상환) | S&P 정의. 구간: 3.7x 넘으면 minimal, 2.1~3.1x intermediate, 1.3~1.7x aggressive, 1.3x 미만 highly leveraged. 회사 covenant의 fixed charge coverage(대개 trailing 12개월, pro forma)와 식이 다르다 |
+| `covenant_headroom` | 줄마다 max: (1 − actual / limit) × 100, min: (1 − limit / actual) × 100 | 한도에 닿기까지 좋은 쪽 값(max는 분모의 자산, min은 분자의 이익·자산)이 몇 % 줄 수 있는지. 한도를 넘었으면 음수다. 회사 covenant 정의를 그대로 따른다 |
+| `covenant_headroom_min_pct` | 줄 headroom의 최소 | flag `covenant_headroom`의 기준. note에 그 줄 이름. headroom을 못 낸 줄이 하나라도 있으면 missing |
+
+## 리파이낸싱·유동성
+
+앞으로 24개월 안에 갚을 부채를 지금 금리로 다시 빌리면 이자가 얼마 늘고, 그 동안 쓸 돈을 손에 쥔 돈으로 덮는지 본다. Moody's credit opinion의 liquidity 분석(현금 + 남은 revolver + 배당 뒤 남는 영업 현금흐름 대 만기·개발비)을 공시 값으로 옮겼다. 모두 가정이 들어 estimated다.
+
+| 지표 | 식 | 메모 |
+| --- | --- | --- |
+| `wam_years`, `weighted_avg_rate_pct` | 회사 발표값 그대로 | 가중평균 잔여 만기, 가중평균 금리 |
+| `market_borrowing_rate_est` | DGS10 + BAA10Y | macro snapshot. Moody's seasoned Baa 회사채 금리로 신규 차입금리를 어림한다. 투자등급 하단 기준이라 A등급 회사에는 보수적이고, 지수 만기(20년 안팎)가 신규 발행(5~10년)보다 길다 |
+| `maturities_24m` | 분기 끝날 해와 다음 해 만기 + 그다음 해 만기 × (분기 끝 달 / 12) | 사다리가 해마다라 셋째 해는 12달에 고르게 나눈다고 가정한다(12월 끝날이면 나누지 않음) |
+| `affo_annualized` | 분기 AFFO 총액 × 4 | |
+| `refi_cost_24m` | 24개월 만기 × (시장 차입금리 추정 − 기존 가중평균 금리) / 100 | 다시 빌린 뒤 1년에 늘어나는 이자(천 달러). 기존 금리는 만기 부채가 아니라 전체 평균이다. 음수면 이자가 준다 |
+| `refi_impact_affo_pct` | `refi_cost_24m` / 연간 AFFO 총액 × 100 | |
+| `floating_rate_shock_affo_pct` | 변동금리 원금 × 1%p / 연간 AFFO 총액 × 100 | 금리가 1%p 오를 때 1년 이자 증가 |
+| `retained_cash_flow_24m` | 2 × (연간 AFFO 총액 − forward dividend × (보통주 + OP unit)) | 배당 뒤 남는 AFFO가 24개월 이어진다고 가정 |
+| `liquidity_sources_24m`, `liquidity_uses_24m` | 현금 + revolver 잔여 + 유보 현금흐름, 24개월 만기 + 남은 개발비 | 현금은 `liquidity_cash`. revolver 잔여가 commercial paper를 이미 뺀 값이면 CP를 만기에서 한 번 더 세어 보수적이다 |
+| `liquidity_coverage_24m` | sources / uses | 1x 아래면 24개월 동안 자본시장(채권·주식 발행, 매각)에 기대야 한다는 뜻. 기준값과 flag는 두지 않는다 |
 
 ## 운영
 
@@ -77,7 +112,8 @@ REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `pe
 | `affo_payout` | `affo_payout_forward`(없으면 `affo_payout_quarter`) | 85% 이상 | 100% 이상 |
 | `maturity_concentration` | `maturity_max_year_pct` | 15% 이상 | 20% 이상 |
 | `net_debt_to_ebitdare` | `net_debt_to_ebitdare` | 6.0x 이상 | 7.0x 이상 |
-| `interest_coverage` | `interest_coverage` | 3.0x 미만 | 1.5x 미만 |
+| `interest_coverage` | `interest_coverage` | 3.0x 미만 | 2.0x 미만(S&P EBITDA/interest 1.8x 아래가 aggressive) |
+| `covenant_headroom` | `covenant_headroom_min_pct` | 15% 미만 | 5% 미만 |
 
 ## 일반 배당주 경로 (SIC가 6798이 아님)
 
