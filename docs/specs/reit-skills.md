@@ -32,8 +32,8 @@
 
 - public MIT 레포. 개인 투자 정보(보유 종목, 관심 종목, 매매 기록), 받은 데이터(REITWatch는 Nareit 저작물), API key를 레포에 두지 않는다.
 - Python 3 표준 라이브러리만 쓴다(이 Mac은 python3 3.9.6, requests·pandas 없음). 외부 도구는 `pdftotext` 하나다.
-- API key 없이 돌고 미리 할 설정이 없다(D80, D82, D83). SEC 공시 원문을 처음 받을 때만 사용자에게 연락처를 한 번 묻는다. 시세는 key 없는 Yahoo chart, FRED는 key 없는 `fredgraph.csv`다. 둘 다 문서에 없는 endpoint라 실패하면 missing으로 두고 웹 채우기로 넘긴다.
-- SEC EDGAR는 초당 10회까지다. data.sec.gov·efts.sec.gov는 식별 정보 없는 `invest-skills/1.0`으로 받는다. www.sec.gov(공시 원문)는 연락처가 든 User-Agent를 요구해서, 처음 받을 때 사용자에게 이름·이메일을 한 번 묻고 `$INVEST_DATA_DIR/config.json`에 둔다(`SEC_USER_AGENT` 환경 변수가 먼저, D83). key가 아니다.
+- API key 없이 돌고 미리 할 설정이 없다(D80, D82, D83). SEC 공시 원문은 연락처가 있으면 script가 받고, 없으면 사용자에게 묻지 않고 agent web fetch로 읽는다(D161). 시세는 key 없는 Yahoo chart, FRED는 key 없는 `fredgraph.csv`다. 둘 다 문서에 없는 endpoint라 실패하면 missing으로 두고 웹 채우기로 넘긴다.
+- SEC EDGAR는 초당 10회까지다. data.sec.gov·efts.sec.gov는 식별 정보 없는 `invest-skills/1.0`으로 받는다. www.sec.gov(공시 원문)는 연락처가 든 User-Agent를 요구해서, 연락처가 있으면 `$INVEST_DATA_DIR/config.json`(`SEC_USER_AGENT` 환경 변수가 먼저, D83)에서 읽고, 없으면 묻지 않고 agent web fetch 경로로 간다(D161). key가 아니다.
 - Claude Code와 Codex가 같은 SKILL.md를 읽는다. 특정 agent에만 있는 도구는 "있으면 쓰고, 없으면"으로 쓴다.
 
 ## 끝났는지 확인하는 방법
@@ -321,6 +321,7 @@ flowchart TB
 | D158 | 옛 facts에 새 칸 | `edgar.py xbrl`은 이미 있는 facts 파일에 지금 칸 목록의 빠진 칸과 series를 빈 칸("Ex.99에서 채울 것")으로 더하고(`add_new_fields`), 값이 있는 칸과 parts는 덮지 않는다 | agent | D33, D132 | S6~S11에서 칸을 더할 때마다 옛 facts가 새 칸 없이 남았다. spec에 적지 않고 만든 동작이다 | 정해짐 |
 | D159 | Tracker XLSX 크기 한도 | XLSX 안 파일 하나가 64MB(`MAX_MEMBER_BYTES`)를 넘으면 파싱하지 않고 exit 1이다 | agent | D121 | zip 안 XML을 한꺼번에 메모리로 읽기 때문에 크기를 막는다. spec에 적지 않고 만든 동작이다 | 정해짐 |
 | D160 | Tracker 같은 이름 줄 | 한 block 안에 같은 sector 이름 줄이 또 나오면 첫 줄만 쓴다 | agent | D121 | block마다 sector 줄은 한 번이 정상이다. 뒤 줄로 덮으면 값과 cell 위치가 어긋날 수 있다. spec에 적지 않고 만든 동작이다 | 정해짐 |
+| D161 | 연락처 없을 때 (D83의 exit 1과 "사용자에게 묻기"를 바꿈) | `edgar.py exhibits`가 연락처 없이 www.sec.gov를 받아야 하면 요청하지 않고 exit 2와 `{fetch_by_agent: true, index_url, save_dir}`를 stdout에 낸다. agent는 사용자에게 묻지 않고 web fetch 도구로 index와 EX-99 문서를 열어 숫자를 원문 그대로 `save_dir/<문서>.txt`에 옮기고 줄 번호를 locator로 쓴다. 보고서 데이터 구멍에 연락처를 저장하면 더 정확하고 싸다는 한 줄을 적는다. 연락처가 있으면 동작은 그대로 | 사용자 + agent | D83 | 사용자 요청: skill이 사용자에게 연락처를 요구하며 멈추면 안 된다. 2026-11-19 확인: agent web fetch는 연락처 없이 GLPI 8-K index(0001575965-26-000075)를 열어 EX-99.1·99.2 URL을 돌려줬다. web fetch는 작은 모델이 페이지를 거쳐 돌려줘 큰 표의 숫자를 줄일 수 있어, 연락처 경로를 기본으로 두고 FFO tie-out으로 검산한다. 버린 대안: git 설정 이메일 자동 사용(허락 없는 개인정보), 가짜 연락처(SEC 정책 취지에 어긋남) | 정해짐 |
 
 ## test할 seam
 

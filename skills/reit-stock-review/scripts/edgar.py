@@ -146,9 +146,9 @@ def throttle():
 
 
 DEFAULT_UA = "invest-skills/1.0"  # 식별 정보(사람·레포·이메일)를 넣지 않는다
-CONTACT_HELP = ("www.sec.gov에서 공시 원문을 받으려면 SEC가 요구하는 연락처(이름과 이메일)가 든 User-Agent가 필요하다. "
-                "이것은 API key가 아니다. 사용자에게 이름과 이메일을 한 번 묻고 "
-                "`python3 <skill 폴더>/scripts/edgar.py config --user-agent \"이름 이메일\"`로 저장한 뒤 다시 돈다"
+CONTACT_HELP = ("www.sec.gov는 SEC가 요구하는 연락처(이름과 이메일)가 든 User-Agent에만 원문을 준다(API key가 아니다). "
+                "연락처가 없으면 사용자에게 묻지 않고 agent의 web fetch 도구로 같은 URL을 읽는다. "
+                "있으면 `python3 <skill 폴더>/scripts/edgar.py config --user-agent \"이름 이메일\"`로 저장해 script가 직접 받게 할 수 있다"
                 "(환경 변수 SEC_USER_AGENT로 줘도 된다)")
 EMAIL_RE = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
 
@@ -626,6 +626,23 @@ def cmd_config(args):
     return 0
 
 
+AGENT_FETCH_HOW = ("SEC 연락처가 없어 script가 www.sec.gov를 받지 않았다. 사용자에게 묻지 않는다. "
+                   "agent의 web fetch 도구로 index_url을 열어 type이 %s로 시작하는 문서의 URL을 찾고, "
+                   "문서마다 열어 본문(표는 cell을 tab, row를 줄로)을 save_dir/<문서 이름에서 확장자를 뺀 것>.txt에 쓴다. "
+                   "facts의 source는 `sec:<문서 URL>`, locator는 그 .txt 줄 번호다. 원문이 같아 status는 그대로 reported다. "
+                   "사용자가 연락처를 주면 `edgar.py config --user-agent \"이름 이메일\"`로 저장해 다음부터 script가 직접 받게 할 수 있다(선택)")
+
+
+def agent_fetch_fallback(info, acc, index_url, adir, doc_type):
+    """연락처가 없을 때 멈추지 않고, agent가 web fetch 도구로 같은 원문을 읽도록 URL과 저장 위치를 낸다(exit 2)."""
+    os.makedirs(adir, exist_ok=True)
+    log(AGENT_FETCH_HOW % doc_type)
+    print(json.dumps({"ticker": info["ticker"], "accession": acc, "fetch_by_agent": True, "type": doc_type,
+                      "index_url": index_url, "save_dir": adir, "exhibits": []},
+                     ensure_ascii=False, indent=2, allow_nan=False))
+    return 2
+
+
 def cmd_exhibits(args):
     info, _ = load_company(args.ticker)
     acc = args.accession.strip()
@@ -634,14 +651,21 @@ def cmd_exhibits(args):
         return 1
     base = ARCHIVES % (int(info["cik"]), acc.replace("-", ""))
     adir = os.path.join(filings_dir(args.ticker), acc)
-    idx = cached(os.path.join(adir, "index.htm"), base + acc + "-index.htm", None).decode("utf-8", "replace")
+    index_url = base + acc + "-index.htm"
+    try:
+        idx = cached(os.path.join(adir, "index.htm"), index_url, None).decode("utf-8", "replace")
+    except NeedContact:
+        return agent_fetch_fallback(info, acc, index_url, adir, args.type)
     docs = wanted_documents(index_documents(idx), args.type)
     if not docs:
         log("이 공시에 %s 문서가 없음" % args.type)
         return 2
     out = []
     for d in docs:
-        raw = cached(os.path.join(adir, d["document"]), base + d["document"], None)
+        try:
+            raw = cached(os.path.join(adir, d["document"]), base + d["document"], None)
+        except NeedContact:
+            return agent_fetch_fallback(info, acc, index_url, adir, args.type)
         tpath = os.path.join(adir, d["document"].rsplit(".", 1)[0] + ".txt")
         if d["document"].lower().endswith((".htm", ".html")):
             with open(tpath, "w", encoding="utf-8") as f:
@@ -883,8 +907,8 @@ def run_check():
                 need = None
             except NeedContact as e:
                 need = str(e)
-            ok(need is not None and "config --user-agent" in need and "key가 아니다" in need,
-               "연락처가 없으면 www.sec.gov 요청 전에 멈추고 config 저장을 안내")
+            ok(need is not None and "web fetch" in need and "key가 아니다" in need,
+               "연락처가 없으면 www.sec.gov 요청 전에 멈추고 agent web fetch 경로를 안내")
             import contextlib
             import io as _io
             # 아래 연락처는 모두 가상이다(HTTP header라 ASCII만 되어 값에 "(가상)"을 붙이지 못한다)
@@ -935,18 +959,22 @@ def run_check():
                 with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(_io.StringIO()):
                     r1 = main(["resolve", "TEST"])
                     r2 = main(["resolve", "NOPE"])
+                    err, out3 = _io.StringIO(), _io.StringIO()
+                with contextlib.redirect_stdout(out3), contextlib.redirect_stderr(err):
                     r3 = main(["exhibits", "TEST", "--accession", "0000000001-26-000001"])
-                    err = _io.StringIO()
-                with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(err):
-                    main(["exhibits", "TEST", "--accession", "0000000001-26-000001"])
             finally:
                 http_get = real_get
             ok(r1 == 0 and urls[0].startswith(EFTS_URL % "TEST") and urls[1] == SUBMISSIONS_URL % "0000000001"
                and not any("www.sec.gov" in u for u in urls),
                "연락처·ticker 목록 없이 resolve: efts → CIK → data.sec.gov submissions, exit 0")
             ok(r2 == 1, "efts에 정확히 일치하는 ticker가 없으면 exit 1")
-            ok(r3 == 1 and "config --user-agent" in err.getvalue() and not any("Archives" in u for u in urls),
-               "연락처 없이 exhibits는 www.sec.gov에 요청하지 않고 exit 1, stderr에 config 안내")
+            fb = json.loads(out3.getvalue() or "{}")
+            ok(r3 == 2 and fb.get("fetch_by_agent") is True
+               and fb.get("index_url", "").endswith("/000000000126000001/0000000001-26-000001-index.htm")
+               and fb.get("save_dir", "").endswith(os.path.join("TEST", "filings", "0000000001-26-000001"))
+               and "묻지 않는다" in err.getvalue() and "web fetch" in err.getvalue()
+               and not any("Archives" in u for u in urls),
+               "연락처 없이 exhibits는 www.sec.gov에 요청하지 않고 exit 2, 사용자에게 묻지 말고 agent web fetch로 읽을 index_url·save_dir을 냄")
     finally:
         if old is not None:
             os.environ["SEC_USER_AGENT"] = old

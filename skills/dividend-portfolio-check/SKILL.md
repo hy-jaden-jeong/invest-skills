@@ -50,7 +50,7 @@ holdings와 종목 metrics를 읽어 script가 비중·배당·쏠림을 계산�
    - subagent가 없으면 한 종목씩 차례로 한다.
    - `edgar.py resolve`가 `is_reit: false`(SIC가 6798이 아님)면 reit-stock-review가 일반 배당주 경로(EPS·FCF payout, Chowder rule, yield trap 신호)로 분석한다. 그 metrics에는 REITWatch subsector가 없어 이 skill의 금리 민감도는 `review`로 남는다. 보고서에 그렇게 적는다.
    - reit-stock-review가 설치돼 있지 않으면 다시 분석하지 않는다. screening 값만 쓰고 그렇게 적는다.
-   - 처음 `exhibits`가 "연락처 설정 없음"(exit 1)이나 HTTP 403으로 멈추면 사용자에게 이름과 이메일을 한 번 묻고 `python3 <skills 폴더>/reit-stock-review/scripts/edgar.py config --user-agent "이름 이메일"`로 저장한 뒤 다시 돈다. 이것은 key가 아니라 SEC가 요구하는 연락처다. 값은 `$INVEST_DATA_DIR/config.json`에만 두고 레포나 보고서에 적지 않는다. subagent에 나눠 맡길 때는 첫 종목을 맡기기 전에 이것을 먼저 해 둔다.
+   - SEC 연락처가 없어도 사용자에게 묻지 않는다. reit-stock-review SKILL.md 3단계의 web fetch 경로로 원문을 읽는다. 연락처가 `$INVEST_DATA_DIR/config.json`에 있으면 script가 직접 받아 더 정확하고 싸다.
 3. 배당 빈도가 12(월배당)가 아니면 최근 배당 지급일을 넣는다. 보도자료(.txt)의 배당 선언 문장(예: "payable on October 15")에서 읽는다. 없으면 회사 IR의 배당 page를 웹에서 찾는다.
 
    ```bash
