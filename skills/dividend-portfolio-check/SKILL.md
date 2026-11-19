@@ -45,12 +45,12 @@ holdings와 종목 metrics를 읽어 script가 비중·배당·쏠림을 계산�
 `needs_review`의 `reason`은 둘이다. `no_metrics`(metrics가 없음)와 `stale`(새 실적 8-K가 낸 분기가 metrics 분기보다 늦음)이다. 어느 쪽이든 reit-stock-review deep으로 다시 분석한다.
 
 1. 시작하기 전에 몇 종목인지, 어떤 종목인지, 종목마다 공시를 읽어 시간과 token이 많이 든다는 것을 사용자에게 알린다. 예(가상): "3종목 중 2종목(PLD: metrics 없음, VICI: metrics 없음)을 reit-stock-review deep으로 분석한다." 알린 뒤 바로 시작한다(사용자가 멈추라고 하면 멈춘다).
-2. 종목마다 `<skills 폴더>/reit-stock-review/SKILL.md`의 "차례"를 1부터 9(계산)까지 따른다. 보고서(10)는 사용자가 원할 때 쓴다.
+2. 종목마다 `<skills 폴더>/reit-stock-review/SKILL.md`의 "deep 절차"를 1단계부터 10단계(계산)까지 따른다. 포트폴리오 점검에는 metrics만 쓰므로 종목 보고서(그 SKILL.md의 "단일 보고서")는 사용자가 원할 때 만든다.
    - subagent를 쓸 수 있으면(Claude Code는 Agent 도구, Codex는 subagent) 종목마다 하나씩 나눠 맡긴다. 지시문에는 ticker, reit-stock-review SKILL.md 경로, 분기를 주고, facts와 metrics 경로를 보고받는다. 보고는 증거가 아니다. metrics 파일이 생겼고 `summary`가 무엇인지 직접 연다.
    - subagent가 없으면 한 종목씩 차례로 한다.
    - `edgar.py resolve`가 `is_reit: false`(SIC가 6798이 아님)면 reit-stock-review가 일반 배당주 경로(EPS·FCF payout, Chowder rule, yield trap 신호)로 분석한다. 그 metrics에는 REITWatch subsector가 없어 이 skill의 금리 민감도는 `review`로 남는다. 보고서에 그렇게 적는다.
    - reit-stock-review가 설치돼 있지 않으면 다시 분석하지 않는다. screening 값만 쓰고 그렇게 적는다.
-   - SEC 연락처가 없어도 사용자에게 묻지 않는다. reit-stock-review SKILL.md 3단계의 web fetch 경로로 원문을 읽는다. 연락처가 `$INVEST_DATA_DIR/config.json`에 있으면 script가 직접 받아 더 정확하고 싸다.
+   - SEC 연락처가 없어도 사용자에게 묻지 않는다. reit-stock-review SKILL.md "deep 절차" 3단계의 web fetch 경로로 원문을 읽는다. 연락처가 `$INVEST_DATA_DIR/config.json`에 있으면 script가 직접 받아 더 정확하고 싸다.
 3. 배당 빈도가 12(월배당)가 아니면 최근 배당 지급일을 넣는다. 보도자료(.txt)의 배당 선언 문장(예: "payable on October 15")에서 읽는다. 없으면 회사 IR의 배당 page를 웹에서 찾는다.
 
    ```bash

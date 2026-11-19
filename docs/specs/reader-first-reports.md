@@ -1,6 +1,6 @@
 # 읽는 사람 먼저: 보고서·장표·PDF 개선
 
-상태: 구현 중 (2026-11-19). 사용자가 맡김(2026-11-19 "추천대로 다 하고 끝까지 맡길게"): 확정, slice 동의, 결과물 확인, merge를 agent가 이중 확인으로 한다
+상태: 구현 중 (2026-11-19, S1~S5 끝, S6 문서까지, S7~S9·피드백 루프·검증은 사용자 요청으로 중단). 사용자가 맡김(2026-11-19 "추천대로 다 하고 끝까지 맡길게"): 확정, slice 동의, 결과물 확인, merge를 agent가 이중 확인으로 한다
 
 ## 문제
 
@@ -114,13 +114,13 @@ flowchart TB
 | S1 | 회귀 기준을 굽고 계산 약점을 고친다 | B10~B14, B21, B22 | 없음 | 다섯 종목 facts로 MPT 차환 비용 부호, GLPI·DEA exit, VICI·GLPI Tracker 줄, DEA cap rate를 본다 | 끝: PR #17, 회귀 381줄 모두 설명 |
 | S2 | 등급, 사건 검사, light, peers 고르기, ticker 별칭 | B3, B7, B8, B9, B16 | S1 | 다섯 종목 등급을 손으로 매긴 것과 견주고, NNN의 peers가 O를 재사용하는지 본다 | 끝: PR #17, 등급 손계산 일치 |
 | S3 | 배당 지급 내역과 8분기 추세 | B15, B17 | 없음 | DEA CAGR, GLPI 컷 목록, O 추세 표를 공시와 견준다 | 끝: PR #16, DEA CAGR·GLPI 컷·O trend 공시 일치 |
-| S4 | report.py: 단일 읽는 보고서, 부록, 장표, 풀이 글 검사, earnings 보고서 | B1, B2, B4, B5, B19, B20, B28 | S2, S3 | NNN을 끝까지 돌려 파일을 직접 읽는다 | 대기 |
-| S4b | report.py compare: 비교 보고서(맞대기·matrix), subsector 섞임, 장표, 7개 이상 거절 | B18, B29, B30, B31, B32, B33 | S4 | VICI·GLPI(같은 subsector 2개)와 VICI·GLPI·NNN·DEA·MPT(섞인 5개)를 돌려 파일을 직접 읽는다. `--check`에 1·2·4·7개 fixture | 대기 |
-| S5 | PDF(단일·비교) | B6, B34 | S4b | NNN 단일 PDF와 VICI·GLPI 비교 PDF를 열어 쪽마다 본다 | 대기 |
-| S6 | reit-stock-review SKILL.md·README, 다섯 종목 다시 돌리기 | B26, B27 | S5 | 끝났는지 확인하는 방법 그대로 | 대기 |
-| S7 | macro-check 읽는 보고서와 장표 | B23, B27 | S4 | 오늘 snapshot으로 보고서를 읽는다 | 대기 |
-| S8 | reit-sector-scan 읽는 보고서와 장표 | B24, B27 | S4 | 오늘 섹터 표로 보고서를 읽는다 | 대기 |
-| S9 | dividend-portfolio-check 읽는 보고서와 장표 | B25, B27 | S4 | 가상 holdings로 보고서를 읽는다 | 대기 |
+| S4 | report.py: 단일 읽는 보고서, 부록, 장표, 풀이 글 검사, earnings 보고서 | B1, B2, B4, B5, B19, B20, B28 | S2, S3 | NNN을 끝까지 돌려 파일을 직접 읽는다 | 끝: NNN·VICI 단일 exit 0, 57·59줄, 장표 6장 |
+| S4b | report.py compare: 비교 보고서(맞대기·matrix), subsector 섞임, 장표, 7개 이상 거절 | B18, B29, B30, B31, B32, B33 | S4 | VICI·GLPI(같은 subsector 2개)와 VICI·GLPI·NNN·DEA·MPT(섞인 5개)를 돌려 파일을 직접 읽는다. `--check`에 1·2·4·7개 fixture | 끝: VICI·GLPI 맞대기 57줄, 다섯 종목 matrix 59줄, 7개 exit 2 |
+| S5 | PDF(단일·비교) | B6, B34 | S4b | NNN 단일 PDF와 VICI·GLPI 비교 PDF를 열어 쪽마다 본다 | 끝: NNN 12쪽·VICI·GLPI 24쪽 A4 PDF, 한글 글꼴 박힘 |
+| S6 | reit-stock-review SKILL.md·README, 다섯 종목 다시 돌리기 | B26, B27 | S5 | 끝났는지 확인하는 방법 그대로 | 일부: SKILL.md·README 새 차례 끝(description 774자). GLPI·DEA·MPT 단일 재실행은 사용자 요청으로 중단 |
+| S7 | macro-check 읽는 보고서와 장표 | B23, B27 | S4 | 오늘 snapshot으로 보고서를 읽는다 | 중단(2026-11-19 사용자 요청) |
+| S8 | reit-sector-scan 읽는 보고서와 장표 | B24, B27 | S4 | 오늘 섹터 표로 보고서를 읽는다 | 중단(2026-11-19 사용자 요청) |
+| S9 | dividend-portfolio-check 읽는 보고서와 장표 | B25, B27 | S4 | 가상 holdings로 보고서를 읽는다 | 중단(2026-11-19 사용자 요청) |
 
 ## 피드백 루프
 
