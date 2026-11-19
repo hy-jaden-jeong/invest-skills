@@ -1,0 +1,15 @@
+{
+  "_note": "report.py --check 비교 풀이 글 fixture(가상)",
+  "conclusion": "(가상) 네 종목은 부채와 만기에서 갈린다. EEE는 부채가 넉넉하고 DDD는 부채·만기·임차인이 위험이다",
+  "axis_causes": {
+    "leverage": "(가상) DDD net debt/EBITDAre 7.5x는 EEE 4.5x보다 훨씬 무겁다",
+    "maturity_liquidity": "(가상) AAA는 24개월 liquidity coverage 0.94x로 만기를 덮을 돈이 모자라다"
+  },
+  "rate_sensitivity": "(가상) 고정금리 비중이 높아 금리 충격은 차환 쪽에서 온다",
+  "strengths": {"AAA": "(가상) 임차인 분산"},
+  "weaknesses": {"DDD": "(가상) 부채 7.5x"},
+  "slide_titles": {"matrix": "(가상) 부채와 만기에서 네 종목이 갈린다", "quadrant": "(가상) 배당수익률이 가장 높은 DDD가 부채도 가장 무겁다",
+                   "tenant": "(가상) DDD는 임차인 한 곳이 30.0%를 낸다"},
+  "slide_keys": {"matrix": "(가상) 위험 칸이 가장 많은 종목은 DDD다.", "quadrant": "(가상) 배당수익률이 높을수록 부채가 무겁다.",
+                 "tenant": "(가상) 20% 위험 경계를 넘는 종목은 DDD 하나다."}
+}

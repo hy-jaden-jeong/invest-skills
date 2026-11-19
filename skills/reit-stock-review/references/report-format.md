@@ -10,6 +10,10 @@ python3 <skill 폴더>/scripts/report.py build --metrics <T metrics> --peers <�
   --trend $INVEST_DATA_DIR/tickers/<T>/trend/<P>.json --narrative <narrative.json> \
   --out-dir $INVEST_DATA_DIR/tickers/<T>/reports
 
+# 비교 보고서: 사용자가 지정한 2~6개(모두 깊게 본 metrics)
+python3 <skill 폴더>/scripts/report.py compare --metrics <M1> <M2> ... --narrative <narrative.json> \
+  --out-dir $INVEST_DATA_DIR/compare
+
 # 실적 뒤 점검: reit_calc.py diff 출력(--out으로 쓴 JSON)
 python3 <skill 폴더>/scripts/report.py earnings --diff <earnings.json> --narrative <narrative.json> \
   --out-dir $INVEST_DATA_DIR/tickers/<T>/reports
@@ -25,6 +29,8 @@ python3 <skill 폴더>/scripts/report.py earnings --diff <earnings.json> --narra
 | 2 | 풀이 글 검사에 걸렸다 | 아무 파일도 쓰지 않았다. stderr의 문제(금지어, 길이, 칸 이름, 보고서에 없는 숫자, 모르는 칸)를 고친다 |
 | 2 | 장표가 diagram-slides 검사에 걸렸다 | 그 장표만 실패로 적히고 나머지는 만들어졌다. 풀이 글의 장표 제목·아래 글을 줄여 다시 돌린다 |
 | 2 | 보고서 자체 검사에 걸렸다(60줄 초과, 칸 이름 누출) | script 결함이다. 보고한다 |
+| 2 | 비교할 종목이 7개 이상이다 | 아무 파일도 쓰지 않는다. reit-sector-scan skill의 screening 표로 본다 |
+| 2 | 비교에 가볍게 본 종목이 섞였다 | 만들되 머리 줄에 적는다. 지정한 종목은 깊게 본다(D18) |
 
 ## 나오는 파일 (단일)
 
@@ -42,6 +48,21 @@ python3 <skill 폴더>/scripts/report.py earnings --diff <earnings.json> --narra
 - 기준선(주의 기준)이 막대 값 글자를 지나가면 diagram-slides가 장표를 막으므로 선 대신 부제에 기준을 적는다.
 - 장표 굽기: diagram-slides 폴더를 `DIAGRAM_SLIDES_DIR`, 없으면 이 skill 옆 `../diagram-slides`, 없으면 `~/.claude/skills/diagram-slides`에서 찾는다. 없으면 HTML만 쓰고 보고서 머리 줄에 "장표 PNG를 굽지 않았다"를 적는다.
 
+## 나오는 파일 (비교)
+
+| 파일 | 내용 |
+| --- | --- |
+| `<날짜>-<T1>-<T2>-....md` | 비교 보고서. 용어 표를 빼고 60줄 이하. 차례: (subsector가 섞이면 첫 줄에 그 사실) 결론 한 줄, 등급 matrix(종목 × 축, 강점·약점 줄), 핵심 지표, 차이를 만든 원인(축마다 근거 지표), 금리 민감도, 주요 사건(종목마다 가장 중요한 것 먼저), 종목별 보고서 링크, 용어 |
+| `<날짜>-<T1>-....json` | `reit_calc.py compare`와 같은 JSON(지표 102개 표, 경고) |
+| `<날짜>-<T1>-...-audit.md` | 종목마다 부록(FFO 재계산·AFFO bridge·만기·covenant·cap rate 다리·데이터 구멍·출처) |
+| `<날짜>-<T1>-....view.json` | view model |
+| `slides/...-01-matrix`·`-02-quadrant`(3~6개)·`-02-pair`(2개)·`-03-tenant` | 장표 3장: 등급 matrix, 배당수익률 × net debt/EBITDAre 2x2(2개면 핵심 지표 맞대기 막대), 최대 임차인 비중 막대 |
+
+- 2개는 맞대기다: 두 종목 column과 "차이"(보이는 두 값의 차) column, 두 값 중 큰 쪽에 대한 차이 비율이 큰 지표가 위로 온다.
+- 3~6개는 matrix에 축마다·지표마다 순위를 괄호로 붙인다(같으면 공동). 등급 순위는 넉넉이 1, valuation은 낮은 편이 1이다. AFFO가 없어 FFO로 대신한 값은 순위에서 뺀다.
+- subsector가 섞이면 valuation 줄은 종목끼리 견주지 않고 각자 subsector 기준과의 거리(P/FFO / peer median, 자기 history percentile, 명목 cap rate − Tracker)로 바꾸고 첫 줄에 섞였다고 쓴다. 나머지 네 축은 그대로 견준다.
+- 어느 종목을 고르라는 말은 쓰지 않는다.
+
 ## 풀이 글 (narrative.json)
 
 agent가 공시와 metrics를 읽고 쓰는 해석 문장이다. 칸 이름과 한도는 `assets/narrative_rules.json`의 `fields`가 기준이다(글자 수는 공백 포함, 장표 아래 글만 공백 빼고). 모든 칸은 생략할 수 있고, 생략한 칸은 script가 숫자로 채운다(결론은 등급 나열, 위험은 가장 나쁜 축 3개와 등급 경계). `_`로 시작하는 칸(`_note`)은 메모로 보고 읽지 않는다.
@@ -57,6 +78,19 @@ agent가 공시와 metrics를 읽고 쓰는 해석 문장이다. 칸 이름과 �
 | `risks` | 정확히 3개, `risk` 60자·`trigger` 70자 | 위험과 그것을 다시 볼 사실 조건. 조건은 "X가 Y를 넘으면"처럼 숫자로 확인할 수 있게 |
 | `slide_titles.grades`·`.maturity`·`.dividend` | 40자 | 장표 제목(결론 한 문장) |
 | `slide_keys.grades`·`.maturity`·`.dividend` | 공백 빼고 90자 | 장표 아래 글("그래서" 한두 문장) |
+
+### 비교 (`compare`)
+
+| 칸 | 한도 | 쓰는 것 |
+| --- | --- | --- |
+| `conclusion` | 120자 | 차이 한 줄 결론: 어디서 갈리고 왜 갈리나 |
+| `axis_causes.<축>` | 축마다 120자 | "차이를 만든 원인": lease 구조, 임차인, 부채 구조 등. 근거 지표 값은 script가 옆에 붙인다 |
+| `rate_sensitivity` | 160자 | 금리 민감도(차환 영향, 변동금리 충격) 견줌 |
+| `strengths.<T>`·`weaknesses.<T>` | 종목마다 40자 | 강점·약점 하나. 없으면 script가 가장 나은 축·가장 약한 축을 쓴다 |
+| `slide_titles.matrix`·`.quadrant`(3~6개)·`.pair`(2개)·`.tenant` | 40자 | 장표 제목 |
+| `slide_keys.`(같은 이름) | 공백 빼고 90자 | 장표 아래 글 |
+
+예는 `tests/fixtures/report/narrative_compare.json`(가상)이다.
 
 ### 실적 뒤 점검 (`earnings`)
 

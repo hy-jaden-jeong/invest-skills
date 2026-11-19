@@ -5,6 +5,9 @@
   report.py build --metrics M [--peers M2 M3] [--trend T] [--narrative N] --out-dir D [--date YYYY-MM-DD]
       단일 보고서: <날짜>-deep.md(읽는 보고서), <날짜>-deep-audit.md(부록), <날짜>-deep.view.json(view model),
       slides/<날짜>-<T>-0N-*.html(장표, diagram-slides가 있으면 .png도)
+  report.py compare --metrics M1 M2 ... [--narrative N] --out-dir D [--date YYYY-MM-DD]
+      비교 보고서(사용자가 지정한 2~6개): <날짜>-<T1>-<T2>...md, -audit.md, .view.json, .json(reit_calc compare JSON),
+      slides/. 2개는 맞대기, 3~6개는 matrix + 순위, 7개 이상은 exit 2(reit-sector-scan screening으로)
   report.py earnings --diff E [--narrative N] --out-dir D [--date YYYY-MM-DD]
       실적 뒤 점검: <날짜>-earnings.md. E는 reit_calc.py diff의 출력. 두 metrics는 E의 files에서 읽는다
   report.py --check
@@ -80,13 +83,12 @@ def log(msg):
 # ---------------------------------------------------------------- 숫자와 상태를 사람 말로
 
 def fnum(v, nd=2):
-    """소수 nd자리까지 반올림하고 끝의 0은 지우되 소수 한 자리는 남긴다(69.4678 → 69.47, 4.1 → 4.1, 6 → 6.0)."""
+    """소수 nd자리까지 반올림하고 끝의 0은 지운다(69.4678 → 69.47, 4.10 → 4.1, 38.0 → 38).
+    장표(diagram-slides)가 값을 같은 모양으로 찍어 본문과 장표의 숫자가 같다."""
     s = "%.*f" % (nd, v)
     if "." in s:
-        s = s.rstrip("0")
-        if s.endswith("."):
-            s += "0"
-    return "0.0" if s in ("-0.0", "-0") else s
+        s = s.rstrip("0").rstrip(".")
+    return "0" if s in ("-0", "") else s
 
 
 def fthr(v):
@@ -697,7 +699,7 @@ def single_peers(main, peers, glossed):
             "%s%s" % (subs[0] or "subsector", " %s개" % n.group(1) if n else "")]
         medtxt = "%s(%s)" % (fval(med["value"], "x"), ", ".join(bits))
     for r in rows:
-        r["median"] = medtxt if r["metric"] == "p_ffo_reitwatch" else ("1.0x = median" if r["metric"] == "p_ffo_vs_peer" else "")
+        r["median"] = medtxt if r["metric"] == "p_ffo_reitwatch" else ("1x = median" if r["metric"] == "p_ffo_vs_peer" else "")
     return {"columns": cols, "rows": rows}
 
 
@@ -752,11 +754,32 @@ def source_short(src):
     return s
 
 
+EVENT_PRIORITY = ("tenant_credit", "rating", "legal", "subsequent", "guidance", "dividend", "other")
+
+
+def spread_events(docs, limit=EVENT_MAX):
+    """비교 보고서: 종목마다 가장 중요한 사건(임차인 신용 > 신용등급 > 소송 > 결산 후 > guidance > 배당) 하나씩, 남으면 최신순."""
+    per = []
+    for d in docs:
+        rows = event_rows([d], limit=99)
+        rows.sort(key=lambda r: (EVENT_PRIORITY.index(r["type"]) if r["type"] in EVENT_PRIORITY else 9, -int(
+            (r["date"] or "0000-00-00").replace("-", ""))))
+        per.append(rows)
+    out = []
+    while len(out) < limit and any(per):
+        for rows in per:
+            if rows and len(out) < limit:
+                out.append(rows.pop(0))
+    out.sort(key=lambda r: (r["date"] or "", r["ticker"] or ""), reverse=True)
+    return out
+
+
 def event_rows(docs, with_ticker=False, limit=EVENT_MAX):
     rows = []
     for d in docs:
         for e in d.get("events") or []:
-            rows.append({"ticker": d.get("ticker"), "date": e.get("date"), "type_name": e.get("type_name") or e.get("type"),
+            rows.append({"ticker": d.get("ticker"), "date": e.get("date"), "type": e.get("type"),
+                         "type_name": e.get("type_name") or e.get("type"),
                          "title": e.get("title"), "source": source_short(e.get("source")), "quote": e.get("quote"),
                          "locator": e.get("locator"), "url": e.get("url") or (
                              e.get("source", "")[4:] if e.get("source", "").startswith("web:") else ""),
@@ -1297,6 +1320,445 @@ def trend_numbers(trend):
     return [r["change_text"] for r in tv["rows"]]
 
 
+# ---------------------------------------------------------------- 비교 보고서 (B18, B29~B33)
+
+MAX_COMPARE = 6
+CMP_ROWS = ("forward_yield", "affo_payout_forward", "net_debt_to_ebitdare", "interest_coverage", "maturity_max_year_pct",
+            "liquidity_coverage_24m", "top1_tenant_pct")
+CMP_VAL_SAME = ("p_ffo_reitwatch", "implied_cap_rate")
+CMP_VAL_MIXED = ("p_ffo_vs_peer", "p_ffo_history_pctile", "implied_cap_rate_vs_tracker")
+RATE_ROWS = ("market_borrowing_rate_est", "weighted_avg_rate_pct", "refi_impact_affo_pct", "floating_rate_shock_affo_pct",
+             "fixed_rate_debt_pct")
+FALLBACK = {"affo_payout_forward": "ffo_payout_forward", "refi_impact_affo_pct": "refi_impact_ffo_pct",
+            "floating_rate_shock_affo_pct": "floating_rate_shock_ffo_pct"}
+VAL_ORDER = ("low", "mid", "high")
+
+
+def metric_cell(d, key):
+    """(env, 쓴 지표). AFFO가 없는 회사는 FFO로 대신한 줄을 쓴다."""
+    e = menv(d, key)
+    if e.get("value") is None and key in FALLBACK and menv(d, FALLBACK[key]).get("value") is not None:
+        return menv(d, FALLBACK[key]), FALLBACK[key]
+    return e, key
+
+
+def cell_text(e, used, key):
+    t = show(e, key=used)
+    if used != key and e.get("value") is not None:
+        t += " FFO 기준"
+    return t
+
+
+def share_ranks(vals, order):
+    """순위(같으면 공동). order asc는 작은 값이 1. 값이 없으면 None."""
+    out = []
+    nums = [v for v in vals if v is not None]
+    for v in vals:
+        if v is None:
+            out.append(None)
+            continue
+        better = sum(1 for x in nums if (x < v if order == "asc" else x > v))
+        same = sum(1 for x in nums if x == v)
+        out.append((better + 1, same > 1))
+    return out
+
+
+def rank_text(r):
+    return "" if r is None else "(공동 %d)" % r[0] if r[1] else "(%d)" % r[0]
+
+
+def latest_report(root, ticker):
+    d = os.path.join(root, "tickers", ticker, "reports")
+    try:
+        names = sorted(n for n in os.listdir(d) if n.endswith("-deep.md"))
+    except OSError:
+        return None
+    return os.path.join(d, names[-1]) if names else None
+
+
+def build_compare_view(docs, nar, date, facts_list, cmpdoc):
+    tickers = [d.get("ticker") for d in docs]
+    n = len(docs)
+    subs = [menv(d, "subsector").get("value") for d in docs]
+    known = [x for x in subs if x]
+    mixed = len(set(known)) > 1 or len(known) < n
+    counts = {}
+    for x in subs:
+        counts[x or "모름"] = counts.get(x or "모름", 0) + 1
+    axes_by = [[axis_view(a) for a in (d.get("scorecard") or {}).get("axes") or []] for d in docs]
+    keys = [a["key"] for a in axes_by[0]] if axes_by and axes_by[0] else []
+    matrix = []
+    for k in keys:
+        cells = [next((a for a in ax if a["key"] == k), None) for ax in axes_by]
+        if k == "valuation":
+            vals = [VAL_ORDER.index(c["grade"]) if c and c["grade"] in VAL_ORDER else None for c in cells]
+        else:
+            vals = [GRADE_ORDER.index(c["grade"]) if c and c["grade"] in GRADE_ORDER else None for c in cells]
+        rk = share_ranks(vals, "asc") if n >= 3 else [None] * n
+        matrix.append({"key": k, "name": cells[0]["name"] if cells[0] else k,
+                       "cells": [{"grade": c["grade"] if c else "unknown", "grade_name": c["grade_name"] if c else "판정 못 함",
+                                  "mark": c["mark"] if c else "?", "binding": c["binding_short"] if c else "",
+                                  "binding_text": c["binding_text"] if c else "", "rank": rank_text(r)}
+                                 for c, r in zip(cells, rk)]})
+    strengths, weaknesses = [], []
+    for i, ax in enumerate(axes_by):
+        g = [a for a in ax if a["key"] != "valuation" and a["grade"] in GRADE_ORDER]
+        best = min(g, key=lambda a: GRADE_ORDER.index(a["grade"])) if g else None
+        worst = max(g, key=lambda a: GRADE_ORDER.index(a["grade"])) if g else None
+        t = tickers[i]
+        bt = ("%s %s(%s)" % (best["name"], best["grade_name"], best["binding_text"])) if best else "–"
+        wt = ("%s %s(%s)" % (worst["name"], worst["grade_name"], worst["binding_text"])) if worst else "–"
+        if best and best["grade"] in ("tight", "risk"):
+            bt = "넉넉·보통인 축이 없다. 가장 나은 축: " + bt
+        if worst and worst["grade"] == "ample":
+            wt = "모든 축이 넉넉. " + wt
+        strengths.append(((nar or {}).get("strengths") or {}).get(t) or bt)
+        weaknesses.append(((nar or {}).get("weaknesses") or {}).get(t) or wt)
+    rows = []
+    for k in CMP_ROWS + (CMP_VAL_MIXED if mixed else CMP_VAL_SAME):
+        cells, vals, rvals = [], [], []
+        for d in docs:
+            e, used = metric_cell(d, k)
+            cells.append(cell_text(e, used, k))
+            vals.append(num_of(e))
+            rvals.append(num_of(e) if used == k else None)  # FFO로 대신한 값은 AFFO 값과 순위를 매기지 않는다
+        meta = lab()["metrics"].get(k) or {}
+        row = {"metric": k, "name": mname(k) + (" · %s 순" % ("낮은" if meta.get("order") == "asc" else "높은")
+                                                if n >= 3 and meta.get("order") else ""), "cells": cells, "values": vals}
+        if n == 2:
+            a, b = vals
+            if a is not None and b is not None:
+                unit = menv(docs[0], k).get("unit") or meta.get("unit") or ""
+                dv = round(round(a, 2) - round(b, 2), 2)  # 보이는 두 값(소수 둘째 자리)의 차라 읽는 사람이 되짚을 수 있다
+                row["diff"] = fval(dv, "%p" if unit in ("%", "%p") else unit, None)
+                if unit not in ("%", "%p") and dv > 0:
+                    row["diff"] = "+" + row["diff"]
+                row["rel"] = abs(a - b) / max(abs(a), abs(b)) if max(abs(a), abs(b)) else 0
+            else:
+                row["diff"], row["rel"] = "–", -1
+        elif meta.get("order"):
+            rk = share_ranks(rvals, meta["order"])
+            row["cells"] = ["%s %s" % (c, rank_text(r)) if r else c for c, r in zip(cells, rk)]
+        rows.append(row)
+    if n == 2:
+        rows.sort(key=lambda r: -r["rel"])
+    causes = []
+    for m in matrix:
+        txt = ((nar or {}).get("axis_causes") or {}).get(m["key"], "")
+        names = set(c["binding_text"][:-len(c["binding"]) - 1] for c in m["cells"] if c["binding_text"] and c["binding"])
+        if len(names) == 1:
+            ev = "%s: %s" % (names.pop(), " · ".join("%s %s" % (t, c["binding"]) for t, c in zip(tickers, m["cells"]) if c["binding"]))
+        else:
+            ev = " · ".join("%s %s" % (t, c["binding_text"]) for t, c in zip(tickers, m["cells"]) if c["binding_text"])
+        if not txt:
+            order = GRADE_ORDER if m["key"] != "valuation" else VAL_ORDER
+            gs = [grade_names()[g] for g in order if any(c["grade"] == g for c in m["cells"])]
+            txt = "등급이 갈린다: %s" % "·".join(gs) if len(gs) > 1 else "등급이 같다: %s" % (gs[0] if gs else "판정 못 함")
+        causes.append({"key": m["key"], "name": m["name"], "text": txt, "evidence": ev})
+    rate = []
+    for k in RATE_ROWS:
+        cells, vals = [], []
+        for d in docs:
+            e, used = metric_cell(d, k)
+            cells.append(cell_text(e, used, k))
+            vals.append(num_of(e) if used == k else None)
+        meta = lab()["metrics"].get(k) or {}
+        name = mname(k)
+        if n >= 3 and meta.get("order"):
+            cells = ["%s %s" % (c, rank_text(r)) if r else c for c, r in zip(cells, share_ranks(vals, meta["order"]))]
+            name += " · %s 순" % ("낮은" if meta["order"] == "asc" else "높은")
+        rate.append({"metric": k, "name": name, "cells": cells})
+    roots = [data_root_of(d) for d in docs]
+    links = []
+    for d, r in zip(docs, roots):
+        links.append({"ticker": d.get("ticker"), "path": latest_report(r, d.get("ticker"))})
+    prices = sorted(set((f.get("facts") or {}).get("price", {}).get("as_of") or "" for f in facts_list) - {""})
+    first = ""
+    if mixed:
+        first = "subsector가 섞였다(%s): valuation은 종목끼리 견주지 않고 각자 subsector 기준(peer median, 자기 history, Tracker)과의 거리로 견준다" % (
+            ", ".join("%s %d" % (k, v) for k, v in counts.items()))
+    summaries, audits = [], []
+    for d, f, r, ax in zip(docs, facts_list, roots, axes_by):
+        summaries.append({"ticker": d.get("ticker"), "company": (f.get("company") or {}).get("name") or d.get("ticker"),
+                          "subsector": menv(d, "subsector").get("value"), "depth": d.get("depth") or "deep",
+                          "axes": ax, "key_numbers": [{"name": mname(k), "text": plain(menv(d, k), k), "status": sword(menv(d, k)),
+                                                       "why": reason(menv(d, k).get("note"))} for k in KEY_ROWS],
+                          "events": event_rows([d], limit=4), "filing": "%s %s(%s 제출)" % (
+                              (f.get("filing") or {}).get("form", ""), (f.get("filing") or {}).get("accession", ""),
+                              (f.get("filing") or {}).get("filed", ""))})
+        audits.append({"ticker": d.get("ticker"), "audit": audit_view(d, f, r)})
+    view = {"schema": VIEW_SCHEMA, "kind": "compare", "date": date, "tickers": tickers, "n": n,
+            "period": "·".join(sorted(set(str(d.get("period")) for d in docs))), "mixed": mixed, "mixed_line": first,
+            "subsectors": subs, "depths": [d.get("depth") or "deep" for d in docs],
+            "conclusion": (nar or {}).get("conclusion") or auto_compare_conclusion(tickers, matrix),
+            "narrative_missing": nar is None, "matrix": matrix, "strengths": strengths, "weaknesses": weaknesses,
+            "rows": rows, "causes": causes, "rate": rate, "rate_note": (nar or {}).get("rate_sensitivity", ""),
+            "events": spread_events(docs), "links": links, "prices": prices,
+            "warnings": cmpdoc.get("warnings") or [], "summaries": summaries, "audits": audits,
+            "slide_titles": (nar or {}).get("slide_titles") or {}, "slide_keys": (nar or {}).get("slide_keys") or {},
+            "notes": [], "files": {}}
+    view["charts"] = compare_charts(docs, facts_list, matrix, tickers)
+    return view
+
+
+def auto_compare_conclusion(tickers, matrix):
+    spread = []
+    for m in matrix:
+        if m["key"] == "valuation":
+            continue
+        gs = [c["grade"] for c in m["cells"] if c["grade"] in GRADE_ORDER]
+        if gs:
+            spread.append((max(GRADE_ORDER.index(g) for g in gs) - min(GRADE_ORDER.index(g) for g in gs), m["name"]))
+    spread.sort(key=lambda x: -x[0])
+    big = [nm for d, nm in spread if d == spread[0][0] and d > 0] if spread else []
+    return "%s: %s(풀이 글 없음)" % ("·".join(tickers), ("가장 크게 갈린 축은 %s. " % "·".join(big)) if big else "축별 등급이 비슷하다. ")
+
+
+def compare_charts(docs, facts_list, matrix, tickers):
+    pts = []
+    for d in docs:
+        x, y = num_of(menv(d, "net_debt_to_ebitdare")), num_of(menv(d, "forward_yield"))
+        lev = next((a for a in (d.get("scorecard") or {}).get("axes") or [] if a.get("key") == "leverage"), {})
+        if x is not None and y is not None:
+            pts.append({"ticker": d.get("ticker"), "x": x, "y": y, "bad": lev.get("grade") == "risk",
+                        "label": "%s %s · %s" % (d.get("ticker"), fval(y, "%"), fval(x, "x"))})
+    tenants = []
+    for d, f in zip(docs, facts_list):
+        e = menv(d, "top1_tenant_pct")
+        if e.get("value") is None:
+            continue
+        tt = ((f.get("series") or {}).get("top_tenants") or [{}])
+        name = short_name((tt[0] or {}).get("label") or "")
+        tenants.append({"label": "%s · %s" % (d.get("ticker"), name) if name else d.get("ticker"), "value": e["value"],
+                        "why": reason(e.get("note")) if skey(e) in ("estimated", "stale") else ""})
+    tenants.sort(key=lambda t: -t["value"])
+    if tenants:
+        tenants[0]["mark"] = "hl"
+    pair = []
+    if len(docs) == 2:
+        best, top = None, -1
+        for k in ("forward_yield", "affo_payout_forward", "maturity_max_year_pct", "top1_tenant_pct"):
+            vs = [num_of(metric_cell(d, k)[0]) for d in docs]
+            if None in vs:
+                continue
+            rel = abs(vs[0] - vs[1]) / max(abs(vs[0]), abs(vs[1]), 1e-9)
+            if rel > top:
+                best, top = k, rel
+            for d, v in zip(docs, vs):
+                pair.append({"label": "%s · %s" % (mname(k), d.get("ticker")), "value": v, "metric": k})
+        for b in pair:
+            if b["metric"] == best:
+                b["mark"] = "hl"
+    return {"quadrant": pts, "tenants": tenants, "pair": pair,
+            "matrix": [{"name": m["name"], "cells": m["cells"]} for m in matrix], "tickers": tickers}
+
+
+def short_name(label, limit=16):
+    """장표 이름 칸: 괄호 안 약자(VA)가 있으면 그것, 아니면 단어 끝에서 자르고 …."""
+    label = re.sub(r"\s+", " ", label or "").strip()
+    m = re.search(r"\(([A-Z][A-Za-z&.]{1,9})\)", label)
+    if len(label) > limit and m:
+        return m.group(1)
+    if len(label) <= limit:
+        return label
+    cut = label[:limit].rsplit(" ", 1)[0]
+    return cut + "…"
+
+
+def quadrant_block(pts):
+    xs, ys = [p["x"] for p in pts], [p["y"] for p in pts]
+    x0, x1 = math.floor(min(xs)) - 0.5, math.ceil(max(xs)) + 0.5
+    y0, y1 = math.floor(min(ys)) - 0.5, math.ceil(max(ys)) + 0.5
+    placed = []
+    for p in sorted(pts, key=lambda p: p["y"]):
+        px = 8 + (p["x"] - x0) / (x1 - x0) * 84
+        py = 8 + (p["y"] - y0) / (y1 - y0) * 84
+        for q in placed:
+            if abs(q[0] - px) < 30 and abs(q[1] - py) < 7:
+                py = min(95, q[1] + 7)
+        placed.append((px, py, p))
+    lines = ["x: 부채 가벼움 %sx -> 부채 무거움 %sx" % (fnum(x0), fnum(x1)),
+             "y: 배당수익률 %s%% -> 배당수익률 %s%%" % (fnum(y0), fnum(y1))]
+    for px, py, p in placed:
+        lines.append("%s, %d, %d%s" % (p["label"].replace(",", " "), round(px), round(py), ", bad" if p["bad"] else ""))
+    return "<pre class=\"quadrant\">\n%s\n</pre>" % "\n".join(lines)
+
+
+def compare_slides(view):
+    T = view["tickers"]
+    st, sk = view["slide_titles"], view["slide_keys"]
+    ch = view["charts"]
+    stem_t = "·".join(T)
+    out = []
+    head = "<thead><tr><th></th>%s</tr></thead>" % "".join("<th>%s</th>" % html.escape(t) for t in T)
+    body = []
+    for m in ch["matrix"]:
+        tds = []
+        for c in m["cells"]:
+            cls = " class=\"no\"" if c["grade"] == "unknown" else ""
+            small = c["binding"] + ((" · " + c["rank"].strip("()") + "위") if c["rank"] else "")
+            tds.append("<td%s>%s %s<small>%s</small></td>" % (cls, c["mark"], html.escape(c["grade_name"]), html.escape(small)))
+        body.append("<tr><th>%s</th>%s</tr>" % (html.escape(m["name"]), "".join(tds)))
+    table = "<table class=\"matrix\">\n<colgroup>%s</colgroup>\n%s\n%s\n</table>" % (
+        "<col>" * (len(T) + 1), head, "\n".join(body))
+    risk = {t: sum(1 for m in ch["matrix"] for c, tt in zip(m["cells"], T) if tt == t and c["grade"] == "risk") for t in T}
+    auto_t = "%s 등급 matrix: 위험 칸이 가장 많은 종목은 %s" % (stem_t, max(T, key=lambda t: risk[t])) if any(risk.values()) else "%s 등급 matrix" % stem_t
+    auto_k = "◎ 넉넉 ○ 보통 △ 빠듯 ✕ 위험 ? 판정 못 함. valuation은 ↓ 낮은 편 – 중간 ↑ 높은 편(위치)."
+    out.append({"name": "matrix", "title": st.get("matrix") or auto_t, "key": sk.get("matrix") or auto_k,
+                "html": slide_html(st.get("matrix") or auto_t, "종목마다 축별 등급은? · %s 공시, 경험칙 기준표%s" % (
+                    view["period"], ", 숫자는 순위" if view["n"] >= 3 else ""), table, sk.get("matrix") or auto_k,
+                    "metrics %s scorecard · assets/scorecard.json" % view["period"])})
+    if view["n"] >= 3:
+        pts = ch["quadrant"]
+        if len(pts) >= 2:
+            top = max(pts, key=lambda p: p["y"])
+            auto_t = "배당수익률이 가장 높은 %s의 net debt/EBITDAre는 %s" % (top["ticker"], fval(top["x"], "x"))
+            auto_k = "높은 배당수익률이 무거운 부채와 함께 가는지 본다. 빨강은 부채 축 위험."
+            out.append({"name": "quadrant", "title": st.get("quadrant") or auto_t, "key": sk.get("quadrant") or auto_k,
+                        "html": slide_html(st.get("quadrant") or auto_t, "높은 배당수익률은 어디서 오나? · 가로 net debt/EBITDAre, 세로 forward 배당수익률",
+                                           quadrant_block(pts), sk.get("quadrant") or auto_k,
+                                           "metrics %s forward_yield, net_debt_to_ebitdare" % view["period"])})
+        else:
+            view["notes"].append("배당수익률·부채 값이 둘보다 적어 2x2 장표를 만들지 않았다")
+    else:
+        if ch["pair"]:
+            auto_t = "%s 핵심 지표 맞대기" % " vs ".join(T)
+            auto_k = "같은 단위(%)인 지표만 나란히 놓았다. 파랑은 두 종목 차이가 가장 큰 지표."
+            block, _ = bar_block(ch["pair"], "%")
+            out.append({"name": "pair", "title": st.get("pair") or auto_t, "key": sk.get("pair") or auto_k,
+                        "html": slide_html(st.get("pair") or auto_t, "두 종목은 어디서 갈리나? · %s 공시" % view["period"],
+                                           block, sk.get("pair") or auto_k, "metrics %s" % view["period"])})
+    if ch["tenants"]:
+        top = ch["tenants"][0]
+        auto_t = "임대료가 한 임차인에 가장 몰린 종목은 %s(%s)" % (top["label"].split(" · ")[0], fval(top["value"], "%"))
+        auto_k = "최대 임차인 비중이 20%를 넘으면 한 임차인의 신용 사건이 배당 여력을 바로 흔든다(경험칙)."
+        block, drawn = bar_block(ch["tenants"], "%", 20, "위험 경계")
+        whys = ["%s %s" % (t["label"].split(" · ")[0], t["why"]) for t in ch["tenants"] if t["why"]]
+        out.append({"name": "tenant", "title": st.get("tenant") or auto_t, "key": sk.get("tenant") or auto_k,
+                    "html": slide_html(st.get("tenant") or auto_t, "임대료가 한 임차인에 얼마나 몰렸나? · 종목별 최대 임차인 비중" + (
+                        "" if drawn else " · 위험 경계 20%"), block, sk.get("tenant") or auto_k,
+                        "metrics %s top1_tenant_pct%s" % (view["period"], (" · " + ", ".join(whys)) if whys else ""))})
+    return out
+
+
+def render_compare_md(v, out_dir):
+    T = v["tickers"]
+    L = ["# %s %s 비교" % ("·".join(T), v["period"]), ""]
+    if v["mixed_line"]:
+        L.append(v["mixed_line"])
+    L.append("**결론** " + v["conclusion"])
+    L.append("")
+    sl = v.get("slides") or []
+    names = {"matrix": "등급 matrix", "quadrant": "배당수익률 × 부채", "pair": "맞대기", "tenant": "최대 임차인"}
+    meta = ["%s 작성" % v["date"], "가격 %s 종가" % "·".join(v["prices"]) if v["prices"] else "가격 기준일 모름",
+            "깊이 %s" % ", ".join("%s %s" % (t, lab()["depth"].get(dp, dp)) for t, dp in zip(T, v["depths"]))]
+    if v["n"] >= 3:
+        meta.append("괄호는 축·지표마다 순위(valuation은 낮은 편이 1)")
+    meta.append("[부록](%s)" % link(v["files"].get("audit"), out_dir))
+    if sl:
+        meta.append("장표 " + " · ".join("[%s](%s)" % (names.get(s["name"], s["name"]), link(s["png_path"] or s["html_path"], out_dir))
+                                        for s in sl))
+    meta += v["notes"]
+    meta.append("경험칙 등급이며 어느 종목을 고르라는 말이 아니다")
+    L += [" · ".join(meta), ""]
+    L.append("## 등급 matrix")
+    L += md_table(["축"] + T, [[m["name"]] + ["%s%s" % (c["grade_name"], c["rank"]) for c in m["cells"]] for m in v["matrix"]]
+                  + [["강점"] + v["strengths"], ["약점"] + v["weaknesses"]])
+    L.append("")
+    L.append("## 핵심 지표")
+    if v["n"] == 2:
+        L += md_table(["지표"] + T + ["차이(%s − %s)" % (T[0], T[1])], [[r["name"]] + r["cells"] + [r["diff"]] for r in v["rows"]])
+        note = "차이가 큰 지표가 위로(두 값 중 큰 쪽에 대한 비율)"
+    else:
+        L += md_table(["지표"] + T, [[r["name"]] + r["cells"] for r in v["rows"]])
+        note = ""
+    vn = ("valuation 줄은 각자 subsector 기준과의 거리다(P/FFO / peer median, 자기 history percentile, Tracker와의 차)" if v["mixed"]
+          else "같은 subsector라 P/FFO(REITWatch)·cap rate를 바로 견준다")
+    L.append(". ".join(x for x in (note, vn) if x))
+    L.append("")
+    L.append("## 차이를 만든 원인")
+    L += ["- %s: %s (근거: %s)" % (c["name"], c["text"], c["evidence"] or "없음") for c in v["causes"]]
+    L.append("")
+    L.append("## 금리 민감도")
+    L += md_table(["지표"] + T, [[r["name"]] + r["cells"] for r in v["rate"]])
+    L.append((v["rate_note"] + " " if v["rate_note"] else "") + "(차환·변동금리 줄은 가정이 든 추정이다)")
+    L.append("")
+    L.append("## 주요 사건")
+    L += ["- %s · %s · %s · %s (%s)" % (e["date"], e["ticker"], e["type_name"], e["title"], e["source"]) for e in v["events"]] or [
+        "- facts에 적힌 사건이 없다"]
+    L.append("")
+    L.append("## 종목별 보고서")
+    L.append(" · ".join("[%s](%s)" % (x["ticker"], link(x["path"], out_dir)) if x["path"] else "%s 없음" % x["ticker"] for x in v["links"]))
+    body = "\n".join(L)
+    L.append("")
+    L += glossary_md(body)
+    return "\n".join(L) + "\n"
+
+
+def render_compare_audit(v, out_dir):
+    L = ["# %s %s 비교 부록: 종목별 계산 검증과 출처 (%s)" % ("·".join(v["tickers"]), v["period"], v["date"]), ""]
+    L.append("비교 보고서: [%s](%s)" % (os.path.basename(v["files"].get("report", "")), link(v["files"].get("report"), out_dir)))
+    if v["warnings"]:
+        L += ["", "compare 경고: " + "; ".join(humanize(w) for w in v["warnings"])]
+    for s, a in zip(v["summaries"], v["audits"]):
+        L += ["", "## %s · %s" % (s["ticker"], s["company"]), "", "공시: %s · subsector %s · %s 봄" % (
+            s["filing"], s["subsector"] or "모름", lab()["depth"].get(s["depth"], s["depth"])), ""]
+        L += audit_sections(a["audit"], level="###")
+    return "\n".join(L) + "\n"
+
+
+def cmd_compare(args):
+    try:
+        date = today(args.date)
+        paths = list(args.metrics)
+        if len(paths) < 2:
+            raise InputError("비교는 종목 둘 이상이어야 한다(하나면 report.py build)")
+        if len(paths) > MAX_COMPARE:
+            log("종목이 %d개다. 비교 보고서는 %d개까지다(한 표·한 장표에 들어가지 않는다). 7개 이상은 reit-sector-scan skill의 "
+                "screening 표로 본다(reitwatch.py screen)" % (len(paths), MAX_COMPARE))
+            return 2
+        docs = [read_doc(p, reit_calc.METRICS_SCHEMA) for p in paths]
+        nar, why = load_narrative(args.narrative, "compare")
+    except InputError as e:
+        log(str(e))
+        return 1
+    cmpdoc, code = reit_calc.compare_metrics(docs)
+    if code == 1:
+        log("; ".join(cmpdoc.get("error") or []))
+        return 1
+    facts_list = [read_facts(d)[0] for d in docs]
+    tickers = [d.get("ticker") for d in docs]
+    if nar is not None:
+        probs = check_narrative(nar, "compare", allowed_numbers(docs, facts_list=facts_list), tickers=tickers)
+        if probs:
+            log("풀이 글 검사에 걸려 아무 파일도 쓰지 않았다(%s):" % args.narrative)
+            for p in probs:
+                log("  - " + p)
+            return 2
+    light = [d.get("ticker") for d in docs if d.get("depth") == "light"]
+    v = build_compare_view(docs, nar, date, facts_list, cmpdoc)
+    if light:
+        v["notes"].append("가볍게 본 종목(%s)이 섞여 그 종목 등급이 판정 못 함으로 찰 수 있다. 비교할 종목은 깊게 본다" % "·".join(light))
+    out = os.path.abspath(args.out_dir)
+    stem = "%s-%s" % (date, "-".join(tickers))
+    v["files"] = {"report": os.path.join(out, stem + ".md"), "audit": os.path.join(out, stem + "-audit.md"),
+                  "view": os.path.join(out, stem + ".view.json"), "json": os.path.join(out, stem + ".json")}
+    failed = write_slides(compare_slides(v), out, stem, v)
+    md = render_compare_md(v, out)
+    write_text(v["files"]["report"], md)
+    write_text(v["files"]["audit"], render_compare_audit(v, out))
+    write_text(v["files"]["view"], json.dumps(v, ensure_ascii=False, indent=1) + "\n")
+    cmpdoc["files"] = {d.get("ticker"): d["_file"] for d in docs}
+    reit_calc.write_json(cmpdoc, v["files"]["json"])
+    probs = finish_md(md, "비교 보고서")
+    for p in probs:
+        log(p)
+    if why:
+        log(why + ". 숫자로 만들 수 있는 부분만 채웠다")
+    print(v["files"]["report"])
+    return 2 if (why or failed or probs or light) else 0
+
+
 # ---------------------------------------------------------------- earnings (B19)
 
 def grade_rank(g):
@@ -1427,6 +1889,11 @@ def main(argv):
     b.add_argument("--narrative")
     b.add_argument("--out-dir", required=True)
     b.add_argument("--date", help="보고서 날짜(기본 오늘)")
+    c = sub.add_parser("compare", help="비교 보고서(사용자가 지정한 2~6개)")
+    c.add_argument("--metrics", nargs="+", required=True)
+    c.add_argument("--narrative")
+    c.add_argument("--out-dir", required=True)
+    c.add_argument("--date")
     e = sub.add_parser("earnings", help="실적 뒤 점검(reit_calc.py diff 출력)")
     e.add_argument("--diff", required=True)
     e.add_argument("--narrative")
@@ -1442,6 +1909,8 @@ def main(argv):
         return cmd_build(args)
     if args.cmd == "earnings":
         return cmd_earnings(args)
+    if args.cmd == "compare":
+        return cmd_compare(args)
     p.print_help(sys.stderr)
     return 1
 
@@ -1468,9 +1937,8 @@ def fixture_metrics(fx, work):
         doc, _ = reit_calc.compute(f, th, macro=macro, rw=rw, baa=baa, tracker=trk, tmap=tmap)
         for k, v in (spec.get("set") or {}).items():
             doc["metrics"][k] = dict(doc["metrics"].get(k) or {"metric": k, "unit": v.get("unit", "")}, **v)
-        for k, g in (spec.get("grades") or {}).items():
-            a = next(x for x in doc["scorecard"]["axes"] if x["key"] == k)
-            a.update(grade=g, grade_name=grade_names()[g], base_grade=g)
+        if spec.get("set"):
+            doc["scorecard"] = reit_calc.build_scorecard(doc["metrics"], th, reit_calc.load_scorecard(), doc["period"])
         d = os.path.join(work, "data", "tickers", t)
         fp = os.path.join(d, "facts", "2026Q3.json")
         mp = os.path.join(d, "metrics", "2026Q3.json")
@@ -1616,6 +2084,47 @@ def run_check():
         exp["earnings_first"], rows[:1]))
     ok(any("net debt/EBITDAre" in r for r in rows), "B19 나빠진 지표(net debt/EBITDAre)가 나빠진 것에")
     ok(not leaks("\n".join(body_lines(emd))), "B19 칸 이름 누출 없음")
+
+    # B18·B29~B33: 비교 보고서
+    cmp2 = os.path.join(work, "cmp2")
+    code = run(["compare", "--metrics", docs["AAA"], docs["DDD"], "--out-dir", cmp2, "--date", "2026-11-19"], no_ds)
+    c2 = read(os.path.join(cmp2, "2026-11-19-AAA-DDD.md"))
+    ok(code == 2 and c2, "B18 compare 2개 exit 2(풀이 글 없음)와 비교 보고서 (got %s)" % code)
+    ok(os.path.isfile(os.path.join(cmp2, "2026-11-19-AAA-DDD.json")), "B18 compare JSON도 그대로 나온다")
+    sec = c2.split("## 핵심 지표")[1].split("\n## ")[0] if "## 핵심 지표" in c2 else ""
+    rows2 = [r for r in sec.split("\n") if r.startswith("| ") and "---" not in r]
+    ok(rows2[:1] == [exp["compare2_head"]], "B31 2개는 맞대기(두 종목 + 차이) %s" % rows2[:1])
+    ok(rows2[1:3] == exp["compare2_top"], "B31 차이가 큰 지표가 위로 %s" % rows2[1:3])
+    ok(len(body_lines(c2)) <= MAX_LINES and not leaks("\n".join(body_lines(c2))), "B18 비교 보고서 60줄 이하, 누출 없음 (%d줄)" % len(body_lines(c2)))
+    sl2 = sorted(n.split("-", 5)[-1] for n in os.listdir(os.path.join(cmp2, "slides")) if n.endswith(".html"))
+    ok(sl2 == exp["compare2_slides"], "B33 2개 맞대기 장표 %s" % sl2)
+    ok("subsector가 섞였다" not in c2, "B32 subsector가 같으면 섞였다는 줄이 없다")
+
+    cmp4 = os.path.join(work, "cmp4")
+    nar4 = os.path.join(fx, "report", "narrative_compare.json")
+    code = run(["compare", "--metrics", docs["AAA"], docs["DDD"], docs["EEE"], docs["FFF"], "--narrative", nar4,
+                "--out-dir", cmp4, "--date", "2026-11-19"], no_ds)
+    c4 = read(os.path.join(cmp4, "2026-11-19-AAA-DDD-EEE-FFF.md"))
+    ok(code == 0 and c4, "B31 compare 4개 exit 0 (got %s)" % code)
+    ok(c4.split("\n")[2].startswith("subsector가 섞였다"), "B32 섞이면 보고서 첫 줄에 쓴다 %r" % c4.split("\n")[2:3])
+    for s in exp["compare4_has"]:
+        ok(s in c4, "B30·B31·B32 비교 보고서에 %r" % s)
+    for s in exp["compare4_not"]:
+        ok(s not in "\n".join(body_lines(c4)), "B32 섞이면 본문에 %r 없음" % s)
+    heads = re.findall(r"^## (.+)$", c4, flags=re.M)
+    ok(heads == exp["compare_sections"], "B30 비교 보고서 절 차례 %s" % heads)
+    ok(len(body_lines(c4)) <= MAX_LINES and not leaks("\n".join(body_lines(c4))), "B30 60줄 이하, 누출 없음 (%d줄)" % len(body_lines(c4)))
+    sl4 = sorted(n.split("-", 7)[-1] for n in os.listdir(os.path.join(cmp4, "slides")) if n.endswith(".html"))
+    ok(sl4 == exp["compare4_slides"], "B33 3~6개 장표 %s" % sl4)
+    q = read(os.path.join(cmp4, "slides", [n for n in os.listdir(os.path.join(cmp4, "slides")) if "quadrant" in n][0])) if sl4 else ""
+    ok("<pre class=\"quadrant\">" in q and "DDD 8% · 7.5x" in q, "B33 2x2에 배당수익률 × net debt/EBITDAre")
+
+    seven = [docs[t] for t in ("AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG")]
+    out7 = os.path.join(work, "cmp7")
+    err = capture(lambda: run(["compare", "--metrics"] + seven + ["--out-dir", out7], no_ds))
+    ok(err[0] == 2 and "reit-sector-scan" in err[1] and not os.path.exists(out7), "B31 7개 이상이면 exit 2와 screening 안내, 파일 없음")
+    err = capture(lambda: run(["compare", "--metrics", docs["AAA"], "--out-dir", out7], no_ds))
+    ok(err[0] == 1 and not os.path.exists(out7), "B31 1개면 exit 1")
 
     log("report.py --check: %s" % ("실패 %d" % len(fails) if fails else "통과"))
     return 1 if fails else 0
