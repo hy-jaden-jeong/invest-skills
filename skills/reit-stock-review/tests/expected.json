@@ -785,5 +785,114 @@
         ]
       }
     }
+  },
+  "report": {
+    "note": "report.py --check 기대값. fixture는 tests/fixtures/facts_o_2026q3.json을 ticker AAA(가상)로 바꾸고 경쟁 종목 BBB·CCC(가상, light)의 몇 값을 손으로 정한 것. 문자열은 읽는 보고서에 그대로 있어야 한다",
+    "single_sections": [
+      "축별 등급",
+      "핵심 숫자",
+      "동종 대비 위치",
+      "8분기 추세",
+      "주요 사건",
+      "위험과 다시 볼 조건",
+      "용어"
+    ],
+    "single_has": [
+      "| 배당 여력 | 넉넉 |",
+      "| 부채 | 보통 |",
+      "| 만기·유동성 | 위험 |",
+      "| 임차인 집중 | 넉넉 |",
+      "| valuation 위치 | 중간 |",
+      "0.94x(추정)",
+      "**AFFO payout(forward) 73.13% 넉넉**(넉넉 구간 75% 미만)",
+      "| 배당수익률(forward) | 6.52% | 계산값 |",
+      "| 배당수익률(forward) | 6.52% | 7.0% | 5.0% | 2/3(높은 순) | – |",
+      "| net debt/EBITDAre | 5.37x | 4.0x(추정) | 6.0x | 2/3(낮은 순) | – |",
+      "| interest coverage | 4.35x | 3.0x | 4.0x | 1/3(높은 순) | – |",
+      "| 최대 임차인 비중 | 3.3% | 10.0% | 2.0% | 2/3(낮은 순) | – |",
+      "| P/FFO / peer median | 0.91x(추정) | 1.2x | 0.85x | 2/3(낮은 순) | 1.0x = median |",
+      "AAA 깊게",
+      "BBB 가볍게",
+      "CCC 가볍게",
+      "| 매출($) | 1,050 | 1,060 | 1,090 | 1,105 | 1,150 | 1,200 | 1,210 | 1,230 | +17.14% |",
+      "| 부채($) | 5,400 | – | 5,630 |",
+      "+10.19%",
+      "+6.0%",
+      "값이 4분기보다 적어 뺀 지표: 주당 배당(선언)",
+      "- 2026-11-03 · guidance · 2026 AFFO guidance 유지(가상) (8-K 보도자료)",
+      "- 2026-10-20 · 임차인 신용 · 임차인 X 9월 임대료 미납(가상) (웹 example.com)",
+      "(가상) 24개월 차환을 자본시장에 기댄다",
+      "(가상) 세 종목 중 interest coverage가 가장 높고",
+      "| 희석 주식 수(가중평균, 주) | – | 100 |"
+    ],
+    "single_not": [
+      "affo_payout",
+      "estimated",
+      "derived",
+      "exit"
+    ],
+    "glossary_has": [
+      "AFFO payout",
+      "net debt/EBITDAre",
+      "liquidity coverage",
+      "등급",
+      "가볍게 봄",
+      "상태"
+    ],
+    "audit_has": [
+      "1,041,026",
+      "맞음(0.5% 안)",
+      "1,061,097",
+      "| 2029 | 4,442,700 | 13.88% |",
+      "Limitation on incurrence of total debt",
+      "30.83%",
+      "## 데이터 구멍",
+      "## facts 출처 위치",
+      "Maintained 2026 AFFO per share guidance (가상)"
+    ],
+    "single_slides": [
+      "01-grades.html",
+      "02-maturity.html",
+      "03-dividend.html"
+    ],
+    "narrative_bad": {
+      "forbidden": {
+        "path": "conclusion",
+        "value": "(가상) 지금 매수할 만하다",
+        "message": "금지어 '매수'"
+      },
+      "target": {
+        "path": "risks.0.trigger",
+        "value": "(가상) 목표가 30달러에 닿으면",
+        "message": "금지어 '목표가'"
+      },
+      "nav": {
+        "path": "peer_position",
+        "value": "(가상) NAV/share 대비 낮다",
+        "message": "금지어 'NAV/share'"
+      },
+      "long": {
+        "path": "conclusion",
+        "value": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+        "message": "conclusion가 121자다(120자까지)"
+      },
+      "number": {
+        "path": "axes.dividend_capacity",
+        "value": "(가상) AFFO payout 73.1%로 넉넉하다",
+        "message": "숫자 73.1%가 보고서 숫자에 없다"
+      },
+      "code": {
+        "path": "peer_position",
+        "value": "(가상) affo_payout_forward가 낮다",
+        "message": "칸 이름"
+      },
+      "unknown": {
+        "path": "verdict",
+        "value": "(가상)",
+        "message": "모르는 칸 'verdict'"
+      }
+    },
+    "auto_trigger": "net debt/EBITDAre 6x 이상이면 빠듯",
+    "earnings_first": "| 등급 | 부채 | 넉넉 | 보통 |"
   }
 }

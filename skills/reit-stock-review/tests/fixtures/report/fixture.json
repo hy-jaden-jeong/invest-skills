@@ -1,0 +1,20 @@
+{
+  "note": "report.py --check fixture(가상). 모든 종목은 tests/fixtures/facts_o_2026q3.json에서 ticker·이름만 바꿔 계산하고, 경쟁 종목 BBB·CCC는 depth light로 계산한 뒤 set의 값을 손으로 정한다. 기대값은 tests/expected.json report",
+  "tickers": {
+    "AAA": {"name": "(가상) 알파 넷리스", "events": [
+      {"type": "guidance", "date": "2026-11-03", "title": "2026 AFFO guidance 유지(가상)", "source": "sec:8-K 0000000000-26-000001 ex99.1",
+       "locator": "aaa-ex99_1.txt L10 (가상)", "quote": "Maintained 2026 AFFO per share guidance (가상)"},
+      {"type": "tenant_credit", "date": "2026-10-20", "title": "임차인 X 9월 임대료 미납(가상)", "source": "web:https://example.com/news/x (가상)",
+       "quote": "Tenant X did not pay its September rent (가상)"}]},
+    "BBB": {"name": "(가상) 베타 리츠", "depth": "light", "set": {
+      "forward_yield": {"value": 7.0, "status": "derived"}, "affo_payout_forward": {"value": 80.0, "status": "derived"},
+      "net_debt_to_ebitdare": {"value": 4.0, "status": "estimated"}, "interest_coverage": {"value": 3.0, "status": "derived"},
+      "top1_tenant_pct": {"value": 10.0, "status": "derived"}, "p_ffo_reitwatch": {"value": 15.0, "status": "derived"},
+      "p_ffo_vs_peer": {"value": 1.2, "status": "derived"}, "market_cap": {"value": 9000000, "status": "derived"}}},
+    "CCC": {"name": "(가상) 감마 리츠", "depth": "light", "set": {
+      "forward_yield": {"value": 5.0, "status": "derived"}, "affo_payout_forward": {"value": 60.0, "status": "derived"},
+      "net_debt_to_ebitdare": {"value": 6.0, "status": "derived"}, "interest_coverage": {"value": 4.0, "status": "derived"},
+      "top1_tenant_pct": {"value": 2.0, "status": "derived"}, "p_ffo_reitwatch": {"value": 11.0, "status": "derived"},
+      "p_ffo_vs_peer": {"value": 0.85, "status": "derived"}, "market_cap": {"value": 4000000, "status": "derived"}}}
+  }
+}
