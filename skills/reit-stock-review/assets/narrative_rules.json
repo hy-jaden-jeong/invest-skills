@@ -1,0 +1,40 @@
+{
+  "schema": "reit-narrative-rules/1",
+  "_how": "report.py가 풀이 글(narrative.json)을 검사하는 기준. forbidden은 어디에도 쓰지 못하는 말(정규식), fields는 보고서 종류마다 쓸 수 있는 칸과 글자 수 한도(공백 포함, slide_keys만 render_slide.py와 같이 공백 빼고 센다). 칸 뜻과 예시는 references/report-format.md",
+  "forbidden": [
+    {"pattern": "매수", "name": "매수"},
+    {"pattern": "매도", "name": "매도"},
+    {"pattern": "목표\\s*가", "name": "목표가"},
+    {"pattern": "사라(?![지진졌질짐])", "name": "사라"},
+    {"pattern": "팔아라|팔라(?!우)", "name": "팔아라"},
+    {"pattern": "NAV\\s*/\\s*share|NAV\\s+per\\s+share|주당\\s*NAV", "name": "NAV/share"},
+    {"pattern": "적정\\s*주가", "name": "적정 주가"},
+    {"pattern": "비중을\\s*(늘|줄)", "name": "비중을 늘려라·줄여라"},
+    {"pattern": "(?i)\\b(buy|sell|target\\s+price|price\\s+target)\\b", "name": "buy·sell·target price"}
+  ],
+  "no_code_tokens": "snake_case 칸 이름(affo_payout_forward 같은), exit 코드, 영문 status(reported, derived, estimated, stale, missing, not_disclosed)를 쓰지 않는다",
+  "fields": {
+    "single": {
+      "conclusion": 120,
+      "axes": {"dividend_capacity": 90, "leverage": 90, "maturity_liquidity": 90, "tenant_concentration": 90, "valuation": 90},
+      "peer_position": 160,
+      "trend_note": 120,
+      "risks": {"count": 3, "risk": 60, "trigger": 70},
+      "slide_titles": {"grades": 40, "maturity": 40, "dividend": 40},
+      "slide_keys": {"grades": 90, "maturity": 90, "dividend": 90}
+    },
+    "compare": {
+      "conclusion": 120,
+      "axis_causes": {"dividend_capacity": 120, "leverage": 120, "maturity_liquidity": 120, "tenant_concentration": 120, "valuation": 120},
+      "rate_sensitivity": 160,
+      "strengths": 40,
+      "weaknesses": 40,
+      "slide_titles": {"matrix": 40, "quadrant": 40, "pair": 40, "tenant": 40},
+      "slide_keys": {"matrix": 90, "quadrant": 90, "pair": 90, "tenant": 90}
+    },
+    "earnings": {
+      "conclusion": 120,
+      "revisit": {"count": 3, "item": 70}
+    }
+  }
+}

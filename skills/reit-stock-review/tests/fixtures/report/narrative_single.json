@@ -1,0 +1,22 @@
+{
+  "_note": "report.py --check 풀이 글 fixture(가상)",
+  "conclusion": "(가상) 배당 여력은 넉넉하지만 24개월 안 만기를 덮을 돈이 모자라 만기·유동성이 위험이다",
+  "axes": {
+    "dividend_capacity": "(가상) AFFO payout(forward) 73.13%라 배당 뒤에도 AFFO가 남는다",
+    "leverage": "(가상) net debt/EBITDAre 5.37x로 보통 구간 안이다",
+    "maturity_liquidity": "(가상) 24개월 liquidity coverage 0.94x라 자본시장에 기대야 한다",
+    "tenant_concentration": "(가상) 최대 임차인이 3.3%라 한 곳의 신용 사건에 덜 흔들린다",
+    "valuation": "(가상) 자기 history와 peer median 둘 다 가운데쯤이다"
+  },
+  "peer_position": "(가상) 세 종목 중 interest coverage가 가장 높고 배당수익률은 가운데다",
+  "trend_note": "(가상) 매출은 8분기 동안 +17.14% 늘었다",
+  "risks": [
+    {"risk": "(가상) 24개월 차환을 자본시장에 기댄다", "trigger": "(가상) 24개월 liquidity coverage가 1x 아래에 머물면"},
+    {"risk": "(가상) 부채 배수가 빠듯 구간에 가깝다", "trigger": "(가상) net debt/EBITDAre가 6x를 넘으면"},
+    {"risk": "(가상) 임대료 미납 임차인", "trigger": "(가상) 다음 10-Q에 미납이 이어지면"}
+  ],
+  "slide_titles": {"grades": "(가상) AAA는 만기·유동성 하나가 위험이다", "maturity": "(가상) 2029년 만기가 13.88%로 가장 크다",
+                   "dividend": "(가상) AAA payout 73.13%는 두 경쟁 종목 사이"},
+  "slide_keys": {"grades": "(가상) 배당 여력과 임차인 분산은 넉넉하고 차환 쪽이 약하다.", "maturity": "(가상) 한 해 만기가 15%를 넘지 않는다.",
+                 "dividend": "(가상) 85% 주의 기준보다 낮다."}
+}
