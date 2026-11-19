@@ -34,6 +34,8 @@ VICI·GLPI·NNN·DEA·MPT를 새 skill로 다시 돌려: 읽는 보고서가 용
 - **등급**: 축마다 기준표로 매긴 넉넉·보통·빠듯·위험·판정 못 함.
 - **풀이 글(narrative)**: agent가 쓰는 해석 문장. script가 검사하고 보고서에 끼운다.
 - **가볍게 보기(light)**: 경쟁 종목을 핵심 칸만으로 보는 깊이.
+- **단일 보고서**: 종목 하나를 물었을 때의 읽는 보고서. 그 종목이 주인공이고 경쟁 종목은 곁에 둔다.
+- **비교 보고서**: 사용자가 2개 이상을 지정했을 때의 읽는 보고서. 지정한 종목이 모두 같은 무게다.
 
 ## 동작
 
@@ -64,8 +66,15 @@ VICI·GLPI·NNN·DEA·MPT를 새 skill로 다시 돌려: 읽는 보고서가 용
 | B23 | macro-check가 읽는 보고서(결론 한 줄, 지표 묶음별 방향 표, 풀이, 용어)와 장표를 낸다 | |
 | B24 | reit-sector-scan이 읽는 보고서(섹터 위치 표, "싸 보이는 이유", 용어)와 장표를 낸다 | |
 | B25 | dividend-portfolio-check가 읽는 보고서(비중, 쏠림, 월별 배당, 종목별 등급)와 장표를 낸다 | |
-| B26 | 네 SKILL.md와 README가 새 차례를 설명하고, description은 1024자 이하다 | |
+| B26 | 네 SKILL.md와 README가 새 차례(단일·비교를 가르는 기준 포함)를 설명하고, description은 1024자 이하다 | |
 | B27 | skill 폴더만 떼어도 `--check`가 exit 0이다 | |
+| B28 | 종목 하나를 물으면 보고서는 그 종목이 주인공이다. "동종 대비 위치" 절이 경쟁 종목 2개(깊이 표시)와 subsector median을 곁에 두고, 지표마다 그 종목의 순위(3개 중 몇째)를 적는다. 경쟁 종목에는 등급을 매기지 않고 숫자만 둔다(light는 등급을 매길 근거가 모자라다) | |
+| B29 | 사용자가 2개 이상을 직접 지정하면 비교 보고서를 쓴다. 지정한 종목은 모두 deep으로 본다(같은 분기 deep이 있으면 재사용). 경쟁 종목을 따로 더 고르지 않는다 | |
+| B30 | 비교 보고서 차례: 차이 한 줄 결론, 등급 matrix(종목 × 축), 종목마다 강점 하나·약점 하나, 축마다 차이를 만든 원인(lease 구조, 임차인, 부채 구조 등 근거 지표와 함께), 금리 민감도 견줌(차환 영향, 변동금리 충격), 주요 사건 모음, 종목별 읽는 보고서 링크, 용어 표. 어느 종목을 고르라는 말은 쓰지 않는다 | |
+| B31 | 지정한 종목이 2개면 맞대기 모양(두 종목 column과 "차이" column, 차이가 큰 지표가 위로)이다. 3~6개면 matrix에 축마다 순위를 붙인다. 7개 이상이면 exit 2와 "reit-sector-scan screening으로" 안내 | |
+| B32 | 지정한 종목의 subsector가 섞이면 valuation 축은 종목끼리 견주지 않고 각자 자기 subsector 기준(peer median, Tracker)과의 거리로 견주며, 보고서 첫 줄에 섞였다고 쓴다. 나머지 네 축은 그대로 견준다 | |
+| B33 | 비교 보고서 장표 3장: 등급 matrix, 배당수익률 × net debt/EBITDAre 2x2, 최대 임차인 비중 막대. 2개 맞대기면 2x2 대신 핵심 지표 맞대기 막대 | |
+| B34 | 비교 PDF: 비교 본문 + 종목마다 한 쪽 요약(등급, 핵심 숫자, 사건) + 부록(종목별 FFO 재계산·만기표·covenant, 출처, 용어 표) | |
 
 ## 설계
 
@@ -105,8 +114,9 @@ flowchart TB
 | S1 | 회귀 기준을 굽고 계산 약점을 고친다 | B10~B14, B21, B22 | 없음 | 다섯 종목 facts로 MPT 차환 비용 부호, GLPI·DEA exit, VICI·GLPI Tracker 줄, DEA cap rate를 본다 | 대기 |
 | S2 | 등급, 사건 검사, light, peers 고르기, ticker 별칭 | B3, B7, B8, B9, B16 | S1 | 다섯 종목 등급을 손으로 매긴 것과 견주고, NNN의 peers가 O를 재사용하는지 본다 | 대기 |
 | S3 | 배당 지급 내역과 8분기 추세 | B15, B17 | 없음 | DEA CAGR, GLPI 컷 목록, O 추세 표를 공시와 견준다 | 대기 |
-| S4 | report.py: 읽는 보고서, 부록, 장표, 풀이 글 검사, compare·earnings 보고서 | B1, B2, B4, B5, B18, B19, B20 | S2, S3 | NNN을 끝까지 돌려 파일을 직접 읽는다 | 대기 |
-| S5 | PDF | B6 | S4 | NNN PDF를 열어 쪽마다 본다 | 대기 |
+| S4 | report.py: 단일 읽는 보고서, 부록, 장표, 풀이 글 검사, earnings 보고서 | B1, B2, B4, B5, B19, B20, B28 | S2, S3 | NNN을 끝까지 돌려 파일을 직접 읽는다 | 대기 |
+| S4b | report.py compare: 비교 보고서(맞대기·matrix), subsector 섞임, 장표, 7개 이상 거절 | B18, B29, B30, B31, B32, B33 | S4 | VICI·GLPI(같은 subsector 2개)와 VICI·GLPI·NNN·DEA·MPT(섞인 5개)를 돌려 파일을 직접 읽는다. `--check`에 1·2·4·7개 fixture | 대기 |
+| S5 | PDF(단일·비교) | B6, B34 | S4b | NNN 단일 PDF와 VICI·GLPI 비교 PDF를 열어 쪽마다 본다 | 대기 |
 | S6 | reit-stock-review SKILL.md·README, 다섯 종목 다시 돌리기 | B26, B27 | S5 | 끝났는지 확인하는 방법 그대로 | 대기 |
 | S7 | macro-check 읽는 보고서와 장표 | B23, B27 | S4 | 오늘 snapshot으로 보고서를 읽는다 | 대기 |
 | S8 | reit-sector-scan 읽는 보고서와 장표 | B24, B27 | S4 | 오늘 섹터 표로 보고서를 읽는다 | 대기 |
@@ -132,3 +142,8 @@ flowchart TB
 | D14 | 장표 도구 | 장표 HTML은 `diagram-slides` skill 형식으로 script가 쓰고, 그 skill의 `render_slide.py`가 있으면(`DIAGRAM_SLIDES_DIR` 환경 변수, 없으면 skills 폴더의 `diagram-slides`) PNG로 굽는다. 없으면 건너뛰고 보고서에 한 줄 적는다. PDF의 차트는 장표와 따로 script가 밝은 배경 SVG로 그린다 | agent | D2, D5 | skill은 따로 설치해도 돌아야 한다. 어두운 장표 PNG를 흰 PDF에 넣으면 인쇄에 맞지 않는다 | 정해짐 |
 | D15 | 가볍게 보기 | facts에 `depth: "light"`를 적으면 핵심 칸(FFO·AFFO, 배당, 주식 수, net debt·EBITDAre, 이자비용, 최대 임차인, occupancy 등 15개 안팎)만으로 metrics가 exit 0으로 끝나고, 내지 않은 지표는 "가볍게 봄"으로 표시한다 | agent | D6 | 같은 script와 같은 식을 쓰면 deep으로 올릴 때 facts만 더 채우면 된다 | 정해짐 |
 | D16 | 토론 생략 | 이 설계는 Fable과 따로 토론하지 않았다 | agent | 없음 | 이번 대화의 메인 모델이 Fable이라 같은 모델끼리의 토론은 답을 바꾸지 않는다. 대신 검증 단계에서 새 subagent 셋이 본다 | 정해짐 |
+| D17 | 단일과 비교를 가르는 기준 | 사용자가 종목 이름을 2개 이상 말하면 비교, 하나면 단일. "O랑 비슷한 거", "O 경쟁사랑"처럼 하나만 말하고 견줄 상대를 맡기면 단일(경쟁 종목 자동). "O, ADC 비교"는 비교 | 사용자 + agent | D6 | 사용자 요청(2026-11-19): 한 종목을 물을 때와 직접 지정할 때 보고서가 달라야 한다. 질문이 다르다: 단일은 "이 종목이 어떤 상태이고 동종 안에서 어디쯤인가", 비교는 "이 종목들이 어디서 갈리고 왜 갈리나" | 정해짐 |
+| D18 | 비교에서 지정한 종목의 깊이 | 모두 deep(재사용 우선) | agent | D17 | 사용자가 직접 고른 종목이라 같은 깊이로 봐야 등급 matrix가 공정하다. light와 deep을 한 matrix에 두면 light 쪽이 "판정 못 함"으로 가득해 비교가 안 된다 | 정해짐 |
+| D19 | 비교 모양 | 2개 맞대기, 3~6개 matrix + 순위, 7개 이상 거절 | agent | D17 | 2개는 지표마다 차이를 바로 보는 것이 가장 빠르다. 7개가 넘으면 한 장표·한 표에 안 들어가고 screening의 일이다 | 정해짐 |
+| D20 | subsector가 섞인 비교의 valuation | 종목끼리 견주지 않고 각자 자기 subsector 기준과의 거리(peer median 대비, Tracker 대비)로 견준다 | agent | D17 | 2026-11-19 다섯 종목 compare가 Gaming과 Office의 P/FFO를 같은 줄에 놓아 경고만 붙였다. 거리로 바꾸면 섞여도 읽힌다 | 정해짐 |
+| D21 | 단일 보고서의 경쟁 종목 등급 | 매기지 않고 숫자만 | agent | D6, D15 | light는 covenant·만기표 같은 근거가 없어 등급이 "판정 못 함"투성이가 되고, 주인공과 같은 무게로 읽힌다. 경쟁 종목을 deep으로 재사용한 경우에도 단일 보고서에서는 숫자만 둔다(등급은 그 종목의 보고서에 있다) | 정해짐 |
