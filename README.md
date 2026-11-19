@@ -60,7 +60,7 @@ skill이 새로 생기면 위 명령을 다시 돌려 link를 건다.
 
 | 원본 | 라이선스 | 가져온 것·참고한 것 | 들어간 곳 |
 | --- | --- | --- | --- |
-| [CaseMark `analyzing-reit-financials`](https://github.com/CaseMark/skills) | Apache-2.0 | FFO → AFFO → leverage → 배당 지속성 절차, 만기 한 해 집중 15~20% 표시, net debt/EBITDA 5~7x, coverage 1.5x, FFO 표를 줄마다 맞추는 확인 | `skills/reit-stock-review/references/metrics.md`(원본 저작권 표시 "Copyright 2025 CaseMark, Inc."와 변경 고지), `assets/thresholds.json`. License 전문은 `skills/reit-stock-review/references/LICENSE-Apache-2.0.txt` |
+| [CaseMark `analyzing-reit-financials`](https://github.com/CaseMark/skills) | Apache-2.0 | FFO → AFFO → leverage → 배당 지속성 절차, 만기 한 해 집중 15~20% 표시, net debt/EBITDA 5~7x, coverage 1.5x(처음 둔 alert 기준. 지금은 S&P 구간에 맞춘 2.0x), FFO 표를 줄마다 맞추는 확인 | `skills/reit-stock-review/references/metrics.md`(원본 저작권 표시 "Copyright 2025 CaseMark, Inc."와 변경 고지), `assets/thresholds.json`. License 전문은 `skills/reit-stock-review/references/LICENSE-Apache-2.0.txt` |
 | [joellewis/finance_skills `real-assets` (`real_assets.py`)](https://github.com/joellewis/finance_skills) | MIT | 참고: FFO·AFFO·P/FFO를 순수 함수로 두고 `--verify` 같은 자기 확인을 두는 생각. 코드는 옮기지 않았고 FFO 식은 Nareit 정의로 새로 썼다 | `skills/reit-stock-review/scripts/reit_calc.py`(참고만) |
 | [tradermonty/claude-trading-skills `kanchi-dividend-sop`](https://github.com/tradermonty/claude-trading-skills) | MIT | 참고: 정기 배당 × 횟수로 forward yield, 데이터가 없으면 통과로 치지 않음(review), AFFO payout 85/100%, 기준값을 한 곳에 두기. 코드는 옮기지 않았다 | `skills/reit-stock-review/scripts/reit_calc.py`(참고만), `assets/thresholds.json` |
 

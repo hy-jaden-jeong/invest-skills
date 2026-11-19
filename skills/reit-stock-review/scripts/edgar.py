@@ -67,6 +67,15 @@ XBRL_MAP = {
     "dividend_regular_latest": ("instant", "USD/shares", ["us-gaap:DividendsPayableAmountPerShare"]),
     "dividends_paid_per_share_quarter": ("duration", "USD/shares", ["us-gaap:CommonStockDividendsPerShareCashPaid",
                                                                     "us-gaap:CommonStockDividendsPerShareDeclared"]),
+    # 신용. 정기 원금 상환·unencumbered·covenant는 표준 concept이 없어 Ex.99에서 채운다
+    "total_assets": ("instant", "USD", ["us-gaap:Assets"]),
+    "accumulated_depreciation": ("instant", "USD", ["us-gaap:RealEstateInvestmentPropertyAccumulatedDepreciation"]),
+    "secured_debt": ("instant", "USD", ["us-gaap:SecuredDebt"]),
+    "capitalized_interest": ("duration", "USD", ["us-gaap:InterestCostsCapitalized"]),
+    "preferred_dividends": ("duration", "USD", ["us-gaap:PreferredStockDividendsIncomeStatementImpact",
+                                                "us-gaap:DividendsPreferredStock"]),
+    # 주당 AFFO를 내지 않는 회사의 분모. AFFO 총액과 같은 기준(OP unit 포함 여부)인지 Ex.99와 맞춰 본다
+    "diluted_shares_weighted": ("duration", "shares", ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding"]),
 }
 # 일반 배당주(SIC가 6798이 아님) 칸 ← concept 후보. ytd는 회계연도 시작부터 그 분기 끝날까지(현금흐름표 기간).
 DIVIDEND_XBRL_MAP = {
@@ -471,6 +480,21 @@ def earnings_8k_for(rows, period):
     return min(cands, key=lambda r: r["filed"]) if cands else None
 
 
+def add_new_fields(doc):
+    """전에 만든 facts에 없는 칸(나중에 더한 칸)을 빈 칸으로 더한다. 더한 칸 이름 목록."""
+    reit = reit_calc.is_reit_doc(doc)
+    added = []
+    for k in (reit_calc.FACT_KINDS if reit else reit_calc.DIVIDEND_FACT_KINDS):
+        if k not in doc.setdefault("facts", {}):
+            doc["facts"][k] = {"value": None, "status": "missing", "note": "Ex.99에서 채울 것"}
+            added.append(k)
+    for k in (reit_calc.SERIES_KINDS if reit else reit_calc.DIVIDEND_SERIES_KINDS):
+        if k not in doc.setdefault("series", {}):
+            doc["series"][k] = []
+            added.append("series." + k)
+    return added
+
+
 def merge_missing(doc, draft):
     """비어 있는(missing) 칸만 채운다. agent가 채운 값은 덮지 않는다."""
     filled = []
@@ -628,6 +652,9 @@ def cmd_xbrl(args):
     path = args.facts or facts_path(args.ticker, args.period)
     if os.path.exists(path):
         doc = read_json(path)
+        new = add_new_fields(doc)
+        if new:
+            log("전에 만든 facts에 없던 칸 %d을 빈 칸으로 더함: %s" % (len(new), ", ".join(new)))
     else:
         f8k = earnings_8k_for(filing_list(sub, ["8-K"], 80), args.period)
         doc = skeleton(info, args.period, f8k and {k: f8k[k] for k in ("form", "accession", "filed")})
@@ -764,6 +791,15 @@ def run_check():
        "초안은 빈 칸만 채우고 agent 값은 덮지 않음")
     ok(set(doc["facts"]) == set(reit_calc.FACT_KINDS) and doc["schema"] == reit_calc.FACTS_SCHEMA,
        "facts 초안에 reit_calc의 칸이 모두 있음")
+    old = skeleton(info, "2026Q3", None)
+    del old["facts"]["principal_amortization"]
+    del old["series"]["covenants"]
+    old["facts"]["cash"] = {"value": 7, "unit": "USD thousands", "status": "reported", "source": "agent (가상)",
+                            "locator": "x (가상)"}
+    added = add_new_fields(old)
+    ok(added == ["principal_amortization", "series.covenants"] and old["facts"]["principal_amortization"]["status"] == "missing"
+       and old["series"]["covenants"] == [] and old["facts"]["cash"]["value"] == 7,
+       "전에 만든 facts에 없는 새 칸(%s)을 빈 칸으로 더하고 있는 값은 그대로" % added)
 
     # 4b. 일반 배당주 초안: 52·53주 회계연도(분기 끝날 2026-09-27), 현금흐름은 YTD
     cfd = fx_json("companyfacts_div.json")
