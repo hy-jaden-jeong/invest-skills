@@ -542,6 +542,107 @@
       },
       "debt_mtm_basis_mix": 7.0132,
       "debt_mtm_basis_mix_why": "회사 capex reserve 300,000(가상)에 NOI pro_rata, 부채 fair value·carrying consolidated: 5,461,304 / (79,672,495 − 1,800,700) × 100 (bc 7.01317...), 기준이 섞여 estimated"
+    },
+    "s1": {
+      "note": "S1(reader-first-reports) 손계산. 24개월 만기 7,923,650 = 2,201.4 + 2,884.1 + 3,784.2 × 9/12 백만, 연간 AFFO 4,244,388 = 1,061,097 × 4, 기존 가중평균 금리 3.83%",
+      "refi": {
+        "baa": {
+          "rate": 6.0,
+          "cost": 171943.205,
+          "why": "등급 모름 → DGS10 4.5 + BAA10Y 1.5(가상) = 6.0, 7,923,650 × 2.17 / 100"
+        },
+        "issuance": {
+          "rate": 5.25,
+          "cost": 112515.83,
+          "impact": 2.6509,
+          "why": "회사 발행 금리 5.25%(가상), 7,923,650 × 1.42 / 100, / 4,244,388"
+        },
+        "bb": {
+          "rate": 6.54,
+          "cost": 214730.915,
+          "why": "BB → DGS10 4.5 + BB OAS 2.04(가상), 7,923,650 × 2.71 / 100"
+        },
+        "hy": {
+          "rate": 7.93,
+          "cost": 324869.65,
+          "why": "B+ 또는 BB OAS 없음 → DGS10 4.5 + HY OAS 3.43(가상), 7,923,650 × 4.10 / 100"
+        },
+        "negative": {
+          "cost": -79236.5,
+          "why": "가중평균 금리 7.0%(가상) > Baa 6.0: 7,923,650 × (6.0 − 7.0) / 100"
+        }
+      },
+      "fcc_bullet": {
+        "value": 4.3133,
+        "why": "정기 원금 상환 0: 1,452,572 / (333,564 + 3,200 + 0 + 0)"
+      },
+      "noi_quarter_cap_rate": {
+        "value": 7.59,
+        "why": "분기 NOI 1,500,000(가상) × 4 / (47,682,300 + 31,369,521 + 0) × 100"
+      },
+      "ffo_reference": {
+        "ffo_annualized": 4174880,
+        "refi_impact_ffo_pct": 4.1185,
+        "floating_rate_shock_ffo_pct": 0.4291,
+        "retained_cash_flow_24m": 2135802.664,
+        "liquidity_coverage_24m": 0.9269,
+        "why": "AFFO 공시 없음 → Normalized FFO 1,043,720 × 4 = 4,174,880. refi 171,943.205 / 4,174,880, 변동 1,791,400 × 1% / 4,174,880, 유보 2 × (4,174,880 − 3.258 × 953,646), (355,800 + 5,485,100 + 2,135,802.664) / 8,605,401"
+      },
+      "straight_line_fact": {
+        "value": 3.8424,
+        "why": "facts straight_line_rent 40,000(가상) / FFO 1,041,026 × 100"
+      },
+      "other_committed_uses": {
+        "uses": 9105401,
+        "coverage": 0.8913,
+        "why": "8,605,401 + 500,000(가상), 8,115,718.664 / 9,105,401"
+      }
+    },
+    "s2": {
+      "note": "S2(reader-first-reports) 손으로 매긴 등급. 구간은 assets/scorecard.json(watch·alert는 thresholds.json)",
+      "axes": [
+        "dividend_capacity",
+        "leverage",
+        "maturity_liquidity",
+        "tenant_concentration",
+        "valuation"
+      ],
+      "base": {
+        "grades": {
+          "dividend_capacity": "ample",
+          "leverage": "moderate",
+          "maturity_liquidity": "risk",
+          "tenant_concentration": "ample",
+          "valuation": "mid"
+        },
+        "why": "AFFO payout 73.13 < 75 넉넉; net debt/EBITDAre 5.37(5~6 보통)·coverage 4.35(≥4 넉넉) 중 나쁜 쪽 보통; 최대 만기 해 13.88(10~15 보통)·liquidity coverage 0.943(<1 위험)·refi 4.05(2~5 보통) 중 위험; top1 3.3(<5)·top10 22.9(<25) 넉넉; history 66.67(33.3~66.7 중간 0)·peer 0.914(0.9~1.1 중간 0) 합 0 중간"
+      },
+      "cut": {
+        "grade": "moderate",
+        "why": "넉넉(73.13) + 2025 컷(2026 분기에서 3년 안) 한 단계 → 보통"
+      },
+      "covenant": {
+        "grade": "tight",
+        "why": "보통 + covenant 최소 여유 13.33% < 15% 한 단계 → 빠듯"
+      },
+      "ffo_fallback": {
+        "grade": "tight",
+        "maturity_grade": "risk",
+        "why": "AFFO 공시 없음: FFO payout 76.66(75~85 보통) 한 단계 → 빠듯. 만기·유동성은 coverage 0.927(<1) 위험, 차환 영향/FFO 4.12는 보통에서 한 단계 보수적으로 빠듯"
+      },
+      "valuation_low": {
+        "grade": "low",
+        "why": "peer median 15.0(가상) → 12.8/15 = 0.853 < 0.9 낮은 편(−1), history 중간(0) → 합 −1 낮은 편"
+      },
+      "light": {
+        "affo_payout_forward": 72.7232,
+        "net_debt_to_ebitdare": 5.399,
+        "why": "핵심 칸만: AFFO guidance가 없어 연간 AFFO 1.12 × 4 = 4.48 → 3.258 / 4.48 = 72.7232%, 연환산 EBITDAre가 없어 31,369,521 / (1,452,572 × 4) = 5.399x"
+      },
+      "alias": {
+        "pctile": 50.0,
+        "why": "OLD 9개 호 10~18 + NEW 13.5(가상): 13.5 이하는 10·11·12·13·13.5 5개 / 10 = 50%"
+      }
     }
   },
   "edgar": {

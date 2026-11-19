@@ -31,9 +31,17 @@
 - 회사가 그 값을 원래 내지 않으면(그 칸이 있을 표에 줄이 없음) `not_disclosed: true`와 그 표의 `source`·`locator`를 함께 적는다. 그 값으로 셈하는 지표는 missing이지만 exit 2로 세지 않고 데이터 구멍에 "공시 없음"으로 오른다. 근거(`source`·`locator`)가 없거나 `value`와 함께 적으면 보통 missing으로 센다.
 
 ```json
-"principal_amortization": {"value": null, "status": "missing", "not_disclosed": true,
-  "source": "sec:8-K ... ex99.2", "locator": "...supple.txt L34 Debt Summary: 정기 원금 상환 줄 없음",
-  "note": "회사가 정기 원금 상환을 내지 않음"}
+"unencumbered_noi": {"value": null, "status": "missing", "not_disclosed": true,
+  "source": "sec:8-K ... ex99.2", "locator": "...supple.txt L34 Debt Metrics: unencumbered NOI 줄 없음",
+  "note": "회사가 unencumbered NOI를 내지 않음"}
+```
+
+- 그 분기에 거래가 없어 값이 없는 칸(매입·매각 cap rate만)은 `none_in_period: true`와 그 표의 `source`·`locator`를 적는다. 공시 없음과 따로 세고(`summary.metrics_none_in_period`) exit 2로 세지 않는다. 회사가 원래 cap rate를 내지 않는 것(공시 없음)과 그 분기 거래가 없는 것은 다르다. 다른 칸에 적거나 근거가 없거나 `value`와 함께 적으면 missing이다.
+
+```json
+"dispositions_cap_rate": {"value": null, "status": "missing", "none_in_period": true,
+  "source": "sec:8-K ... ex99.2", "locator": "...supple.txt L22 Recent Investment Activity: 그 분기 매각 줄 없음",
+  "note": "그 분기 매각 없음"}
 ```
 
 - `basis`(선택): 돈 칸이 회사 표의 consolidated(연결) 열이면 `consolidated`, 지분 몫(pro-rata, Prologis Share 등) 열이면 `pro_rata`. 한 식의 입력끼리 basis가 다르면 script가 그 지표를 estimated로 내리고 note에 섞인 칸을 쓴다. 다른 값은 그 칸이 missing이다. 회사 표에서 기준을 알 수 있는 칸(부채 원금, 총자산, NOI, CIP, JV 부채, 부채 fair value, EBITDAre·이자비용 등)에 적는다.
@@ -82,15 +90,19 @@
 | `unencumbered_assets`, `unencumbered_noi` | 담보로 잡히지 않은 자산(감가상각 전), 그 자산의 연환산 NOI(`noi_annualized`와 같은 기준). 회사가 내는 쪽만 채운다 | supplemental debt metrics·covenant 주석 |
 | `capitalized_interest` | 분기 자본화 이자(개발 중 자산에 얹은 이자) | 개발 표 주석, 현금흐름표 주석, XBRL `InterestCostsCapitalized` |
 | `preferred_dividends` | 분기 우선주 배당 | 손익계산서, XBRL `PreferredStockDividendsIncomeStatementImpact` |
-| `principal_amortization` | 분기 정기 원금 상환(scheduled amortization. 만기 일시 상환은 넣지 않는다) | 회사 fixed charge coverage 표 |
+| `principal_amortization` | 분기 정기 원금 상환(scheduled amortization. 만기 일시 상환은 넣지 않는다). 부채가 모두 만기 일시 상환(bullet)이면 공시 없음이 아니라 `0`과 그 근거(만기표·부채 표에서 만기 해 말고는 상환이 없는 위치)를 적는다. 그러면 fixed-charge coverage가 나온다 | 회사 fixed charge coverage 표, 10-Q contractual obligations·만기 표 |
 | `wam_years`, `weighted_avg_rate_pct` | 부채 가중평균 잔여 만기, 가중평균 금리(swap 반영). 만기 사다리와 같은 기준 | debt summary |
 | `floating_rate_debt` | 변동금리 원금(swap으로 고정한 부분은 뺀 회사 값). 비율만 내면 missing | debt summary |
 | `revolver_available` | credit facility 남은 한도. commercial paper를 이미 뺀 값이면 note에 적는다 | liquidity 표 |
 | `dev_remaining_spend` | 개발 중 자산에 앞으로 들어갈 돈(cost to complete, remaining investment). 0 이상 | 개발 표 |
+| `other_committed_uses` | 개발비 말고 앞으로 내줄 약정(대출 funding commitment 등, lender 성격 REIT). 0 이상. 값을 적으면 24개월 liquidity uses에 더한다(그 기간에 모두 쓴다고 가정). 적지 않으면 더하지 않는다 | 10-Q contractual obligations의 future funding commitments |
+| `recent_issuance_rate_pct` | 최근 12개월 안 회사 채권 발행 금리(쿠폰, %). `issue_date`(발행일, YYYY-MM-DD)를 꼭 함께 적는다. 차환 금리 추정의 첫 후보다(D12). 발행일이 가격 기준일 전 12개월 안이 아니면 쓰지 않는다 | 10-Q debt 주석의 발행 문장, 발행 8-K |
 | `liquidity_cash` | 유동성 계산용 현금·현금성 자산. net debt 표 때문에 `cash`가 0인 회사(D47)도 실제 현금을 적는다 | liquidity 표, balance sheet |
 | `occupancy_pct`, `wale_years`, `investment_grade_share_pct` | 점유율, 가중평균 잔여 임대기간, 투자등급 임차인 비중 | 보도자료, supplemental |
 | `same_store_current`, `same_store_prior` | same store NOI(없으면 회사의 same store 지표), 이번·전년 같은 기간 | supplemental |
 | `noi_annualized` | 연환산 (cash) NOI | supplemental NOI 표 |
+| `noi_quarter` | 분기 (cash) NOI. 회사가 연환산 NOI를 내지 않을 때만 채운다. script가 분기 × 4(estimated)로 연환산한다. agent가 곱하지 않는다 | supplemental NOI 표 |
+| `straight_line_rent` | 분기 straight-line rent(현금보다 더 인식한 임대료, 표의 괄호를 뺀 양수). AFFO bridge에 straight_line 줄이 없을 때만 쓴다(AFFO를 내지 않는 회사의 FFO·NFFO 표 참고 줄) | FFO·NFFO 표 아래 참고 줄 |
 | `price` | 주가 | `quote.py`가 넣는다 |
 | `common_shares_outstanding`, `op_units_outstanding` | 기말 보통주, OP unit | capitalization 표 |
 | `construction_in_progress` | 건설 중 자산(CIP, 개발 portfolio 투자 잔액). NOI와 같은 기준(pro-rata면 지분 몫) | supplemental 개발 표, NAV components |
@@ -99,7 +111,7 @@
 | `jv_debt_pro_rata` | 미연결 JV 부채의 지분 몫 중 `total_debt`에 들어 있지 않은 것. 회사 net debt가 이미 pro-rata면 0과 note | JV 표, pro-rata debt 표 |
 | `capex_reserve` | 회사가 낸 연간 capex reserve(유지 capex + TI·LC), 0 이상. 내지 않으면 missing으로 두면 script가 AFFO bridge 줄로 대신한다 | NAV components, 보도자료 |
 | `debt_fair_value`, `debt_carrying_value` | 부채 fair value와 같은 표의 carrying value(대개 consolidated). 표에 없는 부채(revolver·CP)는 넣지 않는다 | 10-Q·10-K fair value 주석, XBRL `DebtInstrumentFairValue`·`LongTermDebt`. companyfacts에 그 분기가 없으면 10-Q 원문 |
-| `acquisitions_cap_rate`, `dispositions_cap_rate` | 그 분기 매입·매각 cap rate(%). 회사 정의(initial cash yield, stabilized cap rate)를 note에 쓴다 | supplemental 투자·매각 표 |
+| `acquisitions_cap_rate`, `dispositions_cap_rate` | 그 분기 매입·매각 cap rate(%). 회사 정의(initial cash yield, stabilized cap rate)를 note에 쓴다. 그 분기 거래가 없으면 `none_in_period` | supplemental 투자·매각 표 |
 
 ## series
 
@@ -117,7 +129,13 @@
   - Yahoo 금액은 소수 셋째 자리로 반올림된 것이 있어(O 0.2685 → 0.269) 연간 합이 공시와 0.1%쯤 다를 수 있다.
 - `special_dividends`: `quote.py dividends --facts`가 Yahoo 값으로 통째로 바꿔 넣는 특별배당 목록이다. 항목마다 `period`(해), `ex_date`, `value`(주당), `locator`(URL, ex-date, Yahoo 금액), `note`(왜 특별인지). `reit_calc.py`는 읽지 않는다(배당 CAGR·컷에 넣지 않는다).
 - `debt_maturities`: 만기 사다리. `period`는 연도(`"2027"`)나 `thereafter`. 다른 글(날짜 등)이 하나라도 있으면 만기 사다리·24개월 만기가 missing이다. 같은 기준(pro-rata 또는 consolidated)의 원금 합 열을 쓴다.
-- `top_tenants`: 임대료(ABR) 비중 상위 임차인. 항목마다 `label`(이름)과 `%` 값.
+- `top_tenants`: 임대료(ABR) 비중 상위 임차인. 항목마다 `label`(이름)과 `%` 값. 비중의 기준이 ABR이 아니면 항목마다 `measure`(예: `"income from real estate"`, `"Q3 2026 Total revenues"`)를 적는다. script가 지표 formula에 그 기준을 쓰고, 없으면 ABR로 본다. 기준이 섞이면 estimated다.
+- `credit_ratings`: 신용등급. 항목마다 `agency`(S&P, Moody's, Fitch 등), `rating`(S&P·Fitch `AAA`~`C`·`D`, Moody's `Aaa`~`C`. 첫 낱말만 읽는다), `status`·`as_of`·`source`·`locator`. 공시(10-Q·10-K·보도자료)에 없으면 신용평가사 발표나 기사를 `web:<URL>`로 적고 기사면 `estimated`다. 기관마다 다르면 가장 낮은 등급으로 차환 금리를 고른다(`references/metrics.md`). 읽지 못한 등급은 데이터 구멍이다.
+
+```json
+{"agency": "S&P", "rating": "BB+", "status": "reported", "as_of": "2026-09-30", "source": "sec:10-Q ...",
+ "locator": "...txt L812 'S&P ... BB+' (가상)", "note": ""}
+```
 - `covenants`: 회사가 낸 debt covenant 표의 줄. `value` 대신 `limit`(한도)과 `actual`(실제)을 둔다. 한도가 여러 문서(indenture, credit facility)에 따로 있으면 줄마다 `name`에 어느 쪽인지 쓴다.
 
 ```json
@@ -128,7 +146,53 @@
 
   - `direction`: 실제가 한도 아래여야 하면(부채/자산 ≤ 60%) `max`, 위여야 하면(coverage ≥ 1.5x, unencumbered ≥ 150%) `min`.
   - `unit`: `%` 또는 `x`. `limit`은 양수, `actual`은 0 이상인 유한한 숫자다. 어기면 그 줄만 missing과 데이터 구멍이고 출력에는 null을 쓴다.
-  - 회사가 covenant 표를 내지 않으면 빈 목록으로 둔다. 그러면 headroom은 missing, flag는 review다.
+  - 회사가 covenant 표를 내지 않으면 빈 목록으로 두고 아래 `series_not_disclosed.covenants`에 근거를 적는다. 근거가 없으면 headroom은 보통 missing(exit 2), flag는 review다.
+
+## series_not_disclosed
+
+회사가 그 표 전체(또는 일부 줄)를 내지 않는다는 근거를 series 단위로 적는다(B11). facts 맨 위 칸이다. `covenants`(covenant 한도·실제 표)와 `top_tenants`(임차인 비중 표)에만 쓴다.
+
+```json
+"series_not_disclosed": {
+  "covenants": {"source": "sec:10-Q ...", "locator": "...txt L654 'in compliance with all required financial covenants'만 있고 한도·실제 표 없음",
+                "note": "회사가 covenant 한도·실제 표를 내지 않음"},
+  "top_tenants": {"source": "sec:10-K ...", "locator": "...txt L1629 Concentration of Credit Risk: 5곳 비중만",
+                  "note": "회사가 임차인 비중을 5곳까지만 냄"}}
+```
+
+- `covenants`: `series.covenants`가 비어 있을 때 headroom과 최소 headroom이 공시 없음이 된다. exit 2로 세지 않고, flag `covenant_headroom`은 review(note에 공시 없음)다. covenant 줄이 있으면 줄을 쓰고 이 칸은 무시한다(데이터 구멍 ignored). 한도만 있고 실제 값을 내지 않는 회사도 여기에 적는다.
+- `top_tenants`: 공시된 임차인 수보다 큰 상위 n 지표(예: 5곳만 내면 `top10_tenant_pct`)가 공시 없음이 된다. 공시된 수까지의 지표는 그대로 계산한다.
+- `source`·`locator`가 없으면 쓰지 않고(보통 missing) 데이터 구멍에 올린다. 다른 이름은 ignored다.
+
+## 가볍게 보기 (depth light)
+
+경쟁 종목을 핵심 칸만으로 볼 때 facts 맨 위에 `"depth": "light"`를 적는다(없으면 `deep`). 같은 script와 같은 식을 쓰므로 나중에 deep으로 올릴 때는 칸만 더 채우고 `depth`를 지운다.
+
+핵심 칸(15개, `reit_calc.py`의 `LIGHT_CORE_FACTS`와 같다): `ffo_reported`, `ffo_per_share_diluted`, `affo_reported`, `affo_per_share_diluted`(내지 않으면 `diluted_shares_weighted`), `dividend_regular_latest`, `dividend_frequency`, `price`, `common_shares_outstanding`, `op_units_outstanding`, `total_debt`, `cash`, `ebitdare_quarter`, `interest_expense`, `occupancy_pct`, `series.top_tenants`(최대 임차인 한 줄이라도).
+
+- 핵심 칸은 보도자료 첫 표 몇 개, XBRL 초안, `quote.py price`로 채운다. 회사가 내지 않는 칸은 deep과 같이 `not_disclosed`와 근거를 적는다(채운 것으로 친다).
+- 핵심 칸이 비면(값도 공시 없음도 아님) exit 2이고 `summary.light_core_missing`에 그 칸이 오른다.
+- 핵심 칸으로 내는 지표(`LIGHT_METRICS`: FFO·AFFO 주당, 연간 FFO·AFFO, forward yield·payout, net debt/EBITDAre(분기×4), interest coverage, occupancy, 최대 임차인, 시총·P/FFO·P/AFFO, REITWatch 줄, 시장 차입금리)만 빠지면 missing으로 센다. 나머지 지표가 비면 '가볍게 봄'(`not_assessed`)이고 exit 2로 세지 않는다. FFO tie-out·AFFO bridge check도 입력이 없으면 '가볍게 봄'이다. 더 채운 칸으로 나온 지표는 그대로 낸다.
+
+## events (숫자 밖 사건)
+
+공시 본문(임차인 신용 사건, 소송, 결산 후 사건, guidance 변화)과 웹(신용등급, 임차인 신용 사건, 배당 발표, guidance 변경)의 사건을 facts 맨 위 `events` 목록에 적는다. script가 검사해 metrics `events`로 옮기고(날짜 최신순), 어긴 항목은 버리고 데이터 구멍(ignored)에 알린다. exit에는 세지 않는다.
+
+```json
+"events": [
+  {"type": "tenant_credit", "date": "2026-10-20", "title": "임차인 A 9월 임대료 미납(가상)",
+   "source": "sec:10-Q 0000000000-26-000000", "locator": "...txt L2831 (가상)",
+   "quote": "Tenant A did not pay its September rent (가상)", "note": ""},
+  {"type": "rating", "date": "2026-08-12", "title": "S&P 등급 유지(가상)", "source": "web:https://example.com/... (가상)",
+   "quote": "S&P affirmed the 'BB' rating (가상)"}]
+```
+
+- `type`: `tenant_credit`(임차인 신용), `rating`(신용등급), `dividend`(배당), `guidance`, `legal`(소송), `subsequent`(결산 후 사건), `other`.
+- `date`(YYYY-MM-DD), `title`, `source`, `quote`(원문 문장을 그대로)가 꼭 있어야 한다. `source`가 웹이면 `web:<URL>`로 쓰거나 `url`을 함께 적는다. 출처 없는 사건이 보고서에 들어가지 않게 하려는 것이다.
+
+## former_tickers
+
+ticker가 바뀐 종목은 facts 맨 위에 `"former_tickers": ["MPW"]`처럼 예전 ticker를 적는다. `assets/ticker_aliases.json`(실제로 바뀐 것만)과 함께 써서 REITWatch history(P/FFO percentile)와 3개월 앞 호 consensus를 예전 ticker 호까지 잇는다.
 
 ## affo_bridge
 

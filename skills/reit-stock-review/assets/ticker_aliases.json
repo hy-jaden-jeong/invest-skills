@@ -1,0 +1,4 @@
+{
+  "_how": "ticker가 바뀐 종목: 지금 ticker -> 예전 ticker 목록. REITWatch history(P/FFO percentile)와 3개월 앞 호 consensus를 예전 ticker 호까지 잇는다. 실제로 바뀐 것만 적는다. facts의 former_tickers도 함께 쓴다",
+  "MPT": ["MPW"]
+}

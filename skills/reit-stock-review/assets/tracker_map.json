@@ -1,5 +1,5 @@
 {
-  "_how": "REITWatch subsector 이름 -> Nareit REIT Industry Tracker의 row 이름(name)과 그 위 sector(parent). reit-sector-scan의 assets/sector_map.json `tracker`를 복사했다(skill끼리 import하지 않는다). 그 subsector row에 implied cap rate가 없으면 parent 값을 estimated로 쓰고, parent도 없으면 missing. name이 null이면 Tracker에 그 subsector row가 없다",
+  "_how": "REITWatch subsector 이름 -> Nareit REIT Industry Tracker의 row 이름(name)과 그 위 sector(parent). reit-sector-scan의 assets/sector_map.json `tracker`를 복사했다(skill끼리 import하지 않는다). 그 subsector row에 implied cap rate가 없으면 parent 값을 estimated로 쓰고, parent도 없으면 missing. name이 null이면 Tracker에 그 subsector row가 없다. cap_rate_comparable이 false인 subsector는 회계 기준이 달라 회사 implied cap rate와 Tracker 값의 차이를 내지 않고 why를 적는다(이 skill에만 있는 칸)",
   "Office": {"name": "Office", "parent": null},
   "Industrial": {"name": "Industrial", "parent": null},
   "Shopping Centers": {"name": "Shopping Centers", "parent": "Retail"},
@@ -16,6 +16,7 @@
   "Diversified": {"name": "Diversified", "parent": null},
   "Timberland": {"name": "Timberland", "parent": null},
   "Telecommunications": {"name": "Telecommunications", "parent": null},
-  "Gaming": {"name": "Gaming", "parent": null},
+  "Gaming": {"name": "Gaming", "parent": null, "cap_rate_comparable": false,
+             "why": "Gaming REIT 임대가 대개 sales-type·financing lease로 잡혀 Tracker NOI에서 임대 수익 대부분이 빠지므로, Tracker implied cap rate(과거 1.8~2.8%)는 회사 계약 임대료 기준 cap rate와 기준이 다르다"},
   "Specialty": {"name": "Specialty", "parent": null}
 }
