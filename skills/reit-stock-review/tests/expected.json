@@ -448,6 +448,98 @@
       "payout_quarter": 72.6931,
       "affo_fy_run": 4.4736,
       "payout_forward_run": 72.8273
+    },
+    "valuation": {
+      "values": {
+        "capex_reserve": {
+          "value": 9676,
+          "status": "estimated",
+          "why": "facts에 capex reserve가 없어 AFFO bridge −(−2,392 − 27) × 4"
+        },
+        "noi_economic": {
+          "value": 5751628,
+          "status": "estimated",
+          "why": "5,761,304 − 9,676"
+        },
+        "jv_debt_pro_rata": {
+          "value": 893019,
+          "status": "derived",
+          "why": "parts 233,829 + 659,190(Ex.99.2 p.23 미연결 JV 지분 몫)"
+        },
+        "non_operating_assets": {
+          "value": 272345,
+          "status": "derived",
+          "why": "CIP 272,345 + 토지 0 + 기타 0"
+        },
+        "economic_ev": {
+          "value": 79672495,
+          "status": "derived",
+          "why": "47,682,300 + 31,369,521 + 0 + 893,019 − 272,345"
+        },
+        "economic_implied_cap_rate": {
+          "value": 7.2191,
+          "status": "estimated",
+          "why": "5,751,628 / 79,672,495 × 100 (bc 7.21908859)"
+        },
+        "debt_fair_value": {
+          "value": 27809400,
+          "status": "derived",
+          "why": "parts 2,771.2 + 36.2 + 25,002.0 백만(10-Q fair value 표)"
+        },
+        "debt_carrying_value": {
+          "value": 29610100,
+          "status": "derived",
+          "why": "parts 2,785.2 + 36.6 + 26,788.3 백만"
+        },
+        "debt_mtm_adjustment": {
+          "value": -1800700,
+          "status": "derived",
+          "why": "27,809,400 − 29,610,100"
+        },
+        "economic_implied_cap_rate_debt_mtm": {
+          "value": 7.386,
+          "status": "estimated",
+          "why": "5,751,628 / (79,672,495 − 1,800,700) × 100 (bc 7.38602211)"
+        },
+        "tracker_subsector_cap_rate": {
+          "value": 6.5,
+          "status": "reported",
+          "why": "가상 Tracker Free Standing 6.5"
+        },
+        "implied_cap_rate_vs_tracker": {
+          "value": 0.788,
+          "status": "derived",
+          "why": "7.288 − 6.5"
+        },
+        "acquisitions_cap_rate": {
+          "value": 6.6,
+          "status": "reported",
+          "why": "Ex.99.2 p.26 initial weighted average cash yield 6.6%"
+        },
+        "dispositions_cap_rate": {
+          "value": 7.1,
+          "status": "reported",
+          "why": "Ex.99.2 p.28 net cash cap rate 7.1%"
+        },
+        "ffo_fy1_rev_3m": {
+          "value": -1.1628,
+          "status": "estimated",
+          "why": "4.25(2026-10 호 FY1 2026) / 4.30(2026-07 호 FY1 2026) − 1 (bc −1.16279)"
+        },
+        "ffo_growth_fy2": {
+          "value": 3.5294,
+          "status": "estimated",
+          "why": "4.4 / 4.25 − 1 (bc 3.52941)"
+        }
+      },
+      "parent_cap_rate": 6.4,
+      "fy_switch_rev": 1.1905,
+      "capex_reserve_reported": {
+        "value": 300000,
+        "noi_economic": 5461304,
+        "economic_implied_cap_rate": 6.8547,
+        "why": "회사 capex reserve 300,000(가상)이면 derived: (5,761,304 − 300,000) / 79,672,495 × 100 (bc 6.85466)"
+      }
     }
   },
   "edgar": {
@@ -527,6 +619,16 @@
         "value": 205000,
         "locator": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding 2026-07-01..2026-09-30",
         "why": "3개월 가중평균(9개월 203,000은 버림)"
+      },
+      "debt_fair_value": {
+        "value": 8100,
+        "locator": "us-gaap:DebtInstrumentFairValue 2026-09-30",
+        "why": "fair value 표의 instant 값(가상, 2026-06-30 8,300은 다른 분기)"
+      },
+      "debt_carrying_value": {
+        "value": 8500,
+        "locator": "us-gaap:LongTermDebt 2026-09-30",
+        "why": "같은 표의 carrying value. DebtInstrumentCarryingAmount(원금 9,000)보다 LongTermDebt를 먼저"
       }
     },
     "dividends": [

@@ -28,6 +28,18 @@
 - `locator`: 원문 위치. exhibit text 파일 이름과 줄 번호, 표 이름, 원문 숫자를 그대로 쓴다. status와 상관없이 값이 있는데 `source`나 `locator`가 비어 있으면 script가 쓰지 않고(missing) 데이터 구멍에 올린다.
 - 회사 표에 그 줄이 없으면 `value: 0`, `status: reported`, `locator`에 표 이름, `note: "회사 표에 이 줄이 없음"`으로 둔다. 값을 못 찾은 것(`missing`)과 줄이 없는 것(0)은 다르다.
 - 못 찾았으면 `{"value": null, "status": "missing", "note": "이유"}`로 둔다. 추측으로 채우지 않는다.
+- 돈·주식 수 칸이 회사 표의 여러 줄 합이고 회사가 합계 줄을 내지 않으면, `value` 대신 `parts`에 줄마다 값을 적는다. 줄 하나는 위 값 하나와 같은 규칙(status, 유한한 숫자, source·locator)이다. script가 단위를 맞춰 더한다. agent가 더하지 않는 것은 숫자를 script만 계산하기 때문이다. 빼는 줄은 음수로 적는다.
+
+```json
+"jv_debt_pro_rata": {"unit": "USD thousands", "note": "미연결 JV 부채의 지분 몫",
+  "parts": [
+    {"value": 233829, "unit": "USD thousands", "status": "reported", "as_of": "2026-09-30", "source": "sec:8-K ... ex99.2",
+     "locator": "realtyincomeq32026supple.txt L24 (p.23) Cloud Capital Joint Venture 233,829"},
+    {"value": 659190, "unit": "USD thousands", "status": "reported", "as_of": "2026-09-30", "source": "sec:8-K ... ex99.2",
+     "locator": "realtyincomeq32026supple.txt L24 (p.23) Bellagio Las Vegas Joint Venture 659,190"}]}
+```
+
+  - 한 줄이라도 규칙을 어기면 그 칸은 missing과 데이터 구멍이고, 한 줄이 missing이면 그 칸도 missing이다. `edgar.py xbrl`은 parts가 있는 칸을 덮지 않는다.
 
 ## 칸
 
@@ -72,6 +84,13 @@
 | `noi_annualized` | 연환산 (cash) NOI | supplemental NOI 표 |
 | `price` | 주가 | `quote.py`가 넣는다 |
 | `common_shares_outstanding`, `op_units_outstanding` | 기말 보통주, OP unit | capitalization 표 |
+| `construction_in_progress` | 건설 중 자산(CIP, 개발 portfolio 투자 잔액). NOI와 같은 기준(pro-rata면 지분 몫) | supplemental 개발 표, NAV components |
+| `land_held` | 개발용 토지(land bank) 장부가. 운영 부동산의 토지(balance sheet Land)가 아니다. 없으면 0과 "회사 표에 이 줄이 없음" | land portfolio 표, NAV components |
+| `other_non_operating_assets` | NOI에 그 수익이 들어 있지 않은 그 밖의 부동산·투자(매각 예정 자산, 다른 JV 투자 등). NOI가 그 수익(대출 이자, JV 몫)을 넣었으면 넣지 않는다. 현금은 net debt에서 빼므로 넣지 않는다 | NAV components, balance sheet |
+| `jv_debt_pro_rata` | 미연결 JV 부채의 지분 몫 중 `total_debt`에 들어 있지 않은 것. 회사 net debt가 이미 pro-rata면 0과 note | JV 표, pro-rata debt 표 |
+| `capex_reserve` | 회사가 낸 연간 capex reserve(유지 capex + TI·LC). 내지 않으면 missing으로 두면 script가 AFFO bridge 줄로 대신한다 | NAV components, 보도자료 |
+| `debt_fair_value`, `debt_carrying_value` | 부채 fair value와 같은 표의 carrying value(대개 consolidated). 표에 없는 부채(revolver·CP)는 넣지 않는다 | 10-Q·10-K fair value 주석, XBRL `DebtInstrumentFairValue`·`LongTermDebt`. companyfacts에 그 분기가 없으면 10-Q 원문 |
+| `acquisitions_cap_rate`, `dispositions_cap_rate` | 그 분기 매입·매각 cap rate(%). 회사 정의(initial cash yield, stabilized cap rate)를 note에 쓴다 | supplemental 투자·매각 표 |
 
 ## series
 

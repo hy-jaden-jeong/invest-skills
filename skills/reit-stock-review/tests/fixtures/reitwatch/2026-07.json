@@ -2,6 +2,8 @@
  "schema": "reitwatch-parsed/1",
  "month": "2026-07",
  "as_of": "2026-06-30",
+ "fy1": 2026,
+ "fy2": 2027,
  "source": "(가상) check fixture",
  "rows": [
   {
@@ -9,7 +11,7 @@
    "name": "O (가상 row)",
    "subsector": "Free Standing (가상)",
    "price": 50.0,
-   "ffo_fy1": 4.25,
+   "ffo_fy1": 4.3,
    "ffo_fy2": 4.4,
    "p_ffo_fy1": 12.0,
    "div_yield": 6.5,

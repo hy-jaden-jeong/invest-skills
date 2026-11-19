@@ -12,6 +12,7 @@
 
 - 한 값이 두 상태에 걸리면(2차 자료이면서 오래됨, REITWatch 추정값이면서 오래됨) 더 나쁜 쪽을 status로 두고 나머지 사정은 `note`에 쓴다. 그래서 오래된 2차 자료는 `estimated`다. stale로 바꾸면 오래될수록 좋은 status가 되기 때문이다.
 - facts 값은 status와 상관없이 `source`·`locator`가 있어야 하고, `value`는 유한한 숫자여야 한다(NaN·무한대는 아님). 어기면 missing으로 내리고 데이터 구멍에 올린다. 모르는 status도 missing이다.
+- 회사 표의 여러 줄 합인 facts 값은 `parts`에 줄마다 적고, script가 단위를 맞춰 더한다. status는 줄의 가장 나쁜 것이고 모두 reported면 derived다. 한 줄이라도 규칙을 어기거나 missing이면 그 칸은 missing이다. agent가 더하지 않는다.
 - 결과 JSON에는 NaN·Infinity를 쓰지 않는다. 회사 FFO·AFFO가 0이면 tie-out은 실패이고 `diff_pct`는 null이다.
 
 ## FFO와 AFFO
@@ -100,8 +101,36 @@
 | `yield_spread_vs_10y`, `affo_yield_spread_vs_10y` | yield − DGS10 (%p) | DGS10은 macro-check snapshot. snapshot이 가격 기준일보다 7일 넘게 앞서면 stale |
 | `p_ffo_reitwatch`, `p_ffo_history_pctile` | REITWatch P/FFO FY1, 자기 history 중 최신값 이하 비율 | history 표본은 1·4·7·10월 호(가격 기준일이 분기말)와 최신 호다(reit-sector-scan과 같은 표본). 8개(`history_min_points`)보다 적으면 missing. 같은 출처(REITWatch)끼리 견준다 |
 | `peer_median_p_ffo`, `p_ffo_vs_peer` | 같은 subsector peer의 REITWatch P/FFO median, 비율 | reit-sector-scan의 parsed 파일을 읽기만 한다 |
+| `ffo_fy1_rev_3m` | 새 호 consensus FFO FY1 / 3개월 앞 호의 같은 회계연도 consensus FFO − 1(%) | REITWatch parsed. 앞 호 FY1이 같은 해면 FY1, FY가 바뀐 뒤면(2월 호부터) 앞 호 FY2와 견준다. 앞 호가 없거나 값이 0 이하면 missing. reit-sector-scan `ffo_fy1_rev_3m`과 같은 규칙이고 값도 같다. consensus라 estimated |
+| `ffo_growth_fy2` | consensus FFO FY2 / FY1 − 1(%) | REITWatch FFO growth column이 아니라 두 추정치로 셈한다(반올림 차이). estimated |
 
-REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `period_end`)보다 75일(`reitwatch_max_age_days`) 넘게 앞서면, 그 호에서 온 값(consensus FFO, `p_ffo_reitwatch`, `peer_median_p_ffo`, `p_ffo_history_pctile`)의 `note`에 나이를 쓰고 데이터 구멍에 `reitwatch`(stale)를 올린다. status는 estimated 그대로다(estimated가 stale보다 나쁘다). REITWatch 호는 그 달 중순이 지나서 올라오기도 해 최신 호의 기준일이 평소에도 30~60일 앞서므로 그보다 넉넉히 둔다.
+REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `period_end`)보다 75일(`reitwatch_max_age_days`) 넘게 앞서면, 그 호에서 온 값(consensus FFO, `p_ffo_reitwatch`, `peer_median_p_ffo`, `p_ffo_history_pctile`, `ffo_fy1_rev_3m`, `ffo_growth_fy2`)의 `note`에 나이를 쓰고 데이터 구멍에 `reitwatch`(stale)를 올린다. status는 estimated 그대로다(estimated가 stale보다 나쁘다). REITWatch 호는 그 달 중순이 지나서 올라오기도 해 최신 호의 기준일이 평소에도 30~60일 앞서므로 그보다 넉넉히 둔다.
+
+### valuation 기준선 (economic implied cap rate)
+
+명목 implied cap rate(`implied_cap_rate`)는 회사 NOI를 시총과 부채 전체로 나눈다. 그런데 EV에는 아직 NOI를 내지 않는 자산(건설 중 자산, 개발용 토지)이 들어 있고, 미연결 JV의 NOI 몫은 들어 있는데 그 부채는 빠져 있고, NOI에는 건물을 유지하는 데 해마다 드는 돈이 빠져 있지 않다. Green Street의 NAV 모델 설명("REIT Valuation: The NAV-based Pricing Model", Version 3.0 발췌, Green Street Advisors, 2014)은 이 셋을 이렇게 다룬다(우리 말로 옮김):
+
+- 운영 부동산만 forward cash NOI와 cap rate로 값을 매기고, 건설 중 자산(CIP)과 토지는 따로 본다. straight-line rent 같은 현금 아닌 임대료는 빼고 cash NOI로 본다.
+- JV는 회계가 지분법이라 보이지 않는 부채가 숨는다. 지분만큼 자산과 부채를 나눠(pro-rata) 넣어야 leverage가 보인다.
+- capex는 사람들이 가장 적게 세는 비용이고 섹터·자산 품질마다 크게 다르다. NOI에서 capex reserve를 뺀 "economic" cap rate로 견줘야 하고, 빼지 않은 명목 cap rate로 견주면 capex가 큰 portfolio가 싸 보인다.
+- 자산만 시가로 바꾸고 부채를 장부가로 두면 틀린다. 시장금리가 기존 금리와 크게 다르면 부채도 시가(mark-to-market)로 바꾼다.
+
+이 skill은 NAV를 만들지 않는다(목표가로 읽히기 때문이다). 위 조정을 시장이 매긴 EV 쪽에 거꾸로 넣어, 지금 가격이 운영 부동산에 매긴 cap rate만 본다. 사적 시장 cap rate나 NAV/share는 내지 않는다.
+
+| 지표 | 식 | 메모 |
+| --- | --- | --- |
+| `capex_reserve` | 회사가 낸 연간 capex reserve → 없으면 −(AFFO bridge의 recurring_capex + leasing_cost 줄, 분기) × 4 | 뒤쪽은 가정이라 estimated. `recurring_capex_to_noi_pct`와 같은 줄이다. 둘 다 없으면 missing(0으로 두지 않는다) |
+| `noi_economic` | 연환산 NOI − capex reserve | |
+| `non_operating_assets` | CIP + 개발용 토지 + 그 밖의 비운영 자산 | NOI에 그 수익이 들어 있지 않은 자산만 넣는다. NOI가 대출·JV 수익을 넣었으면 그 자산은 빼지 않는다 |
+| `jv_debt_pro_rata` | 미연결 JV 부채의 지분 몫 | `total_debt`에 들어 있지 않은 것만. 회사 net debt가 이미 pro-rata(PLD의 Prologis Share)면 0 |
+| `economic_ev` | 시총 + net debt + 우선주 + 미연결 JV 부채 − 비운영 자산 | 새 칸은 NOI와 같은 기준(pro-rata·consolidated)으로 적는다 |
+| `economic_implied_cap_rate` | `noi_economic` / `economic_ev` × 100 | EV가 0 이하면 내지 않는다. flag 없음 |
+| `debt_fair_value`, `debt_carrying_value` | 10-Q·10-K fair value 표의 fair value와 같은 표의 carrying value | 표에 합계가 없으면 줄마다 `parts`로 적고 script가 더한다 |
+| `debt_mtm_adjustment` | fair value − carrying value | 음수면 시장금리가 기존 금리보다 높아 부채 시가가 장부가보다 낮다 |
+| `economic_implied_cap_rate_debt_mtm` | `noi_economic` / (`economic_ev` + `debt_mtm_adjustment`) × 100 | fair value 표에 없는 부채(JV 부채, 표가 빼 둔 revolver·CP)는 장부가 그대로 |
+| `acquisitions_cap_rate`, `dispositions_cap_rate` | 회사 발표 최근 매입·매각 cap rate | 회사 정의 그대로(initial cash yield, stabilized cap rate 등이 회사마다 다르다). 사적 시장 거래 가격의 단서다 |
+| `tracker_subsector_cap_rate` | Nareit REIT Industry Tracker의 그 subsector implied cap rate(넷째 자리) | reit-sector-scan의 Tracker parsed 가장 최근 파일. subsector 대응은 `assets/tracker_map.json`, 자기 row에 값이 없으면 parent 값(estimated). Tracker 분기 끝날이 가격 기준일보다 150일(`tracker_max_age_days`) 넘게 앞서면 stale. Tracker parsed가 없으면 missing |
+| `implied_cap_rate_vs_tracker` | 명목 implied cap rate − Tracker subsector implied cap rate(%p) | Tracker 값도 시총과 부채로 셈한 명목 값이라 명목끼리만 차를 낸다 |
 
 ## flag
 

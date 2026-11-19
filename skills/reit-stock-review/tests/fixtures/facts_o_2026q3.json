@@ -479,6 +479,146 @@
    "source": "sec:8-K 0000726728-26-000056 ex99.1",
    "locator": "Ex.99.1 p.11 Weighted average number of common shares used for AFFO: Diluted 948,797",
    "note": ""
+  },
+  "construction_in_progress": {
+   "value": 272345,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.29 Development Activity, Pro-Rata Share: Ending CIP as of September 30, 2026 Total $ 272,345",
+   "note": "NOI와 같은 pro-rata 기준"
+  },
+  "land_held": {
+   "value": 0,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.11 Consolidated Balance Sheets, p.29 Development Activity",
+   "note": "회사 표에 이 줄이 없음(balance sheet Land는 운영 부동산의 토지)"
+  },
+  "other_non_operating_assets": {
+   "value": 0,
+   "unit": "USD thousands",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.21 Annualized Pro Forma Cash NOI: Plus: Cash income on loans and preferred equity investments",
+   "note": "회사 표에 이 줄이 없음(대출·우선주 투자 수익이 NOI에 들어 있어 빼지 않는다)"
+  },
+  "jv_debt_pro_rata": {
+   "parts": [
+    {
+     "value": 233829,
+     "unit": "USD thousands",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:8-K 0000726728-26-000056 ex99.2",
+     "locator": "Ex.99.2 p.23 Joint Ventures, Pro-Rata Share Debt: Cloud Capital Joint Venture 233,829",
+     "note": ""
+    },
+    {
+     "value": 659190,
+     "unit": "USD thousands",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:8-K 0000726728-26-000056 ex99.2",
+     "locator": "Ex.99.2 p.23 Joint Ventures, Pro-Rata Share Debt: Bellagio Las Vegas Joint Venture 659,190",
+     "note": ""
+    }
+   ],
+   "unit": "USD thousands",
+   "note": "미연결 JV(Unconsolidated) 부채의 지분 몫. total_debt는 consolidated라 들어 있지 않음"
+  },
+  "debt_fair_value": {
+   "parts": [
+    {
+     "value": 2771.2,
+     "unit": "USD millions",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:10-Q 0000726728-26-000059",
+     "locator": "10-Q note Fair Value: Term loans fair value $2,771.2",
+     "note": ""
+    },
+    {
+     "value": 36.2,
+     "unit": "USD millions",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:10-Q 0000726728-26-000059",
+     "locator": "10-Q note Fair Value: Mortgages payable fair value $36.2",
+     "note": ""
+    },
+    {
+     "value": 25002.0,
+     "unit": "USD millions",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:10-Q 0000726728-26-000059",
+     "locator": "10-Q note Fair Value: Notes and bonds payable fair value $25,002.0",
+     "note": ""
+    }
+   ],
+   "unit": "USD millions",
+   "note": "revolver·CP는 표에 없음(carrying이 fair value와 비슷)"
+  },
+  "debt_carrying_value": {
+   "parts": [
+    {
+     "value": 2785.2,
+     "unit": "USD millions",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:10-Q 0000726728-26-000059",
+     "locator": "10-Q note Fair Value: Term loans carrying value $2,785.2",
+     "note": ""
+    },
+    {
+     "value": 36.6,
+     "unit": "USD millions",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:10-Q 0000726728-26-000059",
+     "locator": "10-Q note Fair Value: Mortgages payable carrying value $36.6",
+     "note": ""
+    },
+    {
+     "value": 26788.3,
+     "unit": "USD millions",
+     "status": "reported",
+     "as_of": "2026-09-30",
+     "source": "sec:10-Q 0000726728-26-000059",
+     "locator": "10-Q note Fair Value: Notes and bonds payable carrying value $26,788.3",
+     "note": ""
+    }
+   ],
+   "unit": "USD millions",
+   "note": "fair value 표와 같은 줄"
+  },
+  "capex_reserve": {
+   "value": null,
+   "status": "missing",
+   "note": "회사가 capex reserve를 내지 않음"
+  },
+  "acquisitions_cap_rate": {
+   "value": 6.6,
+   "unit": "%",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.26 Investment Summary Q3 2026 Total real estate acquisitions Initial Weighted Average Cash Yield 6.6%",
+   "note": "회사 정의: initial weighted average cash yield"
+  },
+  "dispositions_cap_rate": {
+   "value": 7.1,
+   "unit": "%",
+   "status": "reported",
+   "as_of": "2026-09-30",
+   "source": "sec:8-K 0000726728-26-000056 ex99.2",
+   "locator": "Ex.99.2 p.28 Disposition Summary Q3 2026 Occupied Net Cash Capitalization Rate 7.1 %",
+   "note": "회사 정의: 점유 자산 매각의 net cash cap rate"
   }
  },
  "series": {
