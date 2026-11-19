@@ -16,6 +16,7 @@ import csv
 import datetime as dt
 import glob
 import json
+import math
 import os
 import re
 import shutil
@@ -420,8 +421,20 @@ def load_snapshot(path):
     return snap, path, ""
 
 
+def _finite(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def macro_entry(snap, sid):
-    return (snap.get("series") or {}).get(sid) or (snap.get("web") or {}).get(sid)
+    """snapshot의 series 하나. 값·변화가 유한한 숫자가 아니면(NaN 등) 그 칸을 비워 돌려준다(표에 NaN을 쓰지 않는다)."""
+    e = (snap.get("series") or {}).get(sid) or (snap.get("web") or {}).get(sid)
+    if not e:
+        return e
+    e = dict(e)
+    if e.get("value") is not None and not _finite(e["value"]):
+        e.update(value=None, status="missing", note="snapshot의 %s 값(%r)이 유한한 숫자가 아님" % (sid, e["value"]))
+    e["derived"] = {k: (v if v is None or _finite(v) else None) for k, v in (e.get("derived") or {}).items()}
+    return e
 
 
 def structural(snap, snap_note, macro_sector, smap, extra=None):
@@ -437,8 +450,9 @@ def structural(snap, snap_note, macro_sector, smap, extra=None):
     if macro_sector not in (snap.get("sectors") or {}):
         return {"flag": "review", "indicators": extra,
                 "note": "macro snapshot에 %s 섹터가 없음(macro.py fetch --sector %s)" % (macro_sector, macro_sector)}
-    inds, demand_n, worse, supply_up = [], 0, 0, 0
-    for spec in smap["indicators"].get(macro_sector, []):
+    inds, demand_n, worse, supply_up, supply_n = [], 0, 0, 0, 0
+    specs = smap["indicators"].get(macro_sector, [])
+    for spec in specs:
         e = macro_entry(snap, spec["id"]) or {}
         d = e.get("derived") or {}
         c3, c12 = d.get("chg_3m"), d.get("chg_12m")
@@ -450,6 +464,7 @@ def structural(snap, snap_note, macro_sector, smap, extra=None):
                 judged = "나빠짐" if bad else "아님"
                 worse += bad
             else:
+                supply_n += 1
                 up = c3 > 0 and c12 > 0
                 judged = "늘어남" if up else "아님"
                 supply_up += up
@@ -457,14 +472,21 @@ def structural(snap, snap_note, macro_sector, smap, extra=None):
                      "value": e.get("value"), "unit": e.get("unit"), "as_of": e.get("as_of"),
                      "status": e.get("status", "missing"), "chg_3m": c3, "chg_12m": c12,
                      "yoy_pct": d.get("yoy_pct"), "judged": judged, "note": spec.get("note", "")})
+    # supply가 macro에만 있어서 macro 쪽이 판단 못 하면 Tracker 지표는 표에만 두고 판정을 올리지 않는다
+    macro_review = None
+    if demand_n == 0:
+        macro_review = "3·12개월 변화가 있는 macro demand 지표가 없음"
+    elif any(sp["role"] == "supply" for sp in specs) and supply_n == 0:
+        macro_review = "3·12개월 변화가 있는 supply 지표가 없음"
+    if macro_review:
+        return {"flag": "review", "indicators": inds + extra,
+                "note": macro_review + ("(Tracker 지표는 표에만 두고 판정에 세지 않음)" if extra else "")}
     for e in extra:
         inds.append(e)
         if e["judged"] is not None:
             demand_n += 1
             worse += e["judged"] == "나빠짐"
-    if demand_n == 0:
-        flag, note = "review", "3·12개월 변화가 있는 demand 지표가 없음"
-    elif worse * 2 >= demand_n and supply_up > 0:
+    if worse * 2 >= demand_n and supply_up > 0:
         flag, note = "watch", "demand %d개 중 %d개 나빠짐, supply %d개 늘어남" % (demand_n, worse, supply_up)
     else:
         flag, note = "ok", "demand %d개 중 %d개 나빠짐, supply %d개 늘어남" % (demand_n, worse, supply_up)
@@ -492,8 +514,10 @@ def baa_yield(snap, snap_path, snap_note, dgs, today):
         return d
     b = macro_val(snap, snap_path, snap_note, "BAA10Y", today)
     if b["value"] is None or dgs["value"] is None:
+        why = "; ".join("%s: %s" % (sid, e["note"] or "값 없음") for sid, e in (("BAA10Y", b), ("DGS10", dgs))
+                        if e["value"] is None)
         return val(None, "Percent", "missing", None, "", "",
-                   snap_note if snap is None else "snapshot에 DBAA도, BAA10Y와 DGS10도 없음")
+                   snap_note if snap is None else "snapshot에 DBAA 값이 없고 BAA10Y + DGS10을 낼 수 없음(%s)" % why)
     return val(round(b["value"] + dgs["value"], 4), "Percent", tracker.derive(b["status"], dgs["status"]),
                min(b["as_of"], dgs["as_of"]), "macro-snapshot:" + snap_path, "series.BAA10Y + series.DGS10",
                "; ".join(x for x in ("Baa = BAA10Y %s(%s) + DGS10 %s(%s)" % (b["value"], b["as_of"], dgs["value"],
@@ -593,10 +617,12 @@ def build_sectors(docs, snap, snap_path, snap_note, smap, today, tdoc=None, tpat
                                            "%d종목 median. FY2 / FY1 consensus FFO - 1" % len(grs),
                                            "" if grs else "FY1·FY2 FFO가 모두 있는 종목이 없음")
         # Tracker
-        tcols, tinds, t_gap = tracker.columns(tdoc, tpath, tnote, tmap.get(sub), dgs, baa, today)
+        tcols, tinds, uncovered = tracker.columns(tdoc, tpath, tnote, tmap.get(sub), dgs, baa, today)
         row["tracker"] = dict({"name": (tmap.get(sub) or {}).get("name"),
                                "parent": (tmap.get(sub) or {}).get("parent")}, **tcols)
-        t_missing += sum(1 for v in tcols.values() if v["status"] == "missing")
+        # Tracker가 원래 내지 않는 칸만 exit에서 뺀다. 입력(macro·history)이 모자라 빈 칸은 missing으로 센다
+        t_missing += sum(1 for k, v in tcols.items() if v["status"] == "missing" and k in uncovered)
+        missing += sum(1 for k, v in tcols.items() if v["status"] == "missing" and k not in uncovered)
         ms = smap["subsectors"].get(sub)
         row["macro_sector"] = ms
         row["structural"] = structural(snap, snap_note, ms, smap, tinds)
@@ -1038,6 +1064,60 @@ def run_check():
         _, c9 = build_sectors(full, snap, snap_p, "", smap, today, None, None, "없음(가상)")
         ok((c8, c9) == (0, 2), "REITWatch 칸이 다 차면 exit 0, Tracker만 없어도 exit 2 (got %s %s)" % (c8, c9))
         ok(all(k in smap["tracker"] for k in smap["subsectors"]), "sector_map.json tracker 대응표가 subsector를 모두 덮음")
+
+        # 12. 2차 검증 결함: macro가 판단 못 하면 Tracker로 판정을 올리지 않음, Tracker 칸의 입력 부족은 exit 2
+        def snap_with(change):
+            s2 = json.loads(json.dumps(snap))
+            change(s2["series"])
+            return s2
+
+        def off_missing(series):
+            for spec in smap["indicators"]["office"]:
+                if spec["id"] in series:
+                    series[spec["id"]].update(value=None, status="missing", note="받기 실패(가상)", derived={})
+        o12, _ = build_sectors(docs, snap_with(off_missing), snap_p, "", smap, today, tdoc2, tpath2, "")
+        st12 = {r["subsector"]: r for r in o12["subsectors"]}["Office"]["structural"]
+        ok(st12["flag"] == "review" and any(i["id"].startswith("tracker:") for i in st12["indicators"])
+           and "Tracker" in st12["note"],
+           "F2 macro 섹터 지표가 모두 missing이면 Tracker 지표가 있어도 review(Tracker는 표에만) (got %s: %s)" % (
+               st12["flag"], st12["note"]))
+        o13, _ = build_sectors(docs, snap_with(lambda s: s["TLOFCONS"].update(derived={})), snap_p, "", smap, today,
+                               tdoc2, tpath2, "")
+        st13 = {r["subsector"]: r for r in o13["subsectors"]}["Office"]["structural"]
+        ok(st13["flag"] == "review" and "supply" in st13["note"],
+           "F2 supply 지표가 있는 섹터인데 supply 값이 없으면 macro 판정은 review (got %s)" % st13["flag"])
+        _, c14 = build_sectors(full, snap_with(lambda s: s["BAA10Y"].update(value=None, status="missing",
+                                                                            note="받기 실패(가상)")),
+                               snap_p, "", smap, today, tdoc2, tpath2, "")
+        o14, _ = build_sectors(docs, snap_with(lambda s: s["BAA10Y"].update(value=None, status="missing",
+                                                                            note="받기 실패(가상)")),
+                               snap_p, "", smap, today, tdoc2, tpath2, "")
+        ok(c14 == 2 and "BAA10Y" in o14["baa"]["note"] and "DGS10도" not in o14["baa"]["note"],
+           "F3 Tracker가 내는 칸(cap_spread_baa)이 BAA10Y가 없어 missing이면 exit 2, note는 실제 빠진 입력 (got %s, %s)" % (
+               c14, o14["baa"]["note"]))
+        short = json.loads(json.dumps(tdoc2))
+        for r in short["rows"]:
+            h = r["history"].get("implied_cap_rate", {})
+            r["history"]["implied_cap_rate"] = {k: h[k] for k in sorted(h)[-5:]}
+        _, c15 = build_sectors(full, snap, snap_p, "", smap, today, short, tpath2, "")
+        ok(c15 == 2, "F3 cap rate history가 짧아 percentile이 missing이면 exit 2 (got %s)" % c15)
+        noocc = json.loads(json.dumps(tdoc2))
+        for r in noocc["rows"]:
+            if r["name"] in ("Free Standing", "Retail"):
+                r["occupancy"] = None
+        o16, c16 = build_sectors(full, snap, snap_p, "", smap, today, noocc, tpath2, "")
+        ok(c16 == 0 and o16["summary"]["tracker_missing_cells"] == 3,
+           "Tracker가 그 subsector·칸을 내지 않으면(occupancy와 변화 3칸) exit에 세지 않고 tracker_missing_cells에 셈 (got %s %s)" % (
+               c16, o16["summary"]["tracker_missing_cells"]))
+        for sid in ("BAA10Y", "DGS10"):
+            try:
+                o17, c17 = build_sectors(full, snap_with(lambda s, sid=sid: s[sid].update(value=float("nan"))),
+                                         snap_p, "", smap, today, tdoc2, tpath2, "")
+                json.dumps(o17, allow_nan=False)
+                good = c17 == 2 and o17["baa"]["value"] is None
+            except ValueError:
+                good = False
+            ok(good, "macro snapshot %s가 NaN이면 그 값 missing, 표는 NaN 없이 계속(exit 2)" % sid)
 
     log("check: %d개 실패" % len(fails) if fails else "check: 모두 통과")
     return 2 if fails else 0

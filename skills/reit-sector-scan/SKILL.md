@@ -44,7 +44,7 @@ REITWatch의 종목 row로 subsector valuation을 다시 세고, 자기 history�
 
 사용자의 말을 subsector 이름으로 바꾼다. 트리플넷·net lease는 `Free Standing`, 물류·창고는 `Industrial`, 아파트는 `Apartments`, 쇼핑몰은 `Regional Malls`, 호텔은 `Lodging/Resorts`, 데이터센터는 `Data Centers`, 헬스케어는 `Health Care`다. 이름은 `peers`가 틀린 이름에 내는 목록에서 고른다.
 
-exit code: 0이면 표의 칸이 다 찼다. 2면 계산은 했지만 missing 칸이 있다(history가 짧음, macro snapshot 없음, backfill 중 못 받은 호, 3개월 앞 호 없음, Tracker parsed 없음). Tracker 파일은 있는데 Tracker가 그 subsector 값을 내지 않는 칸(예: Free Standing의 SS NOI)은 정상이라 exit 2로 세지 않고 `summary.tracker_missing_cells`에만 센다. 1이면 입력이 틀렸거나 받은 것이 없다. 2여도 표를 쓰고, 빈 칸과 이유(`note`)를 "데이터 구멍"에 적는다.
+exit code: 0이면 표의 칸이 다 찼다. 2면 계산은 했지만 missing 칸이 있다(history가 짧음, macro snapshot 없음, backfill 중 못 받은 호, 3개월 앞 호 없음, Tracker parsed 없음, Tracker 칸의 입력(BAA10Y·DGS10, cap rate history 8개 분기)이 모자람). Tracker 파일은 있는데 Tracker가 그 subsector 값을 내지 않는 칸(예: Free Standing의 SS NOI)은 정상이라 exit 2로 세지 않고 `summary.tracker_missing_cells`에만 센다. Tracker가 낸 값으로 셈하는 칸이 입력 때문에 비면 그것은 센다. 빈 칸이 정상인지 데이터 구멍인지 exit code로 가르기 위해서다. 1이면 입력이 틀렸거나 받은 것이 없다. 2여도 표를 쓰고, 빈 칸과 이유(`note`)를 "데이터 구멍"에 적는다.
 
 ## 섹터 표의 값
 
@@ -56,7 +56,7 @@ exit code: 0이면 표의 칸이 다 찼다. 2면 계산은 했지만 missing �
 - `spread_dgs10`: median 배당수익률 − macro snapshot의 DGS10(%p). REITWatch 가격 기준일과 DGS10 기준일이 다르고, 두 날짜가 `note`에 있다. snapshot이 7일보다 오래됐으면 `stale`이다.
 - `rel_tr_3y`·`rel_tr_5y`: subsector 종목의 3·5년 total return median − 같은 호 equity 종목 전체 median(%p). 지금 상장된 종목만 들어 망한 종목이 빠진다(survivorship).
 - `ffo_rev_3m_median`: 종목마다 consensus FFO FY1이 3개월 앞 호(`revision_vs_month`)보다 몇 % 바뀌었는지의 median. 3개월 안에 FY가 바뀌었으면(REITWatch는 2월 호부터 FY1이 새해다) 새 호 FY1을 앞 호 FY2와 견준다. 같은 회계연도 column이 없거나 앞 호 값이 0 이하인 종목은 뺀다. `locator`에 종목 수가 있다.
-- `ffo_growth_fy2_median`: 종목마다 consensus FFO FY2 / FY1 − 1(%)의 median. REITWatch의 FFO growth column은 반올림 전 값으로 셈해 조금 달라서(O 2026-10 호: column 4.2, FY2/FY1 4.1379) 쓰지 않는다.
+- `ffo_growth_fy2_median`: 종목마다 consensus FFO FY2 / FY1 − 1(%)의 median. REITWatch의 FFO growth column은 반올림 전 값으로 셈해 조금 달라서(예: column 3.5, FY2/FY1 3.4583(가상)) 쓰지 않는다.
 - `history_points`: 표본 수. `history_months`에 표본 호 목록이 있다.
 - mortgage subsector(Home Financing, Commercial Financing)는 REITWatch에 FFO가 없어 표에서 빼고 `excluded`에 둔다. `peers`로는 볼 수 있다.
 - subsector 이름은 호마다 바뀔 수 있다(2015년 `Timber`·`Mixed`). history는 같은 이름끼리만 잇는다. 이름이 바뀐 subsector는 `history_points`가 작다.
@@ -66,7 +66,7 @@ exit code: 0이면 표의 칸이 다 찼다. 2면 계산은 했지만 missing �
 `sectors`는 `$INVEST_DATA_DIR/tracker/parsed/`의 가장 최근 파일을 읽어 subsector마다 `tracker`에 칸을 둔다. 표 머리 `tracker`에 분기·기준일(분기 끝날)·출처가 있다.
 
 - REITWatch subsector와 Tracker row의 대응은 `assets/sector_map.json`의 `tracker`다. Tracker가 그 subsector 값을 내지 않으면 그 위 sector(`parent`, 예: Free Standing → Retail) 값을 `estimated`로 쓰고 note에 "Retail 전체 값"이라고 적는다. 보고서에도 parent 값임을 쓴다.
-- `implied_cap_rate`: Tracker의 subsector implied cap rate(%). `locator`가 `Data Q3 2026!DD423`처럼 XLSX 셀 위치다.
+- `implied_cap_rate`: Tracker의 subsector implied cap rate(%). `locator`가 `Data Q3 2026!DD423`처럼 XLSX cell 위치다.
 - `implied_cap_rate_pctile`: 같은 row의 2015Q1~최신 분기 값 중 최신값 이하 비율(%). cap rate는 높을수록 과거보다 싸다는 쪽이다. 표본이 8개 미만이면 missing.
 - `cap_spread_dgs10`: implied cap rate − DGS10(%p). `cap_spread_baa`: implied cap rate − Baa 회사채 수익률(%p). Baa는 macro snapshot에 DBAA가 있으면 그것, 없으면 BAA10Y + DGS10이다(`baa`). cap rate 기준일(분기 끝날)과 금리 기준일이 다르고 둘 다 note에 있다.
 - `ss_noi_yoy`·`ss_noi_yoy_avg_4q`: same-store NOI YoY(%)의 최신값과 최근 4개 분기 평균.
@@ -94,8 +94,8 @@ REITWatch subsector와 macro-check 섹터의 대응, 섹터 지표마다의 dema
 
 싸 보이는 섹터가 실제로는 수요가 줄고 공급이 느는 중일 수 있다. script가 `structural`에 판정을 내고, agent가 메모를 쓴다.
 
-- script의 판정(`structural.indicators`의 `judged`): demand 지표는 3개월·12개월 변화가 둘 다 나쁜 방향이면 "나빠짐", supply 지표는 둘 다 양수면 "늘어남"이다. 값이 있는 demand 지표의 절반 이상이 나빠지고 supply가 하나라도 늘면 `watch`, 지표가 없으면 `review`, 아니면 `ok`다. `context` 지표는 표에만 놓는다.
-- Tracker의 두 지표도 demand로 센다(id `tracker:ss_noi_yoy`, `tracker:occupancy`). SS NOI는 최신값과 4분기 평균이 둘 다 음수면, occupancy는 1·4분기 변화가 둘 다 음수면 "나빠짐"이다. 그 subsector 자기 값만 세고 parent 값(estimated)은 세지 않는다. supply는 macro snapshot에만 있어서 macro 쪽이 `review`면 Tracker 지표는 표에만 놓는다.
+- script의 판정(`structural.indicators`의 `judged`): demand 지표는 3개월·12개월 변화가 둘 다 나쁜 방향이면 "나빠짐", supply 지표는 둘 다 양수면 "늘어남"이다. 값이 있는 demand 지표의 절반 이상이 나빠지고 supply가 하나라도 늘면 `watch`, 값이 있는 macro demand 지표가 없거나 supply 지표가 있는 섹터인데 supply 값이 없으면 `review`, 아니면 `ok`다(supply 지표가 원래 없는 섹터 net_lease·self_storage는 `ok`가 될 수 있다). `context` 지표는 표에만 놓는다.
+- Tracker의 두 지표도 demand로 센다(id `tracker:ss_noi_yoy`, `tracker:occupancy`). SS NOI는 최신값과 4분기 평균이 둘 다 음수면, occupancy는 1·4분기 변화가 둘 다 음수면 "나빠짐"이다. 그 subsector 자기 값만 세고 parent 값(estimated)은 세지 않는다. supply는 macro snapshot에만 있어서 macro 쪽이 `review`면 Tracker 지표는 표에만 놓고 판정을 올리지 않는다(`note`에 "Tracker 지표는 표에만"이 붙는다).
 - `watch`인 subsector마다 메모를 쓴다.
   1. 나빠진 demand 지표와 늘어난 supply 지표를 값·3·12개월 변화·기준일과 함께 옮긴다. snapshot 숫자를 그대로 쓴다.
   2. valuation 칸과 나란히 놓는다. 예: "P/FFO median이 history 하위 20%지만, 같은 기간 수요 지표 둘이 3·12개월 모두 줄었고 건설 지출은 12개월에 +33% 늘었다."
@@ -160,7 +160,7 @@ Tracker parsed(`$INVEST_DATA_DIR/tracker/parsed/<YYYYQn>.json`)도 읽기만 한
 
 - 가장 최근 파일: `ls "${INVEST_DATA_DIR:-$HOME/invest-data}"/tracker/parsed/*.json | tail -1`. 첫 칸이 `"schema": "nareit-tracker/1"`인지 본다.
 - 머리: `quarter`(YYYYQn), `as_of`(분기 끝날), `source`(XLSX URL), `sheet`(예 `Data Q3 2026`), `units`(칸마다 단위), `missing_blocks`(이번 파일에 없는 칸), `quarters`(history의 분기 목록).
-- `rows`: Tracker row 이름(`name`, 앞 공백 없음. `Free Standing`, `Retail`, `All Equity REITs` …)마다 최신 분기 값 `implied_cap_rate`, `cap_rate_4q`, `ss_noi_yoy`, `occupancy`, `debt_to_ebitda`, `debt_to_market_assets`, `payout`, `dev_pipeline`, `property_holdings`, `dev_pipeline_pct_assets`(없으면 null), `cells`(칸 → 셀 위치, locator로 쓴다), `history`(칸 → {분기: 값}, 빈 분기는 없음).
+- `rows`: Tracker row 이름(`name`, 앞 공백 없음. `Free Standing`, `Retail`, `All Equity REITs` …)마다 최신 분기 값 `implied_cap_rate`, `cap_rate_4q`, `ss_noi_yoy`, `occupancy`, `debt_to_ebitda`, `debt_to_market_assets`, `payout`, `dev_pipeline`, `property_holdings`, `dev_pipeline_pct_assets`(없으면 null), `cells`(칸 → cell 위치, locator로 쓴다), `history`(칸 → {분기: 값}, 빈 분기는 없음).
 - REITWatch subsector 이름과 Tracker row 이름의 대응은 `<skill 폴더>/assets/sector_map.json`의 `tracker`다. 다른 skill은 이 표를 복사해 쓴다(import하지 않는다).
 - 파일이 없거나 분기 끝날이 150일 넘게 지났으면 이 skill이 설치돼 있을 때 `tracker fetch --quarter latest`를 돌리고, 아니면 그 칸을 missing(오래됐으면 stale)으로 둔다.
 

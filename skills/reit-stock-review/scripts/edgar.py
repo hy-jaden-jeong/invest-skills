@@ -170,13 +170,18 @@ def read_config():
 
 
 def contact_ua():
-    """(값, 어디서). SEC_USER_AGENT 환경 변수 > config.json sec_user_agent > (None, None)."""
+    """(값, 어디서). SEC_USER_AGENT 환경 변수 > config.json sec_user_agent > (None, None).
+    ASCII가 아닌 값은 쓰지 않는다(HTTP header에 한글을 넣을 수 없다)."""
     env = os.environ.get("SEC_USER_AGENT", "").strip()
-    if env:
+    if env and env.isascii():
         return env, "env:SEC_USER_AGENT"
+    if env:
+        log("SEC_USER_AGENT에 영문·숫자·기호(ASCII)가 아닌 글자가 있어 쓰지 않음: 이름과 이메일을 영문으로 다시 준다")
     cfg = str(read_config().get("sec_user_agent") or "").strip()
-    if cfg:
+    if cfg and cfg.isascii():
         return cfg, "config:" + config_path()
+    if cfg:
+        log("config.json sec_user_agent가 ASCII가 아니라 쓰지 않음: edgar.py config --user-agent로 영문으로 다시 저장한다")
     return None, None
 
 
@@ -882,6 +887,7 @@ def run_check():
                "연락처가 없으면 www.sec.gov 요청 전에 멈추고 config 저장을 안내")
             import contextlib
             import io as _io
+            # 아래 연락처는 모두 가상이다(HTTP header라 ASCII만 되어 값에 "(가상)"을 붙이지 못한다)
             with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(_io.StringIO()):
                 bad_cfg = main(["config", "--user-agent", "nomail"])
                 bad_ascii = main(["config", "--user-agent", "테스트 test@example.com"])
@@ -890,8 +896,13 @@ def run_check():
                and config_path().startswith(tmp), "config: 이메일 없는 값은 거절, 저장은 데이터 폴더의 config.json")
             ok(contact_ua()[1].startswith("config:") and user_agent("https://www.sec.gov/x").startswith("Test User"),
                "config.json의 sec_user_agent를 www.sec.gov에 씀")
-            os.environ["SEC_USER_AGENT"] = "Env User env@example.com (가상)"
-            ok(contact_ua() == ("Env User env@example.com (가상)", "env:SEC_USER_AGENT"), "순서: 환경 변수 > config")
+            os.environ["SEC_USER_AGENT"] = "Env User env@example.com"
+            ok(contact_ua() == ("Env User env@example.com", "env:SEC_USER_AGENT"), "순서: 환경 변수 > config")
+            os.environ["SEC_USER_AGENT"] = "테스트 env@example.com"
+            with contextlib.redirect_stderr(_io.StringIO()) as err:
+                got_ua = contact_ua()
+            ok(got_ua[1].startswith("config:") and "ASCII" in err.getvalue(),
+               "SEC_USER_AGENT가 ASCII가 아니면 쓰지 않고(config로) 영문으로 다시 주라고 알림 (got %s)" % (got_ua[1],))
             os.environ.pop("SEC_USER_AGENT", None)
             ok(mask_ua("Test User test@example.com") == "Test User t***@example.com", "config 출력은 이메일 일부를 가림")
             os.remove(config_path())

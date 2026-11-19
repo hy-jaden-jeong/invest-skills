@@ -408,8 +408,9 @@ COLUMNS = ["implied_cap_rate", "implied_cap_rate_pctile", "cap_spread_dgs10", "c
 def columns(doc, doc_path, doc_note, entry, dgs, baa, today):
     """한 subsector의 Tracker 칸과 구조 신호에 넣을 지표. entry = sector_map.json tracker 항목({"name", "parent"}).
 
-    covered=False는 Tracker 파일은 있는데 그 subsector·칸을 Tracker가 내지 않는 경우다(빈 칸이 정상이라 exit 2로 세지 않는다)."""
-    out, inds = {}, []
+    (칸, 지표, uncovered). uncovered는 Tracker 파일은 있는데 Tracker가 그 subsector·칸을 내지 않아 빈 칸 이름이다
+    (빈 칸이 정상이라 exit 2로 세지 않는다). 입력(macro, history)이 모자라 빈 칸은 uncovered가 아니다."""
+    out, inds, uncovered = {}, [], set()
     units = {"implied_cap_rate": "Percent", "implied_cap_rate_pctile": "Percent",
              "cap_spread_dgs10": "Percent points", "cap_spread_baa": "Percent points", "ss_noi_yoy": "Percent",
              "ss_noi_yoy_avg_4q": "Percent", "occupancy": "Percent", "occupancy_chg_1q": "Percent points",
@@ -418,7 +419,7 @@ def columns(doc, doc_path, doc_note, entry, dgs, baa, today):
         note = doc_note if doc is None else "sector_map.json의 tracker 대응표에 없는 subsector"
         for k in COLUMNS:
             out[k] = _v(None, units[k], "missing", None, "", "", note)
-        return out, inds, doc is None
+        return out, inds, set() if doc is None else set(COLUMNS)
     qtr, as_of = doc["quarter"], doc["as_of"]
     src = "nareit-tracker:" + doc["source"]
     rows = {r["name"]: r for r in doc["rows"]}
@@ -442,6 +443,8 @@ def columns(doc, doc_path, doc_note, entry, dgs, baa, today):
 
     # implied cap rate와 자기 history percentile
     r, st, note = pick("implied_cap_rate")
+    if r is None:
+        uncovered.update(("implied_cap_rate", "implied_cap_rate_pctile", "cap_spread_dgs10", "cap_spread_baa"))
     cap = r["implied_cap_rate"] if r else None
     out["implied_cap_rate"] = _v(cap, "Percent", st, as_of, src if r else "", loc(r, "implied_cap_rate") if r else "", note)
     if r:
@@ -469,6 +472,8 @@ def columns(doc, doc_path, doc_note, entry, dgs, baa, today):
 
     # SS NOI YoY: 최신값과 최근 4분기 평균
     r, st, note = pick("ss_noi_yoy")
+    if r is None:
+        uncovered.update(("ss_noi_yoy", "ss_noi_yoy_avg_4q"))
     out["ss_noi_yoy"] = _v(r["ss_noi_yoy"] if r else None, "Percent", st, as_of, src if r else "",
                            loc(r, "ss_noi_yoy") if r else "", note)
     avg = None
@@ -490,6 +495,8 @@ def columns(doc, doc_path, doc_note, entry, dgs, baa, today):
 
     # occupancy: 최신값, 1·4분기 변화
     r, st, note = pick("occupancy")
+    if r is None:
+        uncovered.update(("occupancy", "occupancy_chg_1q", "occupancy_chg_4q"))
     out["occupancy"] = _v(r["occupancy"] if r else None, "Percent", st, as_of, src if r else "",
                           loc(r, "occupancy") if r else "", note)
     chg = {}
@@ -513,7 +520,9 @@ def columns(doc, doc_path, doc_note, entry, dgs, baa, today):
 
     # development pipeline / 보유 자산
     r, st, note = pick("dev_pipeline_pct_assets")
+    if r is None:
+        uncovered.add("dev_pipeline_pct_assets")
     out["dev_pipeline_pct_assets"] = _v(r["dev_pipeline_pct_assets"] if r else None, "Percent",
                                         derive(st) if r else "missing", as_of, src if r else "",
                                         loc(r, "dev_pipeline_pct_assets") if r else "", note)
-    return out, inds, False
+    return out, inds, uncovered
