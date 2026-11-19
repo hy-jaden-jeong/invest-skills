@@ -154,6 +154,48 @@ REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `pe
 | `interest_coverage` | `interest_coverage` | 3.0x 미만 | 2.0x 미만(S&P EBITDA/interest 1.8x 아래가 aggressive) |
 | `covenant_headroom` | `covenant_headroom_min_pct` | 15% 미만 | 5% 미만 |
 
+## 등급(scorecard)
+
+metrics 맨 위 `scorecard`에 축 5개의 등급을 낸다. 기준은 `assets/scorecard.json`이고 모두 경험칙이다. 축마다 가장 약한 고리로 매겨 숨은 위험이 평균에 묻히지 않게 한다. 등급은 판단 재료이고 매수·매도 권유가 아니다.
+
+- 등급: 넉넉(`ample`), 보통(`moderate`), 빠듯(`tight`), 위험(`risk`), 판정 못 함(`unknown`). valuation 축은 좋고 나쁨이 아니라 위치라 낮은 편(`low`)·중간(`mid`)·높은 편(`high`)이다.
+- 축마다 `key`, `name`, `grade`, `grade_name`, `base_grade`(내림 전), `downgrade`(`null` 또는 `{notches, reasons}`), `rule`, `evidence`(근거 지표 목록)를 낸다. 근거 지표마다 `metric`, `name`, `value`, `unit`, `status`, `role`(core·fallback·downgrade·side), `grade`, `grade_name`, `criterion`(기준 문구), `note`(값이 없으면 "공시 없음"·"가볍게 봄"·"없음"과 이유)가 있다. 지표만 한 단계 보수적으로 본 경우 `grade_used`가 따로 있다.
+- 축의 핵심 지표가 모두 없음·공시 없음·가볍게 봄이면 판정 못 함이다. 일부만 있으면 있는 것으로 매긴다.
+- 일반 배당주 경로는 축이 없다(`axes: []`).
+
+| 축 | 핵심 지표 | 매기는 법 |
+| --- | --- | --- |
+| 배당 여력 | `affo_payout_forward`(없으면 `affo_payout_quarter`) | AFFO payout이 없으면 `ffo_payout_forward`를 같은 구간에 넣고 한 단계 내린다. 기준 해(분기의 해)에서 3년 안에 배당 컷(`dividend_cuts`)이 있으면 한 단계 내린다 |
+| 부채 | `net_debt_to_ebitdare`, `interest_coverage` | 나쁜 쪽. `covenant_headroom_min_pct`가 thresholds.json `covenant_headroom_pct` watch(15%) 미만이면 한 단계 내린다 |
+| 만기·유동성 | `maturity_max_year_pct`, `liquidity_coverage_24m`, `refi_impact_affo_pct` | 가장 나쁜 것. AFFO를 내지 않아 `refi_impact_ffo_pct`로 보면 그 지표만 한 단계 보수적으로 본다. 24개월 안 갚을 것이 없으면 coverage는 넉넉 |
+| 임차인 집중 | `top1_tenant_pct`, `top10_tenant_pct` | 나쁜 쪽. `wale_years`·`occupancy_pct`는 곁에(side) 보이기만 한다 |
+| valuation 위치 | `p_ffo_history_pctile`, `p_ffo_vs_peer` | 낮은 편 −1, 중간 0, 높은 편 +1의 합이 음수면 낮은 편, 양수면 높은 편, 0이면 중간 |
+
+구간(넉넉 | 보통 | 빠듯 | 위험 경계)과 근거:
+
+| 지표 | 경계 | 근거 |
+| --- | --- | --- |
+| AFFO·FFO payout | 75 / 85 / 100% | 85·100은 flag `affo_payout`의 watch·alert(thresholds.json, kanchi-dividend-sop) 그대로다. 75 아래를 넉넉으로 둔 것은 이 skill의 경험칙(배당 뒤 AFFO의 4분의 1 넘게 남아 유지 capex 오차와 배당 성장을 덮는다) |
+| net debt/EBITDAre | 5.0 / 6.0 / 7.0x | 6.0·7.0은 flag watch·alert. CaseMark가 적은 섹터 범위 5.0~7.0x의 아래 끝 5.0 미만을 넉넉으로 |
+| interest coverage | 4.0 / 3.0 / 2.0x | 3.0·2.0은 flag watch·alert(S&P EBITDA/interest 1.8x 아래 aggressive). 4.0 이상을 넉넉으로 둔 것은 이 skill의 경험칙(watch보다 이익이 4분의 1 더 줄어도 3.0x를 지킨다) |
+| 가장 큰 만기 해 비중 | 10 / 15 / 20% | 15·20은 flag watch·alert(CaseMark). 10% 미만이면 한 해 차환이 부채의 10분의 1을 넘지 않는다 |
+| 24개월 liquidity coverage | 2.0 / 1.25 / 1.0x | 1.0x 아래면 24개월 동안 자본시장에 기대야 한다(이 지표의 정의). 1.25x는 만기·개발비 계획이 어긋날 여유 4분의 1, 2.0x는 두 배를 손에 쥔 것(이 skill의 경험칙) |
+| 차환 이자 증가/AFFO | 2 / 5 / 10% | 이 skill의 경험칙: 2% 아래는 한 해 배당 성장분 안, 5%는 payout 85%(watch) 회사가 배당 여유의 3분의 1을 쓰는 크기, 10%는 그 대부분 |
+| 최대 임차인 비중 | 5 / 10 / 20% | 이 skill의 경험칙: 분산된 net lease 포트폴리오는 최대 임차인이 5% 안팎이다(2026Q3 O 3.3%, NNN 4.1%). 20% 넘으면 한 임차인의 신용 사건이 배당 여력을 바로 흔든다(single-tenant 집중) |
+| 상위 10 임차인 비중 | 25 / 40 / 60% | 같은 경험칙. 60% 넘으면 소수 master lease에 기댄 구조 |
+| P/FFO history percentile | 33.3 / 66.7 | 자기 history를 셋으로 나눈 아래·가운데·위 |
+| P/FFO / peer median | 0.9 / 1.1 | peer median의 ±10% 밖을 낮은 편·높은 편으로 |
+
+경계 숫자는 flag 기준과 어긋나지 않게 watch·alert를 `assets/thresholds.json`에서 읽고(`scorecard.json`에는 `"watch"`·`"alert"`로만 적는다), 그 밖의 숫자만 `scorecard.json`에 둔다. 기준 문구(`criterion`)는 그 구간을 그대로 옮긴다.
+
+## 가볍게 보기·사건·peers·ticker 별칭
+
+- `depth`: metrics 맨 위에 `deep`·`light`. light는 `references/facts-schema.md` "가볍게 보기"의 핵심 칸으로 셈하고, 그 밖의 빈 지표는 `not_assessed`(가볍게 봄, `summary.metrics_not_assessed`)로 exit 2에 세지 않는다. 핵심 칸이 비면 `summary.light_core_missing`과 exit 2.
+- `events`: facts `events` 중 규칙(type, YYYY-MM-DD 날짜, title, source, quote, 웹이면 URL)에 맞는 것을 날짜 최신순으로 옮긴다. 항목마다 `type`, `type_name`, `date`, `title`, `source`, `url`, `quote`, `locator`, `note`. 어긴 항목은 데이터 구멍(ignored).
+- `reit_calc.py peers T [--with A,B] [--period P]`: REITWatch parsed 최신 호에서 T와 같은 subsector, 시총(`mkt_cap`, 백만 달러)의 log 비율이 가장 가까운 2개(같으면 ticker 차례). `--with`면 그 종목. 종목마다 `$INVEST_DATA_DIR/tickers/<종목>/metrics/<P>.json`이 같은 분기로 있으면 `reuse: true`·`metrics_path`·`depth`(없는 옛 metrics는 deep), 없으면 `action: make_light`와 facts 경로. 고르지 않은 같은 subsector 종목 중 같은 분기 metrics가 있는 것은 `reusable_others`. `P`가 없으면 T의 가장 늦은 metrics(없으면 facts) 분기. REITWatch parsed가 없거나 T row가 없거나 2개를 못 고르면 exit 2와 `note`에 안내.
+- ticker 별칭: `assets/ticker_aliases.json`(`{"MPT": ["MPW"]}`)과 facts `former_tickers`를 합쳐 REITWatch history와 3개월 앞 호 row를 예전 ticker로도 찾는다. 이은 호는 `p_ffo_history_pctile` note에 적는다. peer에서는 예전 ticker를 뺀다.
+- compare: `columns[]`마다 `depth`와 `scorecard`(없는 옛 metrics는 deep·null), 맨 위 `scorecard_rows`(축마다 종목 등급). 기존 칸은 그대로다.
+
 ## 일반 배당주 경로 (SIC가 6798이 아님)
 
 `compute()`가 facts의 `company`로 경로를 고르고 metrics에 `path: "dividend"`를 쓴다(REIT는 `"reit"`).

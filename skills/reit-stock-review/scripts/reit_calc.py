@@ -9,6 +9,8 @@
                          같은 종목 두 분기 metrics의 지표별 전후 값·변화·status·flag 변화(earnings mode)
   compare --metrics M... [--out P]
                          여러 종목 metrics를 같은 표에 놓는다. subsector가 다르면 경고(compare mode)
+  peers T [--with A,B] [--period P] [--out P]
+                         같은 subsector에서 REITWatch 시총이 가장 가까운 2개(또는 --with)와 같은 분기 metrics 재사용 여부
   --check                network 없이 fixture로 확인한다
 
 숫자는 이 script만 계산한다. agent는 공시에서 값을 읽어 facts에 위치(locator)와 함께 적는다.
@@ -152,6 +154,19 @@ NONE_IN_PERIOD_FACTS = ("acquisitions_cap_rate", "dispositions_cap_rate")
 PRICED_METRICS = ("forward_yield", "market_cap", "p_ffo", "p_affo", "affo_yield", "implied_cap_rate", "economic_ev",
                   "economic_implied_cap_rate", "economic_implied_cap_rate_debt_mtm", "yield_spread_vs_10y",
                   "affo_yield_spread_vs_10y", "implied_cap_rate_vs_tracker", "p_e", "chowder_number")
+# 가볍게 보기(depth light, D15)의 핵심 칸: 보도자료 첫 표 몇 개와 XBRL로 채울 수 있는 칸. 묶음(tuple)은 그중 하나면 된다.
+# 이 칸이 비면(값도 공시 없음도 아님) exit 2다. references/facts-schema.md "가볍게 보기"와 같아야 한다.
+LIGHT_CORE_FACTS = ("ffo_reported", "ffo_per_share_diluted", "affo_reported", ("affo_per_share_diluted", "diluted_shares_weighted"),
+                    "dividend_regular_latest", "dividend_frequency", "price", "common_shares_outstanding",
+                    "op_units_outstanding", "total_debt", "cash", "ebitdare_quarter", "interest_expense", "occupancy_pct",
+                    "series.top_tenants")
+# light에서도 내는 지표(핵심 칸과 REITWatch·macro로 셈한다). 나머지가 비면 '가볍게 봄'(not_assessed)이다
+LIGHT_METRICS = ("ffo_reported", "ffo_per_share_diluted", "affo_reported", "affo_per_share_diluted", "affo_fy", "ffo_fy",
+                 "forward_dividend", "forward_yield", "affo_payout_forward", "ffo_payout_forward", "net_debt",
+                 "net_debt_to_ebitdare", "interest_coverage", "occupancy_pct", "top1_tenant_pct", "market_cap", "p_ffo",
+                 "p_affo", "affo_yield", "affo_annualized", "dgs10", "yield_spread_vs_10y", "affo_yield_spread_vs_10y",
+                 "subsector", "p_ffo_reitwatch", "p_ffo_history_pctile", "peer_median_p_ffo", "p_ffo_vs_peer",
+                 "ffo_fy1_rev_3m", "ffo_growth_fy2", "market_borrowing_rate_est")
 CONSENSUS_GAP_PCT = 10  # consensus FFO가 회사 분기 FFO × 4와 이만큼 넘게 다르면 정의가 다를 수 있다고 적는다
 # 희석 주식 수가 기말 보통주와 이 배수 넘게 다르면 단위를 잘못 적은 것으로 본다
 SHARE_UNIT_RATIO = 10
@@ -544,8 +559,31 @@ def first_of(*cands):
 def passthrough(name, env, note="회사 발표값"):
     out = {"metric": name, "formula": note, "unit": env.get("unit", ""), "inputs": [name]}
     out.update({k: env.get(k) for k in ("value", "status", "as_of", "source", "locator", "note")})
-    out.update({k: env[k] for k in ("basis", "not_disclosed", "none_in_period") if env.get(k)})
+    out.update({k: env[k] for k in ("basis", "not_disclosed", "none_in_period", "not_assessed") if env.get(k)})
     return out
+
+
+def light_pass(F, S, SND, M, checks, gaps):
+    """depth light(D15): 핵심 칸 목록(LIGHT_CORE_FACTS) 중 빈 칸을 돌려주고, LIGHT_METRICS 밖의 빈 지표와 맞춰 보지 못한
+    check를 '가볍게 봄'(not_assessed)으로 둔다. 값이 나온 지표는 그대로 둔다(agent가 더 채운 칸)."""
+    def filled(k):
+        if k == "series.top_tenants":
+            return bool(S["top_tenants"]) or "top_tenants" in SND
+        return F[k]["value"] is not None or bool(F[k].get("not_disclosed"))
+    lacking = []
+    for c in LIGHT_CORE_FACTS:
+        if not any(filled(k) for k in (c if isinstance(c, tuple) else (c,))):
+            lacking.append("·".join(c) if isinstance(c, tuple) else c)
+    for k in lacking:
+        gaps.append({"item": "light_core." + k, "status": "missing", "reason": "가볍게 보기의 핵심 칸이 비어 있음(값이나 공시 없음을 적는다)"})
+    for k, m in walk(M):
+        if k not in LIGHT_METRICS and m.get("status") == "missing" and not empty_reason(m):
+            m["not_assessed"] = True
+            m["note"] = "; ".join(x for x in ("핵심 칸으로 내는 지표가 아님", m.get("note")) if x)
+    for c in checks:
+        if c["pass"] is False and c["status"] == "missing":
+            c.update({"pass": None, "not_assessed": True, "note": "가볍게 보기라 맞춰 보지 않음(입력이 핵심 칸이 아님): " + c["note"]})
+    return lacking
 
 
 def env_of(m):
@@ -584,7 +622,8 @@ def flag(name, m, th, basis_key):
     t = th[basis_key]
     basis = "경험칙, %s (watch %s, alert %s)" % (t["source"], t["watch"], t["alert"])
     if m["value"] is None:
-        why = "공시 없음(회사가 내지 않음)이라" if m.get("not_disclosed") else "데이터가 없어"
+        why = ("공시 없음(회사가 내지 않음)이라" if m.get("not_disclosed") else
+               "가볍게 봄(depth light)이라" if m.get("not_assessed") else "데이터가 없어")
         return {"flag": name, "level": "review", "value": None, "basis": basis,
                 "note": "%s 판단하지 않음(통과로 치지 않는다): %s" % (why, m.get("note", ""))}
     v = m["value"]
@@ -687,41 +726,61 @@ def maturities_within_24m(mats, period_end):
     return total, used, split
 
 
-def load_reitwatch(dirpath, ticker):
-    """REITWatch parsed 파일들에서 이 종목 row, 최신 달 peer, P/FFO history를 읽는다."""
-    dirpath = dirpath or os.path.join(data_dir(), "reitwatch", "parsed")
-    files = sorted(glob.glob(os.path.join(dirpath, "*.json")))
+def load_ticker_aliases():
+    """ticker가 바뀐 종목의 예전 ticker(assets/ticker_aliases.json): {지금 ticker: [예전 ticker, ...]}."""
+    d = read_json(os.path.join(skill_root(), "assets", "ticker_aliases.json"))
+    return {k: list(v) for k, v in d.items() if not k.startswith("_")}
+
+
+def read_reitwatch_months(dirpath):
+    """REITWatch parsed 파일들 [(달, 경로, 문서)], 달 차례."""
     months = []
-    for p in files:
+    for p in sorted(glob.glob(os.path.join(dirpath, "*.json"))):
         try:
             d = read_json(p)
         except ValueError:
             continue
         if d.get("schema") == REITWATCH_SCHEMA and d.get("month") and isinstance(d.get("rows"), list):
             months.append((d["month"], p, d))
-    months.sort(key=lambda x: x[0])
+    return sorted(months, key=lambda x: x[0])
+
+
+def rw_row(doc, names):
+    """REITWatch 한 호에서 names(지금 ticker, 예전 ticker 차례) 중 먼저 있는 row."""
+    rows = {r.get("ticker"): r for r in doc.get("rows") or []}
+    return next((rows[n] for n in names if n in rows), None)
+
+
+def load_reitwatch(dirpath, ticker, aliases=()):
+    """REITWatch parsed 파일들에서 이 종목 row, 최신 달 peer, P/FFO history를 읽는다.
+    aliases(예전 ticker, B16)가 있으면 그 ticker로 실린 호도 같은 종목으로 잇는다."""
+    dirpath = dirpath or os.path.join(data_dir(), "reitwatch", "parsed")
+    names = [ticker] + [a for a in aliases if a != ticker]
+    months = read_reitwatch_months(dirpath)
     if not months:
         return {"note": "REITWatch parsed 없음(%s): reit-sector-scan skill로 fetch를 먼저 돌린다" % dirpath,
                 "files": []}
     month, path, latest = months[-1]
-    row = next((r for r in latest["rows"] if r.get("ticker") == ticker), None)
+    row = rw_row(latest, names)
     k = int(month[:4]) * 12 + int(month[5:7]) - 1 - REVISION_MONTHS
     old_month = "%04d-%02d" % (k // 12, k % 12 + 1)
     old = next(((p, d) for m, p, d in months if m == old_month), None)
     out = {"month": month, "path": path, "as_of": latest.get("as_of"), "files": [p for _, p, _ in months],
-           "row": row, "note": "", "fy1": latest.get("fy1"), "rev_old_month": old_month, "rev_old": old}
+           "row": row, "note": "", "fy1": latest.get("fy1"), "rev_old_month": old_month, "rev_old": old, "names": names}
     if row is None:
         out["note"] = "REITWatch %s에 %s row가 없음" % (month, ticker)
         return out
     sub = row.get("subsector")
     out["peers"] = [r for r in latest["rows"]
-                    if r.get("subsector") == sub and r.get("ticker") != ticker]
-    out["history"] = []
+                    if r.get("subsector") == sub and r.get("ticker") not in names]
+    out["history"], out["alias_months"] = [], []
     sample = [x for x in months[:-1] if int(x[0][5:7]) in QUARTER_MONTHS] + [months[-1]]
     for m, p, d in sample:
-        r = next((x for x in d["rows"] if x.get("ticker") == ticker), None)
+        r = rw_row(d, names)
         if r and is_finite(r.get("p_ffo_fy1")):
             out["history"].append((m, r["p_ffo_fy1"]))
+            if r.get("ticker") != ticker:
+                out["alias_months"].append((m, r.get("ticker")))
     return out
 
 
@@ -821,7 +880,8 @@ def ffo_revision_env(rw):
     if col is None:
         return missing("REITWatch %s 호에 %s년 column이 없음" % (odoc.get("month"), year))
     t = row.get("ticker")
-    old = next((r for r in odoc.get("rows") or [] if r.get("ticker") == t), {}).get(col)
+    orow = rw_row(odoc, rw.get("names") or [t]) or {}
+    old = orow.get(col)
     new = row.get("ffo_fy1")
     if not is_finite(new):
         return missing("REITWatch %s 호에 %s FFO FY1이 없음" % (rw["month"], t))
@@ -829,7 +889,8 @@ def ffo_revision_env(rw):
         return missing("REITWatch %s 호에 %s %s 값이 없거나 0 이하" % (odoc.get("month"), t, col))
     return aged({"value": round((new / old - 1) * 100, 4), "unit": "%", "status": "derived", "as_of": rw.get("as_of"),
                  "source": "reitwatch:%s,%s" % (rw["month"], odoc.get("month")),
-                 "locator": "%s rows[ticker=%s].ffo_fy1 %s / %s rows[ticker=%s].%s %s" % (rw["path"], t, new, opath, t, col, old),
+                 "locator": "%s rows[ticker=%s].ffo_fy1 %s / %s rows[ticker=%s].%s %s" % (
+                     rw["path"], t, new, opath, orow.get("ticker", t), col, old),
                  "note": "%s 호 FY%s %s / %s 호 %s(FY%s) %s − 1. consensus(애널리스트 추정)" % (
                      rw["month"], year, new, odoc.get("month"), col, year, old)}, rw.get("age_note"))
 
@@ -912,6 +973,44 @@ def read_facts(facts_doc):
     return F, S, gaps
 
 
+EVENT_TYPES = {"tenant_credit": "임차인 신용", "rating": "신용등급", "dividend": "배당", "guidance": "guidance",
+               "legal": "소송", "subsequent": "결산 후 사건", "other": "기타"}
+
+
+def read_events(facts_doc, gaps):
+    """facts의 events(숫자 밖 사건): type·date·title·source·quote(원문 문장)가 꼭 있고 source가 web이면 URL이 있어야 한다.
+    어긴 항목은 버리고 데이터 구멍(ignored)에 알린다(exit에는 세지 않는다). 날짜 최신순."""
+    raw = facts_doc.get("events") or []
+    if not isinstance(raw, list):
+        gaps.append({"item": "events", "status": "ignored", "reason": "events는 사건 목록이어야 함"})
+        return []
+    out = []
+    for i, e in enumerate(raw):
+        why, url = None, ""
+        if not isinstance(e, dict):
+            why = "형식이 아님"
+        elif e.get("type") not in EVENT_TYPES:
+            why = "type %r는 %s 중 하나가 아님" % (e.get("type"), ", ".join(EVENT_TYPES))
+        elif not (isinstance(e.get("date"), str) and len(e["date"]) == 10 and to_date(e["date"])):
+            why = "date %r가 날짜(YYYY-MM-DD)가 아님" % (e.get("date"),)
+        else:
+            src = str(e.get("source") or "").strip()
+            url = str(e.get("url") or (src[4:] if src.startswith("web:") else "")).strip()
+            for k, label in (("title", "제목(title)이"), ("source", "출처(source)가"), ("quote", "원문 문장(quote)이")):
+                if not str(e.get(k) or "").strip():
+                    why = "%s 없음" % label
+                    break
+            if why is None and src.startswith("web") and not url.startswith(("http://", "https://")):
+                why = "source가 web인데 URL이 없음"
+        if why:
+            gaps.append({"item": "events[%d]" % i, "status": "ignored", "reason": "사건을 쓰지 않음: " + why})
+            continue
+        out.append({"type": e["type"], "type_name": EVENT_TYPES[e["type"]], "date": e["date"], "title": e["title"],
+                    "source": e["source"], "url": url or None, "quote": e["quote"], "locator": e.get("locator") or "",
+                    "note": e.get("note") or ""})
+    return sorted(out, key=lambda x: x["date"], reverse=True)
+
+
 SERIES_ND_KEYS = ("covenants", "top_tenants")  # 회사가 표 전체(또는 일부 줄)를 내지 않을 수 있는 series
 
 
@@ -955,7 +1054,7 @@ def walk(ms):
 
 # 값이 없는 것이 정상인 지표의 표시와 사람 말. status는 missing이고 이 표시가 붙으면 exit 2와 metrics_missing에 세지 않는다.
 EMPTY_OK = (("not_disclosed", "공시 없음(회사가 내지 않음)"), ("none_in_period", "그 분기 거래 없음"),
-            ("not_comparable", "견줄 수 없음"))
+            ("not_comparable", "견줄 수 없음"), ("not_assessed", "가볍게 봄(depth light)"))
 
 
 def empty_reason(m):
@@ -965,7 +1064,7 @@ def empty_reason(m):
     return next((k for k, _ in EMPTY_OK if m.get(k)), None)
 
 
-def finish(facts_doc, path, M, checks, flags, gaps, inputs, thresholds):
+def finish(facts_doc, path, M, checks, flags, gaps, inputs, thresholds, extra=None):
     """metrics 문서를 맺는다: missing·estimated·stale·check 실패를 데이터 구멍에 올리고 exit code를 정한다."""
     labels = dict(EMPTY_OK)
     for k, m in walk(M):
@@ -977,7 +1076,9 @@ def finish(facts_doc, path, M, checks, flags, gaps, inputs, thresholds):
         elif m.get("status") in ("estimated", "stale") and m.get("value") is not None:
             gaps.append({"item": k, "status": m["status"], "reason": m.get("note", "")})
     for c in checks:
-        if c["pass"] is None:  # 회사가 그 값을 내지 않아 맞춰 볼 것이 없다
+        if c["pass"] is None and c.get("not_assessed"):  # 가볍게 보기라 맞춰 보지 않았다
+            gaps.append({"item": "check:" + c["check"], "status": "not_assessed", "reason": "가볍게 봄: " + c["note"]})
+        elif c["pass"] is None:  # 회사가 그 값을 내지 않아 맞춰 볼 것이 없다
             gaps.append({"item": "check:" + c["check"], "status": "not_disclosed", "reason": "공시 없음: " + c["note"]})
         elif not c["pass"]:
             gaps.append({"item": "check:" + c["check"], "status": "fail" if c["status"] != "missing" else "missing",
@@ -1006,9 +1107,11 @@ def finish(facts_doc, path, M, checks, flags, gaps, inputs, thresholds):
         "data_gaps": gaps,
         "summary": {"metrics_missing": n_missing, "metrics_not_disclosed": n_empty["not_disclosed"],
                     "metrics_none_in_period": n_empty["none_in_period"], "metrics_not_comparable": n_empty["not_comparable"],
+                    "metrics_not_assessed": n_empty["not_assessed"],
                     "checks_failed": n_fail,
                     "flags": {f["flag"]: f["level"] for f in flags}},
     }
+    doc.update(extra or {})
     return doc, (2 if (n_missing or n_fail) else 0)
 
 
@@ -1021,6 +1124,11 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
         return compute_dividend(facts_doc, th, macro=macro)
     F, S, gaps = read_facts(facts_doc)
     SND = read_series_nd(facts_doc, S, gaps)
+    events = read_events(facts_doc, gaps)
+    depth = facts_doc.get("depth") or "deep"
+    if depth not in ("deep", "light"):
+        gaps.append({"item": "depth", "status": "ignored", "reason": "depth %r는 deep·light가 아니라 deep으로 셈" % (depth,)})
+        depth = "deep"
 
     def reject(key, why):
         F[key] = missing(why)
@@ -1596,8 +1704,12 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
         M["p_ffo_history_pctile"] = dict(metric("p_ffo_history_pctile", "자기 REITWatch P/FFO history 중 최신값 이하 비율(%%), 표본 %d개 호" % len(hist),
                                                 {"p_ffo_reitwatch": rw_pffo}, lambda x: pctile_le(hist, x), "%"),
                                          status="estimated")
+        am = rwd.get("alias_months") or []
         M["p_ffo_history_pctile"]["note"] = "; ".join(x for x in (
-            "%s~%s의 1·4·7·10월 호와 최신 호" % (rwd["history"][0][0], rwd["history"][-1][0]), rwd["age_note"]) if x)
+            "%s~%s의 1·4·7·10월 호와 최신 호" % (rwd["history"][0][0], rwd["history"][-1][0]),
+            "예전 ticker %s로 실린 %s~%s 호 %d개를 이음(assets/ticker_aliases.json·facts former_tickers)" % (
+                "·".join(sorted(set(t for _, t in am))), am[0][0], am[-1][0], len(am)) if am else "",
+            rwd["age_note"]) if x)
     peers = [r for r in rwd.get("peers", []) if is_finite(r.get("p_ffo_fy1"))]
     if rw_pffo["value"] is None or not peers:
         why = rw_pffo["note"] if rw_pffo["value"] is None else "같은 subsector peer가 없음"
@@ -1644,6 +1756,7 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
                                                    "tracker_subsector_cap_rate": tenv},
                                                   lambda a, b: a - b, "%p")
 
+    lacking = light_pass(F, S, SND, M, checks, gaps) if depth == "light" else []
     price_dated(M, F["price"])
     flags = [
         flag("affo_payout", M["affo_payout_forward"] if M["affo_payout_forward"]["value"] is not None
@@ -1654,12 +1767,168 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
         flag("covenant_headroom", M["covenant_headroom_min_pct"], th, "covenant_headroom_pct"),
     ]
 
-    return finish(facts_doc, "reit", M, checks, flags, gaps,
-                  {"macro_snapshot": (macro or {}).get("locator", "").split(" ")[0] or None,
-                   "reitwatch_files": rwd.get("files", []), "reitwatch_month": rwd.get("month"),
-                   "tracker_file": trk.get("path")},
-                  {k: th[k] for k in ("affo_payout_pct", "maturity_single_year_pct", "net_debt_to_ebitdare_x",
-                                      "interest_coverage_x", "covenant_headroom_pct", "ffo_tie_out_tolerance_pct")})
+    doc, code = finish(facts_doc, "reit", M, checks, flags, gaps,
+                       {"macro_snapshot": (macro or {}).get("locator", "").split(" ")[0] or None,
+                        "reitwatch_files": rwd.get("files", []), "reitwatch_month": rwd.get("month"),
+                        "tracker_file": trk.get("path")},
+                       {k: th[k] for k in ("affo_payout_pct", "maturity_single_year_pct", "net_debt_to_ebitdare_x",
+                                           "interest_coverage_x", "covenant_headroom_pct", "ffo_tie_out_tolerance_pct")},
+                       extra={"depth": depth, "scorecard": build_scorecard(M, th, load_scorecard(), facts_doc.get("period")),
+                              "events": events})
+    doc["summary"]["light_core_missing"] = lacking
+    return doc, (2 if lacking else code)
+
+
+# ---------------------------------------------------------------- 등급(scorecard, D11)
+
+SCORECARD_SCHEMA = "reit-scorecard/1"
+GRADE_ORDER = ("ample", "moderate", "tight", "risk")  # 나쁜 쪽으로 간다
+
+
+def load_scorecard(path=None):
+    return read_json(path or os.path.join(skill_root(), "assets", "scorecard.json"))
+
+
+def resolve_cut(c, th, spec):
+    """cuts 칸 하나: 숫자면 그대로, "watch"·"alert"면 thresholds.json의 그 값(flag와 같은 숫자)."""
+    return th[spec["thresholds"]][c] if isinstance(c, str) else c
+
+
+def num(x):
+    return ("%.4f" % x).rstrip("0").rstrip(".") if isinstance(x, float) else str(x)
+
+
+def band_grade(v, spec, th):
+    cuts = [resolve_cut(c, th, spec) for c in spec["cuts"]]
+    for g, c in zip(GRADE_ORDER, cuts):
+        if (v < c) if spec["direction"] == "above" else (v >= c):
+            return g
+    return "risk"
+
+
+def band_text(spec, th, unit, names):
+    a, b, c = [num(resolve_cut(x, th, spec)) + unit for x in spec["cuts"]]
+    if spec["direction"] == "above":
+        t = "%s < %s, %s %s~%s, %s %s~%s, %s ≥ %s" % (names["ample"], a, names["moderate"], a, b, names["tight"], b, c,
+                                                     names["risk"], c)
+    else:
+        t = "%s ≥ %s, %s %s~%s, %s %s~%s, %s < %s" % (names["ample"], a, names["moderate"], b, a, names["tight"], c, b,
+                                                     names["risk"], c)
+    src = "경험칙, assets/scorecard.json"
+    if spec.get("thresholds"):
+        src += "; 경계 %s·%s는 thresholds.json %s watch·alert" % (b, c, spec["thresholds"])
+    return "%s (%s)" % (t, src)
+
+
+def worse(g, n=1):
+    return GRADE_ORDER[min(GRADE_ORDER.index(g) + n, len(GRADE_ORDER) - 1)]
+
+
+def empty_note(m):
+    """값이 없는 지표의 사람 말: 공시 없음·가볍게 봄 등, 아니면 '없음: 이유'."""
+    r = empty_reason(m)
+    return "%s: %s" % (dict(EMPTY_OK)[r], m.get("note", "")) if r else "없음: %s" % (m.get("note") or "값 없음")
+
+
+def build_scorecard(M, th, sc, period):
+    """축 5개의 등급(D11). 축마다 근거 지표(값·단위·단계·기준 문구)와 한 단계 내림의 이유를 낸다.
+    축의 핵심 지표가 모두 없음·공시 없음이면 판정 못 함(unknown)이다. 같은 입력이면 같은 출력."""
+    names, vnames, specs = sc["grades"], sc["valuation_grades"], sc["metrics"]
+    year = int(str(period)[:4]) if str(period or "")[:4].isdigit() else None
+
+    def ev(key, role="core"):
+        m = M.get(key) or dict(missing("metrics에 없는 지표"))
+        spec = specs.get(key) or {}
+        unit = m.get("unit") or ""
+        e = {"metric": key, "name": spec.get("name", key), "value": m.get("value"), "unit": unit,
+             "status": m.get("status"), "role": role, "grade": None, "grade_name": None, "criterion": "", "note": ""}
+        if "cuts" in spec:
+            e["criterion"] = band_text(spec, th, "%" if unit == "%" else unit, names)
+        elif "low_below" in spec:
+            e["criterion"] = "%s < %s, %s %s~%s, %s ≥ %s (경험칙, assets/scorecard.json)" % (
+                vnames["low"], num(spec["low_below"]), vnames["mid"], num(spec["low_below"]), num(spec["high_at"]),
+                vnames["high"], num(spec["high_at"]))
+        v = m.get("value")
+        if is_finite(v) and "cuts" in spec:
+            e["grade"] = band_grade(v, spec, th)
+        elif is_finite(v) and "low_below" in spec:
+            e["grade"] = "low" if v < spec["low_below"] else "high" if v >= spec["high_at"] else "mid"
+        elif v is None and key == "liquidity_coverage_24m" and m.get("status") != "missing":
+            e["grade"], e["note"] = "ample", "갚을 것 없음: 24개월 안 만기와 남은 개발비가 0"
+        elif v is None:
+            e["note"] = empty_note(m)
+        if e["grade"]:
+            e["grade_name"] = (vnames if "low_below" in spec else names)[e["grade"]]
+        return e
+
+    def axis(key, evs, base, reasons, gnames=names):
+        meta = next(a for a in sc["axes"] if a["key"] == key)
+        if base is None:
+            grade = "unknown"
+        else:  # 한 단계 내림은 좋고 나쁨이 있는 축에만(valuation은 위치라 내리지 않는다)
+            grade = worse(base, len(reasons)) if gnames is names else base
+        out = {"key": key, "name": meta["name"], "grade": grade, "grade_name": gnames[grade],
+               "base_grade": base or "unknown", "downgrade": None, "rule": meta["rule"], "evidence": evs, "note": ""}
+        if base is None:
+            out["note"] = "핵심 지표가 모두 없음·공시 없음이라 판정 못 함"
+        elif reasons and gnames is names:
+            out["downgrade"] = {"notches": len(reasons), "reasons": reasons}
+        return out
+
+    def worst_of(evs):
+        gs = [e.get("grade_used") or e["grade"] for e in evs if e["grade"]]
+        return max(gs, key=GRADE_ORDER.index) if gs else None
+
+    axes = []
+    # 배당 여력: AFFO payout(forward → 분기), 없으면 FFO payout + 한 단계, 최근 컷이면 한 단계
+    a_f, a_q, f_f, cuts = (ev("affo_payout_forward"), ev("affo_payout_quarter", "fallback"),
+                           ev("ffo_payout_forward", "fallback"), ev("dividend_cuts", "downgrade"))
+    reasons = []
+    prim = a_f if a_f["grade"] else a_q if a_q["grade"] else None
+    if prim:
+        base = prim["grade"]
+    elif f_f["grade"]:
+        base = f_f["grade"]
+        reasons.append("AFFO payout이 없어 FFO payout %s%%를 같은 구간에 넣고 한 단계 내림(FFO는 유지 capex를 빼지 않아 "
+                       "payout이 낮게 나온다)" % num(f_f["value"]))
+    else:
+        base = None
+    n_cut = sc["downgrades"]["recent_cut_years"]
+    cuts["criterion"] = "기준 해(%s)에서 %d년 안에 배당 컷이 있으면 한 단계 내림(경험칙, assets/scorecard.json)" % (year, n_cut)
+    recent = [str(y) for y in (cuts["value"] or []) if year and str(y).isdigit() and int(y) > year - n_cut]
+    if recent:
+        reasons.append("최근 %d년 안 배당 컷(%s)" % (n_cut, "·".join(recent)))
+    elif cuts["value"] is None:
+        cuts["note"] = cuts["note"] or "컷 이력이 없어 내림을 판단하지 않음"
+    axes.append(axis("dividend_capacity", [a_f, a_q, f_f, cuts], base, reasons))
+    # 부채: net debt/EBITDAre와 interest coverage 중 나쁜 쪽, covenant 최소 여유가 watch 미만이면 한 단계
+    nd_, ic, cov = ev("net_debt_to_ebitdare"), ev("interest_coverage"), ev("covenant_headroom_min_pct", "downgrade")
+    ct = th[sc["downgrades"]["covenant_headroom"]["thresholds"]][sc["downgrades"]["covenant_headroom"]["level"]]
+    cov["criterion"] = "%s%% 미만이면 한 단계 내림(thresholds.json %s %s)" % (
+        num(ct), sc["downgrades"]["covenant_headroom"]["thresholds"], sc["downgrades"]["covenant_headroom"]["level"])
+    reasons = ["covenant 최소 여유 %s%%가 %s%% 미만" % (num(cov["value"]), num(ct))] \
+        if is_finite(cov["value"]) and cov["value"] < ct else []
+    axes.append(axis("leverage", [nd_, ic, cov], worst_of([nd_, ic]), reasons))
+    # 만기·유동성: 최대 만기 해 비중, 24개월 liquidity coverage, 차환 영향/AFFO(없으면 /FFO를 한 단계 보수적으로) 중 가장 나쁜 것
+    refi = ev("refi_impact_affo_pct")
+    if refi["value"] is None and "refi_impact_ffo_pct" in M:
+        refi = ev("refi_impact_ffo_pct")
+        if refi["grade"]:
+            refi["grade_used"] = worse(refi["grade"])
+            refi["note"] = "AFFO가 없어 FFO로 나눈 참고 값이라 한 단계 보수적으로 봄(%s → %s)" % (
+                names[refi["grade"]], names[refi["grade_used"]])
+    mats = [ev("maturity_max_year_pct"), ev("liquidity_coverage_24m"), refi]
+    axes.append(axis("maturity_liquidity", mats, worst_of(mats), []))
+    # 임차인 집중: top1·top10 중 나쁜 쪽. WALE·occupancy는 곁에
+    ts = [ev("top1_tenant_pct"), ev("top10_tenant_pct")]
+    axes.append(axis("tenant_concentration", ts + [ev("wale_years", "side"), ev("occupancy_pct", "side")], worst_of(ts), []))
+    # valuation 위치: history percentile과 peer 대비의 위치(−1·0·+1) 합
+    vs = [ev("p_ffo_history_pctile"), ev("p_ffo_vs_peer")]
+    pos = [{"low": -1, "mid": 0, "high": 1}[e["grade"]] for e in vs if e["grade"]]
+    vbase = None if not pos else "low" if sum(pos) < 0 else "high" if sum(pos) > 0 else "mid"
+    axes.append(axis("valuation", vs, vbase, [], gnames=vnames))
+    return {"schema": SCORECARD_SCHEMA, "axes": axes,
+            "note": "경험칙 기준표(assets/scorecard.json)로 매긴 판단 재료다. 매수·매도 권유가 아니다"}
 
 
 def chowder_threshold(yield_pct, sic, ch):
@@ -1678,6 +1947,7 @@ def chowder_threshold(yield_pct, sic, ch):
 def compute_dividend(facts_doc, th, macro=None):
     """일반 배당주(SIC가 6798이 아님) 경로: EPS·FCF payout, 배당 CAGR, Chowder rule, yield trap 신호."""
     F, S, gaps = read_facts(facts_doc)
+    events = read_events(facts_doc, gaps)
     M = {}
     sic = (facts_doc.get("company") or {}).get("sic") or ""
 
@@ -1811,7 +2081,10 @@ def compute_dividend(facts_doc, th, macro=None):
         flags[1] = dict(flags[1], level="alert", note="FCF가 0 이하(배당을 FCF로 못 덮음)")
     return finish(facts_doc, "dividend", M, [], flags, gaps,
                   {"macro_snapshot": (macro or {}).get("locator", "").split(" ")[0] or None},
-                  {k: th[k] for k in ("eps_payout_pct", "fcf_payout_pct", "chowder", "yield_trap")})
+                  {k: th[k] for k in ("eps_payout_pct", "fcf_payout_pct", "chowder", "yield_trap")},
+                  extra={"depth": "deep", "scorecard": {"schema": SCORECARD_SCHEMA, "axes": [],
+                                                        "note": "일반 배당주 경로는 REIT 등급 축(assets/scorecard.json)을 매기지 않음"},
+                         "events": events})
 
 
 # ---------------------------------------------------------------- diff·compare (metrics 파일끼리)
@@ -1924,7 +2197,8 @@ def compare_metrics(docs):
         columns.append({"ticker": d.get("ticker"), "period": d.get("period"), "path": d.get("path", "reit"),
                         "subsector": s, "warning": w,
                         "metrics_missing": (d.get("summary") or {}).get("metrics_missing"),
-                        "checks_failed": (d.get("summary") or {}).get("checks_failed")})
+                        "checks_failed": (d.get("summary") or {}).get("checks_failed"),
+                        "depth": d.get("depth") or "deep", "scorecard": d.get("scorecard")})
         if w:
             warnings.append("%s: %s" % (d.get("ticker"), w))
     paths = sorted(set(c["path"] for c in columns))
@@ -1961,11 +2235,129 @@ def compare_metrics(docs):
     flags = {d.get("ticker"): {f["flag"]: f.get("level") for f in d.get("flags") or []} for d in docs}
     checks = {d.get("ticker"): {c["check"]: c.get("pass") for c in d.get("checks") or []} for d in docs}
     incomplete = [c["ticker"] for c in columns if (c["metrics_missing"] or 0) or (c["checks_failed"] or 0)]
+    srows = []  # 축마다 종목 등급(scorecard가 없는 옛 metrics는 비움)
+    for d in docs:
+        for a in (d.get("scorecard") or {}).get("axes") or []:
+            r = next((x for x in srows if x["axis"] == a["key"]), None)
+            if r is None:
+                r = {"axis": a["key"], "name": a.get("name"), "grades": {}}
+                srows.append(r)
+            r["grades"][d.get("ticker")] = {"grade": a.get("grade"), "grade_name": a.get("grade_name")}
     doc = {"schema": COMPARE_SCHEMA, "tickers": tickers, "columns": columns, "warnings": warnings,
-           "rows": rows, "flags": flags, "checks": checks,
+           "rows": rows, "flags": flags, "checks": checks, "scorecard_rows": srows,
            "summary": {"tickers": len(docs), "warnings": len(warnings), "incomplete": incomplete,
                        "median_note": "median은 이 표에 놓인 종목끼리의 값이다(REITWatch peer median과 다르다)"}}
     return doc, (2 if warnings or incomplete else 0)
+
+
+# ---------------------------------------------------------------- peers (경쟁 종목 고르기, B7)
+
+PEERS_SCHEMA = "reit-peers/1"
+PEER_COUNT = 2
+
+
+def latest_period(root, ticker):
+    """그 종목의 가장 늦은 metrics 분기, 없으면 facts 분기(파일 이름 YYYYQn). 없으면 None."""
+    for kind in ("metrics", "facts"):
+        ps = sorted(os.path.basename(p)[:-5] for p in glob.glob(os.path.join(root, "tickers", ticker, kind, "*.json"))
+                    if len(os.path.basename(p)) == 11)
+        if ps:
+            return ps[-1]
+    return None
+
+
+def peer_metrics(root, ticker, period):
+    """같은 분기 metrics가 있으면 (경로, depth), 없으면 (None, None). depth가 없는 옛 metrics는 deep이다."""
+    p = os.path.join(root, "tickers", ticker, "metrics", "%s.json" % period)
+    try:
+        d = read_json(p)
+    except (OSError, ValueError):
+        return None, None
+    if d.get("schema") != METRICS_SCHEMA or d.get("period") != period:
+        return None, None
+    return p, d.get("depth") or "deep"
+
+
+def find_peers(ticker, with_=None, period=None, root=None, aliases=()):
+    """같은 subsector에서 REITWatch 시총(mkt_cap)이 가장 가까운(log 비율) 2개, 또는 with_로 정한 종목.
+    종목마다 같은 분기 metrics가 있으면 재사용(reuse), 없으면 light로 만들라고 낸다(D6). (문서, exit)."""
+    root = root or data_dir()
+    rw_dir = os.path.join(root, "reitwatch", "parsed")
+    period = period or latest_period(root, ticker)
+    doc = {"schema": PEERS_SCHEMA, "ticker": ticker, "period": period, "subsector": None, "market_cap_usd_millions": None,
+           "reitwatch_month": None, "rule": "", "peers": [], "reusable_others": [], "note": "",
+           "next": "action이 make_light인 종목은 edgar.py xbrl <종목> --period <분기>로 facts를 만들고 depth: \"light\"와 "
+                   "핵심 칸(references/facts-schema.md '가볍게 보기')만 채워 reit_calc.py metrics를 돌린다. reuse면 그 metrics를 쓴다"}
+    months = read_reitwatch_months(rw_dir)
+    if not months:
+        doc["note"] = ("REITWatch parsed 없음(%s): reit-sector-scan skill로 fetch를 먼저 돌린다. "
+                       "그 전에는 --with로 경쟁 종목을 정해도 subsector·시총을 확인하지 못한다" % rw_dir)
+        return doc, 2
+    if not period:
+        doc["note"] = "%s의 metrics·facts가 없어 분기를 모름: --period로 정한다" % ticker
+        return doc, 2
+    month, path, latest = months[-1]
+    names = [ticker] + [a for a in aliases if a != ticker]
+    me = rw_row(latest, names)
+    doc.update(reitwatch_month=month, reitwatch_file=path)
+    if me is None:
+        doc["note"] = "REITWatch %s에 %s row가 없음: ticker(바뀐 이름은 assets/ticker_aliases.json)를 확인하거나 --with로 정한다" % (
+            month, ticker)
+        return doc, 2
+    sub, cap = me.get("subsector"), me.get("mkt_cap")
+    doc.update(subsector=sub, market_cap_usd_millions=cap)
+    rows = {r.get("ticker"): r for r in latest["rows"]}
+    same = [r for r in latest["rows"] if r.get("subsector") == sub and r.get("ticker") not in names]
+
+    def dist(r):
+        c = r.get("mkt_cap")
+        return abs(math.log(c / cap)) if is_finite(c) and c > 0 and is_finite(cap) and cap > 0 else float("inf")
+    if with_:
+        chosen = [rows.get(t) or {"ticker": t} for t in with_]
+        doc["rule"] = "--with로 정한 종목"
+    else:
+        chosen = sorted(same, key=lambda r: (dist(r), r.get("ticker")))[:PEER_COUNT]
+        doc["rule"] = "같은 subsector(%s)에서 REITWatch %s 시총이 가장 가까운 %d개(log 비율 거리)" % (sub, month, PEER_COUNT)
+    warn = []
+    for r in chosen:
+        t = r.get("ticker")
+        mp, depth = peer_metrics(root, t, period)
+        c = r.get("mkt_cap")
+        item = {"ticker": t, "subsector": r.get("subsector"), "market_cap_usd_millions": c,
+                "cap_ratio": round(c / cap, 4) if is_finite(c) and is_finite(cap) and cap > 0 else None,
+                "metrics_path": mp, "depth": depth, "reuse": mp is not None, "action": "reuse" if mp else "make_light",
+                "facts_path": os.path.join(root, "tickers", t, "facts", "%s.json" % period), "note": ""}
+        if t not in rows:
+            item["note"] = "REITWatch %s에 row가 없음" % month
+            warn.append(t)
+        elif r.get("subsector") != sub:
+            item["note"] = "subsector %s가 %s와 다름: P/FFO·cap rate를 같은 기준으로 견주지 않는다" % (r.get("subsector"), sub)
+            warn.append(t)
+        doc["peers"].append(item)
+    picked = {x["ticker"] for x in doc["peers"]}
+    for r in sorted(same, key=lambda r: (dist(r), r.get("ticker"))):
+        mp, depth = peer_metrics(root, r.get("ticker"), period)
+        if mp and r.get("ticker") not in picked:
+            doc["reusable_others"].append({"ticker": r.get("ticker"), "metrics_path": mp, "depth": depth,
+                                           "market_cap_usd_millions": r.get("mkt_cap")})
+    if warn:
+        doc["note"] = "확인할 종목: %s" % ", ".join(warn)
+    if len(doc["peers"]) < PEER_COUNT and not with_:
+        doc["note"] = "; ".join(x for x in (doc["note"], "같은 subsector 종목이 %d개뿐" % len(doc["peers"])) if x)
+        return doc, 2
+    return doc, 2 if warn else 0
+
+
+def cmd_peers(args):
+    with_ = [t.strip() for t in args.with_.split(",") if t.strip()] if args.with_ else None
+    doc, code = find_peers(args.ticker, with_=with_, period=args.period,
+                           aliases=load_ticker_aliases().get(args.ticker, []))
+    if doc.get("note"):
+        log(doc["note"])
+    for x in doc["peers"]:
+        log("peer %s: %s%s" % (x["ticker"], x["action"], " (%s)" % x["depth"] if x["depth"] else ""))
+    emit(doc, args.out)
+    return code
 
 
 # ---------------------------------------------------------------- CLI
@@ -1998,14 +2390,17 @@ def cmd_metrics(args):
     dbaa, _ = load_macro(args.macro_snapshot, "DBAA")
     hy, _ = load_macro(args.macro_snapshot, "BAMLH0A0HYM2")
     bb, _ = load_macro(args.macro_snapshot, "BAMLH0A1HYBB")
-    rw = load_reitwatch(args.reitwatch_dir, facts["ticker"])
+    aliases = load_ticker_aliases().get(facts["ticker"], []) + [
+        t for t in (facts.get("former_tickers") or []) if isinstance(t, str)]
+    rw = load_reitwatch(args.reitwatch_dir, facts["ticker"], aliases=aliases)
     doc, code = compute(facts, th, macro=macro, rw=rw, baa=baa, tracker=load_tracker(args.tracker_dir), dbaa=dbaa,
                         hy=hy, bb=bb)
     doc["facts_file"] = os.path.abspath(args.facts)
     path = args.out or metrics_path(doc)
     write_json(doc, path)
     for c in doc["checks"]:
-        log("%s %s: %s" % ("공시 없음" if c["pass"] is None else "PASS" if c["pass"] else "FAIL", c["check"],
+        log("%s %s: %s" % (("가볍게 봄" if c.get("not_assessed") else "공시 없음") if c["pass"] is None
+                           else "PASS" if c["pass"] else "FAIL", c["check"],
                            c.get("note") or "diff %s%%" % c.get("diff_pct")))
     for f in doc["flags"]:
         log("flag %s: %s (%s)" % (f["flag"], f["level"], f["value"]))
@@ -2090,6 +2485,11 @@ def main(argv):
     d.add_argument("--prev", required=True)
     d.add_argument("--curr", required=True)
     d.add_argument("--out", help="없으면 stdout")
+    pe = sub.add_parser("peers", help="같은 subsector에서 시총이 가장 가까운 경쟁 종목 2개와 metrics 재사용 여부")
+    pe.add_argument("ticker")
+    pe.add_argument("--with", dest="with_", help="경쟁 종목을 직접 정함(A,B)")
+    pe.add_argument("--period", help="기본: 그 종목의 가장 늦은 metrics(없으면 facts) 분기")
+    pe.add_argument("--out", help="없으면 stdout")
     c = sub.add_parser("compare", help="여러 종목 metrics를 같은 표에(compare mode)")
     c.add_argument("--metrics", nargs="+", required=True)
     c.add_argument("--out", help="없으면 stdout")
@@ -2105,6 +2505,8 @@ def main(argv):
         return cmd_diff(args)
     if args.cmd == "compare":
         return cmd_compare(args)
+    if args.cmd == "peers":
+        return cmd_peers(args)
     p.print_help(sys.stderr)
     return 1
 
@@ -3237,6 +3639,205 @@ def run_check():
     ok(c120 == 2 and any(g["item"] == "price" and "none_in_period" in g["reason"] for g in d120["data_gaps"]),
        "거래 없음은 매입·매각 cap rate에만(다른 칸은 missing, 데이터 구멍)")
     ok(diff_metrics(dict(d119, period="2026Q2"), d119)[1] == 0, "diff: 두 분기 모두 거래 없음인 줄은 missing으로 세지 않음")
+
+    # 35. B3 등급(scorecard, D11): 축 5개, 등급마다 근거 지표·값·단위·단계·기준 문구, 한 단계 내림의 이유 (손으로 매긴 등급)
+    e2 = exp["s2"]
+    sc = load_scorecard()
+    ok(sc["schema"] == "reit-scorecard/1" and [a["key"] for a in sc["axes"]] == list(e2["axes"])
+       and all(resolve_cut(c, th, sc["metrics"]["affo_payout_forward"]) == w for c, w in zip(["watch", "alert"], (85, 100))),
+       "B3 assets/scorecard.json 축 5개, watch·alert 경계는 thresholds.json 값(AFFO payout 85·100)")
+
+    def grades(d):
+        return {a["key"]: a["grade"] for a in d.get("scorecard", {}).get("axes", [])}
+    s130 = d90.get("scorecard") or {}
+    ok(grades(d90) == e2["base"]["grades"], "B3 O fixture 등급 %s (손으로: %s)" % (grades(d90), e2["base"]["why"]))
+    ax = {a["key"]: a for a in s130.get("axes", [])}
+    ev = {e["metric"]: e for e in (ax.get("leverage") or {}).get("evidence", [])}
+    ok(ax.get("leverage", {}).get("grade_name") == "보통" and ax.get("leverage", {}).get("name") == "부채"
+       and ev.get("net_debt_to_ebitdare", {}).get("grade") == "moderate" and ev["net_debt_to_ebitdare"].get("unit") == "x"
+       and near(ev["net_debt_to_ebitdare"].get("value"), exp["values"]["net_debt_to_ebitdare"]["value"])
+       and "6" in ev["net_debt_to_ebitdare"].get("criterion", "") and ev.get("interest_coverage", {}).get("grade") == "ample"
+       and ax["leverage"].get("downgrade") is None and ax.get("valuation", {}).get("grade_name") == "중간",
+       "B3 축마다 이름·등급 이름, 근거 지표(key·값·단위·단계·기준 문구), 내림 없음은 null")
+    cut2 = copy.deepcopy(base)
+    cut2["series"]["dividend_per_share_annual"] = [
+        dict(e, value=v) for e, v in zip(cut2["series"]["dividend_per_share_annual"], exp["cut_series"]["values"])]
+    a131 = {a["key"]: a for a in rcompute(cut2)[0]["scorecard"]["axes"]}["dividend_capacity"]
+    ok(a131["grade"] == e2["cut"]["grade"] and a131.get("base_grade") == "ample"
+       and "2025" in " ".join(a131["downgrade"]["reasons"]) and a131["downgrade"]["notches"] == 1,
+       "B3 최근 3년 안 배당 컷(2025)이 있으면 배당 여력을 한 단계 내림(넉넉 → 보통)")
+    a132 = {a["key"]: a for a in rcompute(wa)[0]["scorecard"]["axes"]}["leverage"]
+    ok(a132["grade"] == e2["covenant"]["grade"] and "covenant" in " ".join(a132["downgrade"]["reasons"]),
+       "B3 covenant 최소 여유 13.3%(15% 미만)면 부채를 한 단계 내림(보통 → 빠듯)")
+    na6 = copy.deepcopy(na5)
+    for k in ("affo_per_share_diluted", "affo_guidance_low", "affo_guidance_high"):
+        na6["facts"][k] = nd("AFFO를 내지 않음")
+    a133 = {a["key"]: a for a in rcompute(na6)[0]["scorecard"]["axes"]}
+    ok(a133["dividend_capacity"]["grade"] == e2["ffo_fallback"]["grade"]
+       and "FFO payout" in " ".join(a133["dividend_capacity"]["downgrade"]["reasons"])
+       and a133["maturity_liquidity"]["grade"] == e2["ffo_fallback"]["maturity_grade"]
+       and {e["metric"]: (e["grade"], e.get("grade_used")) for e in a133["maturity_liquidity"]["evidence"]}.get(
+           "refi_impact_ffo_pct") == ("moderate", "tight"),
+       "B3 AFFO가 없으면 FFO payout 76.66%(보통)을 한 단계 내림(빠듯), 차환 영향/FFO는 그 지표만 한 단계 보수적으로")
+    un = copy.deepcopy(base)
+    for k in ("ebitdare_quarter", "ebitdare_annualized"):
+        un["facts"][k] = {"value": None, "status": "missing", "note": "못 찾음(가상)"}
+    a134 = {a["key"]: a for a in rcompute(un)[0]["scorecard"]["axes"]}["leverage"]
+    nd7 = copy.deepcopy(nc1)
+    nd7["series"]["top_tenants"] = []
+    nd7["series_not_disclosed"]["top_tenants"] = snd(top_tenants={})["top_tenants"]
+    a135 = {a["key"]: a for a in rcompute(nd7)[0]["scorecard"]["axes"]}["tenant_concentration"]
+    ok(a134["grade"] == "unknown" and a134["grade_name"] == "판정 못 함" and a135["grade"] == "unknown"
+       and any(e.get("note", "").startswith("공시 없음") for e in a135["evidence"]),
+       "B3 축의 핵심 지표가 모두 없음·공시 없음이면 판정 못 함")
+    rp = dict(rw, peers=[dict(r, p_ffo_fy1=15.0) for r in rw["peers"]])
+    a136 = {a["key"]: a for a in rcompute(copy.deepcopy(base), rw=rp)[0]["scorecard"]["axes"]}["valuation"]
+    ok(a136["grade"] == e2["valuation_low"]["grade"] and a136["grade_name"] == "낮은 편",
+       "B3 valuation: history 중간(0) + peer 대비 0.853(낮은 편 −1) → 합 −1 낮은 편")
+    ok(g.get("scorecard", {}).get("axes") == [], "B3 일반 배당주 경로는 등급 축이 없음(빈 목록과 note)")
+
+    # 36. B9 사건(events): type·날짜·제목·source·원문 문장(quote), web이면 URL. 어긴 항목은 버리고 데이터 구멍에 알린다
+    def evt(**kw):
+        return dict({"type": "tenant_credit", "date": "2026-10-20", "title": "임차인 A 임대료 미납(가상)",
+                     "source": "sec:10-Q (가상)", "locator": "10-Q L100 (가상)",
+                     "quote": "Tenant A did not pay September rent (가상)"}, **kw)
+    evs = copy.deepcopy(base)
+    evs["events"] = [evt(), evt(type="dividend", date="2026-11-01", title="배당 유지(가상)", source="web:https://example.com/a (가상)",
+                             quote="declared a monthly dividend (가상)"),
+                     evt(type="rating", source="web", quote="x (가상)"), evt(type="merger"), evt(quote=""),
+                     evt(date="2026-13-40"), evt(type="legal", source="web", url="https://example.com/b (가상)", date="2026-09-01",
+                                                 title="소송(가상)", quote="filed a complaint (가상)")]
+    d140, c140 = rcompute(evs)
+    e140 = d140.get("events") or []
+    bad140 = sorted(g["item"] for g in d140["data_gaps"] if g["item"].startswith("events["))
+    ok(c140 == 0 and [e["date"] for e in e140] == ["2026-11-01", "2026-10-20", "2026-09-01"]
+       and e140[0].get("type_name") == "배당" and e140[2].get("url") == "https://example.com/b (가상)"
+       and bad140 == ["events[2]", "events[3]", "events[4]", "events[5]"]
+       and all(g["status"] == "ignored" for g in d140["data_gaps"] if g["item"].startswith("events[")),
+       "B9 맞는 사건 3개를 최신순으로, URL 없는 web·모르는 type·빈 원문·날짜 아닌 것은 버리고 데이터 구멍(ignored), exit 그대로 (got %s %s)" % (
+           [e["date"] for e in e140], bad140))
+    ok(d90.get("events") == [], "B9 facts에 events가 없으면 빈 목록")
+
+    # 37. B8 가볍게 보기(depth light, D15): 핵심 칸만으로 exit 0, 내지 않은 지표는 '가볍게 봄'(not_assessed), 핵심 칸이 비면 exit 2
+    core = set()
+    for c_ in LIGHT_CORE_FACTS:
+        core |= set(c_) if isinstance(c_, tuple) else {c_}
+    lt = copy.deepcopy(base)
+    lt["depth"] = "light"
+    lt["facts"] = {k: v for k, v in lt["facts"].items() if k in core}
+    lt["series"] = {"top_tenants": lt["series"]["top_tenants"]}
+    for k in ("affo_bridge", "sector_kpis"):
+        lt.pop(k)
+    d150, c150 = rcompute(lt)
+    m150 = d150["metrics"]
+    tie150 = next(c_ for c_ in d150["checks"] if c_["check"] == "ffo_tie_out")
+    ax150 = {a["key"]: a for a in d150["scorecard"]["axes"]}
+    ok(c150 == 0 and d150.get("depth") == "light" and d150["summary"]["metrics_missing"] == 0
+       and d150["summary"].get("metrics_not_assessed", 0) > 10 and d150["summary"].get("light_core_missing") == []
+       and m150["ffo_nareit"].get("not_assessed") and m150["covenant_headroom_min_pct"].get("not_assessed")
+       and tie150["pass"] is None and tie150.get("not_assessed")
+       and any(g["status"] == "not_assessed" and "가볍게 봄" in g["reason"] for g in d150["data_gaps"])
+       and near(m150["affo_payout_forward"]["value"], e2["light"]["affo_payout_forward"])
+       and near(m150["net_debt_to_ebitdare"]["value"], e2["light"]["net_debt_to_ebitdare"])
+       and ax150["maturity_liquidity"]["grade"] == "unknown"
+       and any("가볍게 봄" in e["note"] for e in ax150["maturity_liquidity"]["evidence"]),
+       "B8 핵심 칸 %d개만으로 exit 0, 나머지 지표·FFO tie-out은 가볍게 봄, 만기·유동성 축은 판정 못 함 (got %s, missing %s)" % (
+           len(LIGHT_CORE_FACTS), c150, [g["item"] for g in d150["data_gaps"] if g["status"] == "missing"][:5]))
+    schema_md = open(os.path.join(root, "references", "facts-schema.md"), encoding="utf-8").read()
+    light_md = schema_md.split("## 가볍게 보기", 1)[-1].split("\n## ", 1)[0]
+    ok(all("`%s`" % k in light_md for k in core | {"series.top_tenants"}),
+       "B8 facts-schema.md '가볍게 보기'의 핵심 칸이 LIGHT_CORE_FACTS와 같음")
+    lt2 = copy.deepcopy(lt)
+    del lt2["facts"]["occupancy_pct"]
+    d151, c151 = rcompute(lt2)
+    ok(c151 == 2 and d151["summary"].get("light_core_missing") == ["occupancy_pct"],
+       "B8 핵심 칸(occupancy)이 비면 exit 2, summary.light_core_missing")
+    ok(d90.get("depth") == "deep" and d90["summary"].get("metrics_not_assessed") == 0, "B8 depth가 없으면 deep")
+
+    # 38. B16 ticker가 바뀐 종목: assets/ticker_aliases.json과 facts former_tickers로 REITWatch history를 잇는다
+    ok(load_ticker_aliases().get("MPT") == ["MPW"], "B16 assets/ticker_aliases.json에 MPT ← MPW")
+    with tempfile.TemporaryDirectory() as tmp:
+        hist = [("2024-01", 10), ("2024-04", 11), ("2024-07", 12), ("2024-10", 13), ("2025-01", 14), ("2025-04", 15),
+                ("2025-07", 16), ("2025-10", 17), ("2026-01", 18), ("2026-04", 13.5)]
+        for m_, v in hist:
+            t_ = "NEW" if m_ == "2026-04" else "OLD"
+            with open(os.path.join(tmp, m_ + ".json"), "w", encoding="utf-8") as f:
+                json.dump({"schema": REITWATCH_SCHEMA, "month": m_, "as_of": m_ + "-28", "fy1": int(m_[:4]),
+                           "fy2": int(m_[:4]) + 1, "rows": [{"ticker": t_, "subsector": "Free Standing (가상)", "ffo_fy1": 4.0,
+                                                             "ffo_fy2": 4.2, "p_ffo_fy1": v, "mkt_cap": 1000}]}, f)
+        no_alias = load_reitwatch(tmp, "NEW")
+        with_alias = load_reitwatch(tmp, "NEW", aliases=["OLD"])
+        ok(len(no_alias["history"]) == 1 and len(with_alias["history"]) == 10, "B16 별칭이 없으면 history 1개, 있으면 10개")
+        nw = dict(copy.deepcopy(base), ticker="NEW", former_tickers=["OLD"])
+        _, m160 = cli_metrics(nw, ["--reitwatch-dir", tmp])
+        p160 = (m160 or {}).get("metrics", {}).get("p_ffo_history_pctile", {})
+        r160 = (m160 or {}).get("metrics", {}).get("ffo_fy1_rev_3m", {})
+        ok(near(p160.get("value"), e2["alias"]["pctile"]) and "OLD" in p160.get("note", "")
+           and r160.get("value") is not None,
+           "B16 facts former_tickers [OLD]로 history 10개 중 13.5 이하 5개 = 50%%, 3개월 앞 호(OLD)와 revision (got %s)" % (
+               p160.get("value"),))
+
+    # 39. B7 peers: 같은 subsector에서 REITWatch 시총이 가장 가까운 2개, --with, 같은 분기 metrics 재사용 여부
+    with tempfile.TemporaryDirectory() as root:
+        os.makedirs(os.path.join(root, "reitwatch", "parsed"))
+        rows = [("NNN", "Free Standing", 7800), ("O", "Free Standing", 50000), ("ADC", "Free Standing", 8300),
+                ("EPRT", "Free Standing", 5600), ("FCPT", "Free Standing", 2400), ("AAA", "Free Standing", 900),
+                ("DDD", "Industrial", 7900)]
+        with open(os.path.join(root, "reitwatch", "parsed", "2026-10.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": REITWATCH_SCHEMA, "month": "2026-10", "as_of": "2026-09-30",
+                       "rows": [{"ticker": t_, "subsector": s_, "mkt_cap": c_} for t_, s_, c_ in rows]}, f)
+        for t_, depth_, per_ in (("O", None, "2026Q3"), ("ADC", "light", "2026Q3"), ("EPRT", None, "2026Q2")):
+            mp = os.path.join(root, "tickers", t_, "metrics", "2026Q3.json")  # EPRT는 이름만 2026Q3인 다른 분기 파일
+            os.makedirs(os.path.dirname(mp))
+            with open(mp, "w", encoding="utf-8") as f:
+                json.dump(dict({"schema": METRICS_SCHEMA, "ticker": t_, "period": per_}, **({"depth": depth_} if depth_ else {})), f)
+        os.makedirs(os.path.join(root, "tickers", "NNN", "facts"))
+        with open(os.path.join(root, "tickers", "NNN", "facts", "2026Q3.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema": FACTS_SCHEMA, "ticker": "NNN", "period": "2026Q3"}, f)
+        p170, c170 = find_peers("NNN", root=root)
+        pp = {x["ticker"]: x for x in p170.get("peers", [])}
+        ok(c170 == 0 and list(pp) == ["ADC", "EPRT"] and p170.get("period") == "2026Q3"
+           and pp["ADC"]["reuse"] is True and pp["ADC"]["depth"] == "light" and pp["EPRT"]["action"] == "make_light"
+           and pp["EPRT"]["reuse"] is False and [x["ticker"] for x in p170.get("reusable_others", [])] == ["O"]
+           and p170["reusable_others"][0]["depth"] == "deep",
+           "B7 NNN(7,800) peers는 시총이 가까운 ADC(8,300)·EPRT(5,600)(AAA 900은 멂), ADC는 light metrics 재사용, "
+           "EPRT는 파일 속 분기가 달라 light로 만들기, O는 deep metrics가 있어 reusable_others (got %s)" % list(pp))
+        p171, c171 = find_peers("NNN", with_=["O", "ADC"], root=root)
+        q = {x["ticker"]: x for x in p171.get("peers", [])}
+        ok(c171 == 0 and list(q) == ["O", "ADC"] and q["O"]["reuse"] is True and q["O"]["depth"] == "deep"
+           and q["O"]["action"] == "reuse" and q["O"]["metrics_path"].endswith(os.path.join("O", "metrics", "2026Q3.json")),
+           "B7 --with O,ADC면 그 종목, O는 같은 분기 deep metrics를 재사용")
+        ok(find_peers("ZZZ", root=root)[1] == 2 and find_peers("NNN", period="2026Q2", root=root)[0]["peers"][0]["reuse"] is False,
+           "B7 REITWatch에 없는 종목은 exit 2, 다른 분기 metrics는 재사용하지 않음")
+        cli_out = io.StringIO()
+        old_env = os.environ.get("INVEST_DATA_DIR")
+        os.environ["INVEST_DATA_DIR"] = root
+        try:
+            with contextlib.redirect_stdout(cli_out), contextlib.redirect_stderr(io.StringIO()):
+                c172 = main(["peers", "NNN", "--with", "O,ADC"])
+        finally:
+            if old_env is None:
+                os.environ.pop("INVEST_DATA_DIR")
+            else:
+                os.environ["INVEST_DATA_DIR"] = old_env
+        ok(c172 == 0 and json.loads(cli_out.getvalue()).get("peers", [{}])[0].get("ticker") == "O",
+           "B7 peers CLI(--with)가 JSON을 stdout에 씀")
+    with tempfile.TemporaryDirectory() as root:
+        p173, c173 = find_peers("NNN", root=root)
+        ok(c173 == 2 and "reit-sector-scan" in p173.get("note", ""), "B7 REITWatch parsed가 없으면 exit 2와 안내")
+
+    # 40. compare: 종목마다 depth와 scorecard를 싣는다(기존 칸은 그대로)
+    c180, k180 = compare_metrics([d90, dict(d150, ticker="LT")])
+    cols = {c_["ticker"]: c_ for c_ in c180.get("columns", [])}
+    ok(cols.get("O", {}).get("depth") == "deep" and cols.get("LT", {}).get("depth") == "light"
+       and [a["key"] for a in (cols["O"].get("scorecard") or {}).get("axes", [])] == list(e2["axes"])
+       and cols["O"].get("warning") == "" and "metrics_missing" in cols["O"]
+       and c180.get("scorecard_rows", [{}])[0].get("grades", {}).get("O", {}).get("grade") == e2["base"]["grades"]["dividend_capacity"],
+       "compare columns에 depth·scorecard, scorecard_rows에 축마다 종목 등급")
+    old_m = {k_: v for k_, v in d90.items() if k_ not in ("depth", "scorecard", "events")}
+    c181, _ = compare_metrics([old_m, dict(old_m, ticker="O2")])
+    ok(c181["columns"][0]["depth"] == "deep" and c181["columns"][0]["scorecard"] is None,
+       "compare: depth·scorecard가 없는 옛 metrics는 deep과 null")
 
     log("check: %d개 실패" % len(fails) if fails else "check: 모두 통과")
     return 2 if fails else 0

@@ -164,6 +164,36 @@
 - `top_tenants`: 공시된 임차인 수보다 큰 상위 n 지표(예: 5곳만 내면 `top10_tenant_pct`)가 공시 없음이 된다. 공시된 수까지의 지표는 그대로 계산한다.
 - `source`·`locator`가 없으면 쓰지 않고(보통 missing) 데이터 구멍에 올린다. 다른 이름은 ignored다.
 
+## 가볍게 보기 (depth light)
+
+경쟁 종목을 핵심 칸만으로 볼 때 facts 맨 위에 `"depth": "light"`를 적는다(없으면 `deep`). 같은 script와 같은 식을 쓰므로 나중에 deep으로 올릴 때는 칸만 더 채우고 `depth`를 지운다.
+
+핵심 칸(15개, `reit_calc.py`의 `LIGHT_CORE_FACTS`와 같다): `ffo_reported`, `ffo_per_share_diluted`, `affo_reported`, `affo_per_share_diluted`(내지 않으면 `diluted_shares_weighted`), `dividend_regular_latest`, `dividend_frequency`, `price`, `common_shares_outstanding`, `op_units_outstanding`, `total_debt`, `cash`, `ebitdare_quarter`, `interest_expense`, `occupancy_pct`, `series.top_tenants`(최대 임차인 한 줄이라도).
+
+- 핵심 칸은 보도자료 첫 표 몇 개, XBRL 초안, `quote.py price`로 채운다. 회사가 내지 않는 칸은 deep과 같이 `not_disclosed`와 근거를 적는다(채운 것으로 친다).
+- 핵심 칸이 비면(값도 공시 없음도 아님) exit 2이고 `summary.light_core_missing`에 그 칸이 오른다.
+- 핵심 칸으로 내는 지표(`LIGHT_METRICS`: FFO·AFFO 주당, 연간 FFO·AFFO, forward yield·payout, net debt/EBITDAre(분기×4), interest coverage, occupancy, 최대 임차인, 시총·P/FFO·P/AFFO, REITWatch 줄, 시장 차입금리)만 빠지면 missing으로 센다. 나머지 지표가 비면 '가볍게 봄'(`not_assessed`)이고 exit 2로 세지 않는다. FFO tie-out·AFFO bridge check도 입력이 없으면 '가볍게 봄'이다. 더 채운 칸으로 나온 지표는 그대로 낸다.
+
+## events (숫자 밖 사건)
+
+공시 본문(임차인 신용 사건, 소송, 결산 후 사건, guidance 변화)과 웹(신용등급, 임차인 신용 사건, 배당 발표, guidance 변경)의 사건을 facts 맨 위 `events` 목록에 적는다. script가 검사해 metrics `events`로 옮기고(날짜 최신순), 어긴 항목은 버리고 데이터 구멍(ignored)에 알린다. exit에는 세지 않는다.
+
+```json
+"events": [
+  {"type": "tenant_credit", "date": "2026-10-20", "title": "임차인 A 9월 임대료 미납(가상)",
+   "source": "sec:10-Q 0000000000-26-000000", "locator": "...txt L2831 (가상)",
+   "quote": "Tenant A did not pay its September rent (가상)", "note": ""},
+  {"type": "rating", "date": "2026-08-12", "title": "S&P 등급 유지(가상)", "source": "web:https://example.com/... (가상)",
+   "quote": "S&P affirmed the 'BB' rating (가상)"}]
+```
+
+- `type`: `tenant_credit`(임차인 신용), `rating`(신용등급), `dividend`(배당), `guidance`, `legal`(소송), `subsequent`(결산 후 사건), `other`.
+- `date`(YYYY-MM-DD), `title`, `source`, `quote`(원문 문장을 그대로)가 꼭 있어야 한다. `source`가 웹이면 `web:<URL>`로 쓰거나 `url`을 함께 적는다. 출처 없는 사건이 보고서에 들어가지 않게 하려는 것이다.
+
+## former_tickers
+
+ticker가 바뀐 종목은 facts 맨 위에 `"former_tickers": ["MPW"]`처럼 예전 ticker를 적는다. `assets/ticker_aliases.json`(실제로 바뀐 것만)과 함께 써서 REITWatch history(P/FFO percentile)와 3개월 앞 호 consensus를 예전 ticker 호까지 잇는다.
+
 ## affo_bridge
 
 회사 AFFO reconciliation을 줄마다 옮긴다. `start`는 `ffo_reported`나 `normalized_ffo_reported`(표가 시작하는 값), `items`는 그 아래 줄들이다. 부호는 더하는 값 기준이다. 표의 소계 줄(예: "Cumulative adjustments")은 넣지 않는다.

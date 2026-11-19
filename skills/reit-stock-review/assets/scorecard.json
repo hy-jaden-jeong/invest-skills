@@ -1,0 +1,37 @@
+{
+  "schema": "reit-scorecard/1",
+  "_how": "축마다 등급을 매기는 기준(경험칙). cuts는 [넉넉|보통, 보통|빠듯, 빠듯|위험] 경계다. direction above는 값이 클수록 나쁘고(x < cuts[0]이면 넉넉, < cuts[1] 보통, < cuts[2] 빠듯, 그 밖은 위험), below는 값이 작을수록 나쁘다(x >= cuts[0]이면 넉넉, >= cuts[1] 보통, >= cuts[2] 빠듯, 그 밖은 위험). cuts에 \"watch\"·\"alert\"를 쓰면 thresholds 칸이 가리키는 assets/thresholds.json의 값을 쓴다(flag 기준과 어긋나지 않게 같은 숫자를 두 번 적지 않는다). valuation은 위치라 low_below·high_at로 낮은 편·중간·높은 편을 가른다. 근거는 references/metrics.md의 '등급(scorecard)'",
+  "grades": {"ample": "넉넉", "moderate": "보통", "tight": "빠듯", "risk": "위험", "unknown": "판정 못 함"},
+  "valuation_grades": {"low": "낮은 편", "mid": "중간", "high": "높은 편", "unknown": "판정 못 함"},
+  "metrics": {
+    "affo_payout_forward": {"name": "AFFO payout(forward)", "direction": "above", "cuts": [75, "watch", "alert"], "thresholds": "affo_payout_pct"},
+    "affo_payout_quarter": {"name": "AFFO payout(분기)", "direction": "above", "cuts": [75, "watch", "alert"], "thresholds": "affo_payout_pct"},
+    "ffo_payout_forward": {"name": "FFO payout(forward, 참고)", "direction": "above", "cuts": [75, "watch", "alert"], "thresholds": "affo_payout_pct"},
+    "net_debt_to_ebitdare": {"name": "net debt/EBITDAre", "direction": "above", "cuts": [5.0, "watch", "alert"], "thresholds": "net_debt_to_ebitdare_x"},
+    "interest_coverage": {"name": "interest coverage", "direction": "below", "cuts": [4.0, "watch", "alert"], "thresholds": "interest_coverage_x"},
+    "maturity_max_year_pct": {"name": "가장 큰 만기 해 비중", "direction": "above", "cuts": [10, "watch", "alert"], "thresholds": "maturity_single_year_pct"},
+    "liquidity_coverage_24m": {"name": "24개월 liquidity coverage", "direction": "below", "cuts": [2.0, 1.25, 1.0]},
+    "refi_impact_affo_pct": {"name": "차환 이자 증가/AFFO", "direction": "above", "cuts": [2, 5, 10]},
+    "refi_impact_ffo_pct": {"name": "차환 이자 증가/FFO(참고)", "direction": "above", "cuts": [2, 5, 10]},
+    "top1_tenant_pct": {"name": "최대 임차인 비중", "direction": "above", "cuts": [5, 10, 20]},
+    "top10_tenant_pct": {"name": "상위 10 임차인 비중", "direction": "above", "cuts": [25, 40, 60]},
+    "p_ffo_history_pctile": {"name": "P/FFO 자기 history percentile", "low_below": 33.3, "high_at": 66.7},
+    "p_ffo_vs_peer": {"name": "P/FFO / peer median", "low_below": 0.9, "high_at": 1.1}
+  },
+  "downgrades": {
+    "recent_cut_years": 3,
+    "covenant_headroom": {"thresholds": "covenant_headroom_pct", "level": "watch"}
+  },
+  "axes": [
+    {"key": "dividend_capacity", "name": "배당 여력",
+     "rule": "AFFO payout(forward, 없으면 분기)으로 매긴다. AFFO payout이 없으면 FFO payout을 같은 구간에 넣고 한 단계 내린다(FFO는 유지 capex를 빼지 않아 payout이 낮게 나온다). 최근 3년 안 배당 컷이 있으면 한 단계 내린다"},
+    {"key": "leverage", "name": "부채",
+     "rule": "net debt/EBITDAre와 interest coverage 중 나쁜 쪽. covenant 최소 여유가 thresholds.json covenant_headroom_pct watch(15%) 미만이면 한 단계 내린다"},
+    {"key": "maturity_liquidity", "name": "만기·유동성",
+     "rule": "가장 큰 만기 해 비중, 24개월 liquidity coverage, 차환 이자 증가/AFFO 중 가장 나쁜 것. AFFO가 없어 FFO로 나눈 차환 영향은 그 지표만 한 단계 보수적으로 본다. 24개월 안 갚을 것이 없으면 liquidity coverage는 넉넉"},
+    {"key": "tenant_concentration", "name": "임차인 집중",
+     "rule": "최대 임차인 비중과 상위 10 임차인 비중 중 나쁜 쪽. WALE·occupancy는 곁에 보이기만 한다"},
+    {"key": "valuation", "name": "valuation 위치",
+     "rule": "좋고 나쁨이 아니라 위치다. REITWatch P/FFO의 자기 history percentile과 peer median 대비 비율을 낮은 편(-1)·중간(0)·높은 편(+1)으로 놓고 합이 음수면 낮은 편, 양수면 높은 편, 0이면 중간"}
+  ]
+}
