@@ -103,7 +103,19 @@
 
 ## series
 
-- `dividend_per_share_annual`: `edgar.py dividends --facts F`가 넣는다. 항목마다 `period`(연도)가 있다. 다시 돌리면 해마다 합치고, 값과 `locator`가 있는 해(agent가 고친 해)는 덮지 않는다.
+- `dividend_per_share_annual`: 해마다 정기 주당 배당 합(split 조정). `quote.py dividends T --facts F`가 먼저 넣는다(`source: yahoo:dividends`, `locator`는 URL과 그 해 정기 지급의 ex-date·금액). Yahoo가 실패하면 `edgar.py dividends --facts F`(XBRL 연간 값)로 대신한다. XBRL 연간 합은 reverse split 전후 값이 섞이고 특별·주식 배당이 든 해가 커져 그다음 해가 컷으로 보이므로 대조용이다. 항목마다 `period`(연도)가 있다.
+  - 끝난 해만 넣는다(올해는 부분 합이라 CAGR·컷에 쓰지 않는다). Yahoo 값은 최근 끝난 15년만 넣는다(오래된 기록의 빈틈이 컷으로 읽힌다).
+  - 다시 돌리면 해마다 합친다. 빈 해는 채우고, XBRL 값(`sec:xbrl`)과 전에 넣은 Yahoo 값은 Yahoo 값으로 바꾼다(다르면 `note`에 XBRL 값). Yahoo 값이 불확실한 해(아래 3)는 XBRL 값을 남기고 `note`에 Yahoo 값을 적는다. 그 밖의 출처(agent가 공시에서 고친 해)는 덮지 않는다. `edgar.py dividends`는 값과 `locator`가 있는 해를 덮지 않는다.
+  - 정기·특별을 가르는 규칙(`quote.py`의 `classify`). 지급의 자리는 ex-date에 15일을 더한 날(지급일에 가깝다)의 달력 해와 월(월 배당)·분기(분기 배당)이고, 해도 그것으로 정한다. 주기는 최근 지급 간격 12개의 중앙값이다(45일 이하 월, 135일 이하 분기, 270일 이하 반기, 그 위 연).
+    1. 금액이 앞뒤 지급보다 모두 20% 넘게 크거나 작고 다른 지급과 한 자리에 있으면 통째로 특별이다(정기 사이에 끼운 지급).
+    2. 제 자리에 혼자 있고 앞뒤보다 20% 넘게 작으면 정기로 두되 불확실이다. 일부를 주식으로 준 배당은 Yahoo에 현금 부분만 보인다(GLPI 2020 0.60 중 현금 0.12).
+    3. 제 자리에 혼자 있고 1·2를 건너뛴 앞뒤 정기보다 20% 넘게 크면 정기(앞뒤 중 큰 값)와 특별(나머지)로 나눈다. Yahoo가 정기와 특별을 한 건으로 준 것이다(GLPI 2023-03 0.97 = 0.72 + 0.25). 그 해는 `estimated`다.
+    4. 이웃이 하나인 끝 지급은 1만 본다(혼자면 큰 인상인지 특별인지 모른다).
+    5. ex-date + 15일로 정한 해가 한 해 주기−1회, 다음 해 주기+1회면 경계의 지급 하나를 ex-date의 해로 되돌린다(MPT 2008-12-19).
+    6. 끝난 해의 정기 횟수가 주기와 다르면(상장·배당 시작 해, 중단) 그 해는 `estimated`이고 `note`에 횟수를 쓴다. 지급이 없는 끝난 해는 0이다. 상장한 해(첫 거래일이 1월 15일 뒤)는 넣지 않는다.
+  - split: Yahoo 금액은 이미 split 조정돼 있다. 비율을 기약분수로 줄여 한쪽이 1이거나 둘 다 10 이하면(4:10, 2:1) 진짜 split이라 그대로 쓰고, 아니면(O 2021-11 1032:1000, spin-off) 가격 조정으로 보고 그 날 전 금액의 조정을 되돌린다(회사 공시 기준).
+  - Yahoo 금액은 소수 셋째 자리로 반올림된 것이 있어(O 0.2685 → 0.269) 연간 합이 공시와 0.1%쯤 다를 수 있다.
+- `special_dividends`: `quote.py dividends --facts`가 Yahoo 값으로 통째로 바꿔 넣는 특별배당 목록이다. 항목마다 `period`(해), `ex_date`, `value`(주당), `locator`(URL, ex-date, Yahoo 금액), `note`(왜 특별인지). `reit_calc.py`는 읽지 않는다(배당 CAGR·컷에 넣지 않는다).
 - `debt_maturities`: 만기 사다리. `period`는 연도(`"2027"`)나 `thereafter`. 다른 글(날짜 등)이 하나라도 있으면 만기 사다리·24개월 만기가 missing이다. 같은 기준(pro-rata 또는 consolidated)의 원금 합 열을 쓴다.
 - `top_tenants`: 임대료(ABR) 비중 상위 임차인. 항목마다 `label`(이름)과 `%` 값.
 - `covenants`: 회사가 낸 debt covenant 표의 줄. `value` 대신 `limit`(한도)과 `actual`(실제)을 둔다. 한도가 여러 문서(indenture, credit facility)에 따로 있으면 줄마다 `name`에 어느 쪽인지 쓴다.
@@ -151,4 +163,15 @@
 | `price` | 주가 | `quote.py`가 넣는다 |
 
 - XBRL 분기 값은 끝날이 달력 분기 끝날에서 7일 안인 관측을 고른다(52·53주 회계연도). 누적(`_ytd`) 칸은 그 끝날의 380일 안 기간 중 가장 긴 것이다. 새 초안의 `period_end`는 XBRL 관측의 끝날이다.
-- 연간 배당 history의 해는 회계연도 기간 가운데 날의 해다(끝날이 다음 해 1월 초인 53주 해 때문). `Declared` 마지막 해 값이 `CashPaid`의 절반도 안 되면 `CashPaid`를 쓴다(다른 뜻으로 단 tag).
+- 연간 배당 history는 REIT와 같이 `quote.py dividends`가 먼저다. `edgar.py dividends`(대조용)의 해는 회계연도 기간 가운데 날의 해다(끝날이 다음 해 1월 초인 53주 해 때문). `Declared` 마지막 해 값이 `CashPaid`의 절반도 안 되면 `CashPaid`를 쓴다(다른 뜻으로 단 tag).
+
+## facts 밖 출력 파일
+
+facts가 아니라 보고서(`report.py`)가 읽는 파일이다. 값 하나는 위 "값 하나"와 같은 `{value, unit, status, as_of, source, locator, note}`다(`status`에 script가 푼 값이면 `derived`).
+
+- `$INVEST_DATA_DIR/tickers/<T>/dividends.json`(`quote.py dividends`, schema `reit-dividends/1`): `frequency`(`name` monthly·quarterly·semiannual·annual, `per_year`, `median_gap_days`), `splits`(`date`, `ratio`, `kind` split·adjustment), `payments`(지급마다 `ex_date`, `year`, `amount`, `yahoo_amount`, `kind` regular·special, `uncertain`, `note`. 정기 + 특별로 나눈 지급은 같은 ex-date로 두 줄), `annual`(상장 뒤 모든 해: `period`, `regular`, `special`, `regular_count`, `complete`, `uncertain`, `status`, `note`), `series`(facts에 넣는 두 series).
+- `$INVEST_DATA_DIR/tickers/<T>/trend/<P>.json`(`edgar.py trend`, schema `reit-trend/1`): `quarters`(오래된 분기부터 8개), `metrics`(칸마다 `label`, `concept`, `unit`, `kind`, `count`, `values`(분기마다 값 하나, 없으면 missing), `note`), `dropped`(값이 4분기보다 적어 뺀 지표와 이유). 칸은 `revenue`, `interest_expense`, `debt`, `diluted_shares`, `dividend_per_share`다.
+  - 지표마다 분기 값이 가장 많은 concept 하나를 쓴다(분기마다 concept을 섞지 않는다). 같은 기간 값이 여럿이면 늦게 낸 값이다.
+  - 3개월 값이 없는 손익 항목(10-K의 4분기 등)은 같은 시작일의 누적 차이로 푼다(연간 − 9개월, 6개월 − 3개월, `derived`). 희석 주식 수는 가중평균이라 풀지 않는다.
+  - 부채는 합계 concept(`LongTermDebt`, `DebtInstrumentCarryingAmount` 등)이 없으면 마지막 분기에 값이 있는 구성 concept(notes, secured, term loan, line of credit, commercial paper)을 무리마다 하나씩 더한다. 하나라도 없는 분기는 missing이다. carrying value라 Ex.99 total debt(원금)와 다를 수 있다.
+  - 이자비용을 순이자 concept(`InterestIncomeExpenseNonoperatingNet`, 음수)으로만 단 회사는 부호를 바꿔 쓰고 `note`에 적는다.

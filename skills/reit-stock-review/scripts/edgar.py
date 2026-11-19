@@ -4,11 +4,15 @@
 명령
   resolve T                         ticker → CIK, 회사 이름, SIC(6798이면 REIT)
   filings T [--forms F] [--limit N] 최근 공시 목록. 실적 8-K(item 2.02)를 표시한다
-  exhibits T --accession A [--type 10-Q]
-                                    공시의 EX-99 문서(--type이면 그 type 문서)를 받아 .txt로 바꾼다
+  exhibits T --accession A [--type 10-Q] [--images]
+                                    공시의 EX-99 문서(--type이면 그 type 문서)를 받아 .txt로 바꾼다.
+                                    --images면 문서가 참조하는 그림(jpg·png·gif)도 같은 폴더에 받는다(supplemental이 그림인 회사)
   xbrl T --period P [--facts F]     XBRL에서 그 분기 값을 facts 초안에 채운다(비어 있는 칸만).
                                     REIT가 아니면 일반 배당주 칸(EPS, 현금흐름 YTD, 배당)
-  dividends T [--facts F]           XBRL 연간 주당 배당 history
+  dividends T [--facts F]           XBRL 연간 주당 배당 history(대조용. split·특별배당을 가르지 못해 quote.py dividends가 먼저)
+  trend T [--quarters 8] [--period P]
+                                    companyfacts로 최근 8분기 매출·이자비용·부채·희석 주식 수·주당 배당 표.
+                                    $INVEST_DATA_DIR/tickers/<T>/trend/<P>.json과 stdout. 4분기보다 적은 지표는 빼고 알린다
   config (--user-agent "이름 이메일" | --show)
                                     www.sec.gov용 연락처를 $INVEST_DATA_DIR/config.json에 저장·확인한다
   --check                           network 없이 fixture로 확인한다
@@ -98,10 +102,44 @@ DIVIDEND_XBRL_MAP = {
     "dividends_paid_ytd": ("ytd", "USD", ["us-gaap:PaymentsOfDividendsCommonStock", "us-gaap:PaymentsOfOrdinaryDividends",
                                           "us-gaap:PaymentsOfDividends"]),
 }
-XBRL_NOTE = {"dividend_regular_latest": "XBRL 초안: 분기 배당 1회분(분기 배당이면 분기 값과 같다). 최근 배당 공지가 다르면 고친다"}
+DIVIDEND_CONCEPTS = ["us-gaap:CommonStockDividendsPerShareDeclared", "us-gaap:CommonStockDividendsPerShareCashPaid"]
+FFO_BASIS_NOTE = "XBRL 초안: 회사 FFO 표와 기준이 다를 수 있다(%s). Ex.99 줄과 맞춰 볼 것"
+XBRL_NOTE = {"dividend_regular_latest": "XBRL 초안: 분기 배당 1회분(분기 배당이면 분기 값과 같다). 최근 배당 공지가 다르면 고친다",
+             "depreciation_amortization": FFO_BASIS_NOTE % "총 D&A라 FFO 표의 부동산 D&A보다 클 수 있음",
+             "accumulated_depreciation": FFO_BASIS_NOTE % "lease intangible 상각이 빠질 수 있음",
+             "diluted_shares_weighted": FFO_BASIS_NOTE % "OP unit이 빠질 수 있음",
+             "net_income_common": FFO_BASIS_NOTE % "FFO 표의 시작 줄과 NCI·우선주 처리가 다를 수 있음",
+             "debt_carrying_value": FFO_BASIS_NOTE % "발행비용을 뺀 carrying value라 원금과 다를 수 있음"}
+DIV_XBRL_NOTE = ("XBRL 연간 합은 split·특별배당을 가르지 못한다(reverse split 전후 값이 섞이고 특별·주식 배당이 든 해 다음 해가 컷으로 보인다). "
+                 "quote.py dividends가 먼저이고 이 값은 대조용이다")
+# 이자비용 줄을 순이자(이자비용이 음수) concept으로 다는 회사가 있다(DEA). 다른 후보가 없을 때만 부호를 바꿔 쓴다
+NEGATE = {"us-gaap:InterestIncomeExpenseNonoperatingNet": "순이자 concept(이자비용이 음수, 이자수익 차감)이라 부호를 바꿈"}
+TREND_SCHEMA = "reit-trend/1"
+TREND_MIN = 4   # 값이 이보다 적은 지표는 표에서 뺀다
+# 부채: 합계 concept(xbrl 초안 debt_carrying_value의 후보 + 둘). 없으면 구성 concept을 무리마다 하나씩 골라 더한다(겹치지 않게)
+DEBT_TOTALS = XBRL_MAP["debt_carrying_value"][2] + ["us-gaap:DebtLongtermAndShorttermCombinedAmount",
+                                                   "us-gaap:LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities"]
+DEBT_PART_GROUPS = [["us-gaap:SeniorNotes", "us-gaap:NotesPayable", "us-gaap:UnsecuredDebt"],
+                    ["us-gaap:SecuredDebt", "us-gaap:SecuredLongTermDebt"], ["us-gaap:LoansPayable"],
+                    ["us-gaap:LineOfCredit", "us-gaap:LongTermLineOfCredit"], ["us-gaap:CommercialPaper"]]
+# (칸, 이름, 성격, unit, concept 후보, note). flow는 분기 값이 없으면 누적(YTD) 차이로 푼다. average(가중평균)는 풀지 않는다
+TREND_METRICS = [
+    ("revenue", "매출", "flow", "USD", ["us-gaap:Revenues", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                                       "us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax",
+                                       "us-gaap:OperatingLeaseLeaseIncome"],
+     "총매출(Revenues 계열). 보도자료 표의 total revenues와 맞춰 본다"),
+    ("interest_expense", "이자비용", "flow", "USD", XBRL_MAP["interest_expense"][2] + ["us-gaap:InterestIncomeExpenseNonoperatingNet"],
+     "손익계산서 이자비용"),
+    ("debt", "부채", "debt", "USD", DEBT_TOTALS,
+     "carrying value라 회사 total debt(원금)와 다를 수 있다. 구성 concept 합이면 빠진 부채(revolver 등)가 있을 수 있다"),
+    ("diluted_shares", "희석 주식 수(가중평균)", "average", "shares",
+     ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding"],
+     "OP unit이 빠질 수 있다. 가중평균이라 4분기(연간 − 9개월)는 풀지 않는다"),
+    ("dividend_per_share", "주당 배당(선언)", "flow", "USD/shares", DIVIDEND_CONCEPTS,
+     "Declared가 없으면 CashPaid. split 전 값이 섞이지 않았는지 quote.py dividends와 맞춰 본다"),
+]
 END_TOLERANCE_DAYS = 7  # 52·53주 회계연도는 분기 끝날이 달력 분기 끝날과 며칠 다르다
 UNIT_NAME = {"USD": "USD", "shares": "shares", "USD/shares": "USD/share"}
-DIVIDEND_CONCEPTS = ["us-gaap:CommonStockDividendsPerShareDeclared", "us-gaap:CommonStockDividendsPerShareCashPaid"]
 
 
 class FetchError(Exception):
@@ -332,6 +370,20 @@ def index_documents(index_html):
     return docs
 
 
+IMG_RE = re.compile(r"""<img\b[^>]*?\bsrc\s*=\s*(["']?)([^"'\s>]+)\1""", re.I)
+SAFE_IMG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|gif)$", re.I)
+
+
+def image_refs(html_text):
+    """문서가 참조하는 그림 중 같은 폴더의 jpg·png·gif 이름(나온 차례, 겹치면 한 번). 다른 host·상위 경로는 버린다."""
+    out = []
+    for m in IMG_RE.finditer(html_text):
+        name = m.group(2)
+        if SAFE_IMG.match(name) and name not in out:
+            out.append(name)
+    return out
+
+
 def wanted_documents(docs, doc_type):
     """filing index 문서 중 type이 doc_type(EX-99, 10-Q 등)으로 시작하는 것."""
     return [d for d in docs if d["type"].upper().startswith(doc_type.upper())]
@@ -471,6 +523,136 @@ def annual_dividends(cf):
              25 <= (parse_date(o["end"]) - parse_date(o["start"])).days <= 35]
     hint = note + ("월별 지급 기록이 있음(12회일 수 있음)" if short else "월별 기록 없음(분기 4회일 수 있음)")
     return series, c, hint
+
+
+def xbrl_dividends_doc(info, cf):
+    series, concept, hint = annual_dividends(cf)
+    return {"ticker": info["ticker"], "concept": concept, "frequency_hint": hint, "series": series, "note": DIV_XBRL_NOTE}
+
+
+# ---------------------------------------------------------------- 8분기 추세
+
+def prev_quarter(q):
+    y, n = int(q[:4]), int(q[5])
+    return "%dQ%d" % ((y - 1, 4) if n == 1 else (y, n - 1))
+
+
+def _obs(cf, concept, unit):
+    ns, name = concept.split(":")
+    return (((cf.get("facts") or {}).get(ns) or {}).get(name) or {}).get("units", {}).get(unit) or []
+
+
+def _days(o):
+    return (parse_date(o["end"]) - parse_date(o["start"])).days
+
+
+def _num(v):
+    v = round(v, 6)
+    return int(v) if float(v).is_integer() else v
+
+
+def ytd_diff(cf, concept, unit, end):
+    """분기 값 = 그 분기 끝날의 누적(YTD) − 같은 시작일로 한 분기 짧은 누적(연간 − 9개월, 6개월 − 3개월). (A, B) 또는 None."""
+    obs = [o for o in _obs(cf, concept, unit) if o.get("start")]
+    cands = [o for o in obs if abs((parse_date(o["end"]) - end).days) <= END_TOLERANCE_DAYS and 100 < _days(o) <= 380]
+    for a in sorted(cands, key=lambda o: (_days(o), o.get("filed", "")), reverse=True):
+        bs = [o for o in obs if abs((parse_date(o["start"]) - parse_date(a["start"])).days) <= 3
+              and 80 <= _days(a) - _days(o) <= 100]
+        if bs:
+            return a, max(bs, key=lambda o: o.get("filed", ""))
+    return None
+
+
+def trend_cell(cf, concept, unit, kind, end):
+    """분기 하나의 값 envelope. 풀 수 없으면 missing."""
+    o = pick_fact(cf, concept, unit, "instant" if kind == "instant" else "duration", end)
+    if o:
+        span = ("%s..%s" % (o["start"], o["end"])) if o.get("start") else o["end"]
+        return {"value": o["val"], "unit": UNIT_NAME[unit], "status": "reported", "as_of": o["end"],
+                "source": "sec:xbrl %s %s" % (o.get("form", ""), o.get("accn", "")), "locator": "%s %s" % (concept, span),
+                "note": ""}
+    if kind == "average":
+        return reit_calc.missing("3개월 값이 없음. 가중평균이라 누적 차이로 풀지 않는다")
+    if kind == "flow":
+        ab = ytd_diff(cf, concept, unit, end)
+        if ab:
+            a, b = ab
+            return {"value": _num(a["val"] - b["val"]), "unit": UNIT_NAME[unit], "status": "derived", "as_of": a["end"],
+                    "source": "sec:xbrl %s %s − %s %s" % (a.get("form", ""), a.get("accn", ""), b.get("form", ""), b.get("accn", "")),
+                    "locator": "%s %s..%s %s − %s..%s %s" % (concept, a["start"], a["end"], a["val"], b["start"], b["end"], b["val"]),
+                    "note": "분기 값이 없어 누적(YTD) 차이로 풀었다"}
+    return reit_calc.missing("그 분기 값이 companyfacts에 없음")
+
+
+def debt_parts_cells(cf, quarters):
+    """합계 concept이 없을 때: 마지막 분기에 값이 있는 구성 concept을 무리마다 하나씩 골라 분기마다 더한다.
+    고른 concept 중 하나라도 없는 분기는 missing. (concept 이름, {분기: envelope})."""
+    last = quarter_end(quarters[-1])
+    parts = []
+    for group in DEBT_PART_GROUPS:
+        c = next((c for c in group if pick_fact(cf, c, "USD", "instant", last)), None)
+        if c:
+            parts.append(c)
+    cells = {}
+    for q in quarters:
+        got = [(c, pick_fact(cf, c, "USD", "instant", quarter_end(q))) for c in parts]
+        if not parts or any(o is None for _, o in got):
+            cells[q] = reit_calc.missing("구성 concept 중 그 분기 값이 없는 것: %s" % ", ".join(c for c, o in got if o is None)
+                                         if parts else "부채 concept이 없음")
+            continue
+        cells[q] = {"value": sum(o["val"] for _, o in got), "unit": "USD", "status": "derived" if len(got) > 1 else "reported",
+                    "as_of": max(o["end"] for _, o in got),
+                    "source": "sec:xbrl " + ", ".join(sorted({"%s %s" % (o.get("form", ""), o.get("accn", "")) for _, o in got})),
+                    "locator": " + ".join("%s %s" % (c, o["val"]) for c, o in got) + " (%s)" % got[0][1]["end"],
+                    "note": "합계 concept이 없어 구성 concept을 더함"}
+    return " + ".join(parts), cells
+
+
+def trend_doc(cf, ticker, period, n=8):
+    """companyfacts → 최근 n분기 표. 지표마다 분기 값이 가장 많은 concept 하나를 쓴다(분기마다 concept을 섞지 않는다)."""
+    quarters = [period]
+    while len(quarters) < n:
+        quarters.insert(0, prev_quarter(quarters[0]))
+    metrics, dropped = {}, []
+    for key, label, kind, unit, cands, note in TREND_METRICS:
+        best = None
+        for c in cands:
+            cells = {q: trend_cell(cf, c, unit, "instant" if kind == "debt" else kind, quarter_end(q)) for q in quarters}
+            if c in NEGATE:
+                cells = {q: dict(v, value=-v["value"], note="; ".join(x for x in (v["note"], NEGATE[c]) if x))
+                         if v["value"] is not None else v for q, v in cells.items()}
+            cnt = sum(1 for v in cells.values() if v["value"] is not None)
+            if cnt and (best is None or cnt > best[2]):
+                best = (c, cells, cnt)
+        if kind == "debt" and (best is None or best[2] < len(quarters)):
+            c, cells = debt_parts_cells(cf, quarters)
+            cnt = sum(1 for v in cells.values() if v["value"] is not None)
+            if cnt and (best is None or cnt > best[2]):
+                best = (c, cells, cnt)
+        if best is None or best[2] < min(TREND_MIN, n):
+            dropped.append({"metric": key, "label": label, "count": best[2] if best else 0,
+                            "concept": best[0] if best else None,
+                            "reason": "값이 %d분기뿐이라 표에서 뺌(%d분기 이상만 싣는다)" % (best[2] if best else 0, min(TREND_MIN, n))})
+            continue
+        metrics[key] = {"label": label, "concept": best[0], "unit": UNIT_NAME[unit], "kind": kind, "count": best[2],
+                        "values": best[1], "note": "; ".join(x for x in (note, NEGATE.get(best[0])) if x)}
+    return {"schema": TREND_SCHEMA, "ticker": ticker.upper(), "period": period, "quarters": quarters,
+            "source": "sec:companyfacts", "metrics": metrics, "dropped": dropped,
+            "note": "분기는 달력 분기(끝날 ±%d일). 값은 companyfacts에서 늦게 낸 것, 3개월 값이 없으면 누적 차이(derived)" % END_TOLERANCE_DAYS}
+
+
+def latest_quarter(cf):
+    """추세 concept 중 가장 늦은 분기 끝날(달력 분기 끝날 ±7일)의 분기."""
+    best = None
+    concepts = [(c, u) for _, _, _, u, cs, _ in TREND_METRICS for c in cs] + [
+        (c, "USD") for g in DEBT_PART_GROUPS for c in g]
+    for c, u in concepts:
+        for o in _obs(cf, c, u):
+            e = parse_date(o["end"])
+            for q in ("%dQ%d" % (e.year + dy, k) for dy in (-1, 0) for k in (1, 2, 3, 4)):
+                if abs((quarter_end(q) - e).days) <= END_TOLERANCE_DAYS and (best is None or q > best):
+                    best = q
+    return best
 
 
 def skeleton(info, period, filing):
@@ -667,13 +849,24 @@ def cmd_exhibits(args):
         except NeedContact:
             return agent_fetch_fallback(info, acc, index_url, adir, args.type)
         tpath = os.path.join(adir, d["document"].rsplit(".", 1)[0] + ".txt")
+        images = []
         if d["document"].lower().endswith((".htm", ".html")):
+            text = raw.decode("utf-8", "replace")
             with open(tpath, "w", encoding="utf-8") as f:
-                f.write(html_to_text(raw.decode("utf-8", "replace")))
+                f.write(html_to_text(text))
+            for name in (image_refs(text) if args.images else []):
+                try:
+                    cached(os.path.join(adir, name), base + name, None)
+                except NeedContact:
+                    return agent_fetch_fallback(info, acc, index_url, adir, args.type)
+                images.append({"name": name, "path": os.path.join(adir, name), "url": base + name})
         else:
             tpath = None
-        out.append(dict(d, path=os.path.join(adir, d["document"]), text_path=tpath, url=base + d["document"]))
-    print(json.dumps({"ticker": info["ticker"], "accession": acc, "exhibits": out}, ensure_ascii=False, indent=2, allow_nan=False))
+        out.append(dict(d, path=os.path.join(adir, d["document"]), text_path=tpath, url=base + d["document"], images=images))
+    if args.images:
+        log("그림 %d개를 받음: %s" % (sum(len(x["images"]) for x in out), adir))
+    print(json.dumps({"ticker": info["ticker"], "accession": acc, "images_requested": bool(args.images), "exhibits": out},
+                     ensure_ascii=False, indent=2, allow_nan=False))
     return 0
 
 
@@ -715,9 +908,10 @@ def cmd_xbrl(args):
 def cmd_dividends(args):
     info, _ = load_company(args.ticker)
     cf = load_companyfacts(args.ticker, info["cik"])
-    series, concept, hint = annual_dividends(cf)
-    print(json.dumps({"ticker": info["ticker"], "concept": concept, "frequency_hint": hint, "series": series},
-                     ensure_ascii=False, indent=2, allow_nan=False))
+    doc = xbrl_dividends_doc(info, cf)
+    series = doc["series"]
+    log(DIV_XBRL_NOTE)
+    print(json.dumps(doc, ensure_ascii=False, indent=2, allow_nan=False))
     if args.facts:
         doc = read_json(args.facts)
         ser = doc.setdefault("series", {})
@@ -727,11 +921,39 @@ def cmd_dividends(args):
     return 0 if series else 2
 
 
+def cmd_trend(args):
+    if args.period and not quarter_end(args.period):
+        log("--period는 2026Q3 모양(달력 분기)")
+        return 1
+    if args.quarters < 1:
+        log("--quarters는 1 이상")
+        return 1
+    info, _ = load_company(args.ticker)
+    cf = load_companyfacts(args.ticker, info["cik"])
+    period = args.period or latest_quarter(cf)
+    if not period:
+        log("companyfacts에 추세 concept의 분기 값이 없음")
+        return 1
+    doc = trend_doc(cf, info["ticker"], period, args.quarters)
+    doc["url"] = COMPANYFACTS_URL % info["cik"]
+    path = os.path.join(ticker_dir(args.ticker), "trend", "%s.json" % period)
+    write_json(doc, path)
+    for k, m in doc["metrics"].items():
+        empty = [q for q, v in m["values"].items() if v["value"] is None]
+        log("%s(%s): %d/%d분기%s" % (m["label"], m["concept"], m["count"], len(doc["quarters"]),
+                                   ", 없음 " + " ".join(empty) if empty else ""))
+    for d in doc["dropped"]:
+        log("표에서 뺌: %s(%s) %s" % (d["label"], d["metric"], d["reason"]))
+    log("추세 표: %s" % path)
+    print(json.dumps(doc, ensure_ascii=False, indent=2, allow_nan=False))
+    return 2 if doc["dropped"] else 0
+
+
 def main(argv):
     p = argparse.ArgumentParser(prog="edgar.py", description="SEC EDGAR 공시·XBRL")
     p.add_argument("--check", action="store_true", help="network 없이 fixture로 확인")
     sub = p.add_subparsers(dest="cmd")
-    for name in ("resolve", "filings", "exhibits", "xbrl", "dividends"):
+    for name in ("resolve", "filings", "exhibits", "xbrl", "dividends", "trend"):
         s = sub.add_parser(name)
         s.add_argument("ticker")
         if name == "filings":
@@ -740,6 +962,10 @@ def main(argv):
         if name == "exhibits":
             s.add_argument("--accession", required=True)
             s.add_argument("--type", default="EX-99", help="받을 문서 type(기본 EX-99. 10-Q 본문의 fair value 주석은 10-Q)")
+            s.add_argument("--images", action="store_true", help="문서가 참조하는 그림(jpg·png·gif)도 받는다")
+        if name == "trend":
+            s.add_argument("--quarters", type=int, default=8)
+            s.add_argument("--period", help="마지막 분기(2026Q3). 없으면 companyfacts의 가장 늦은 분기")
         if name == "xbrl":
             s.add_argument("--period", required=True)
         if name in ("xbrl", "dividends"):
@@ -757,7 +983,7 @@ def main(argv):
     if args.cmd == "config":
         return cmd_config(args)
     cmds = {"resolve": cmd_resolve, "filings": cmd_filings, "exhibits": cmd_exhibits,
-            "xbrl": cmd_xbrl, "dividends": cmd_dividends}
+            "xbrl": cmd_xbrl, "dividends": cmd_dividends, "trend": cmd_trend}
     if args.cmd not in cmds:
         p.print_help(sys.stderr)
         return 1
@@ -1002,8 +1228,117 @@ def run_check():
         ok(len(calls) == 1, "cache 안이면 다시 받지 않음")
         ok(cached(p, "u", 0, down) == b"{}", "받기 실패면 전에 받은 cache를 씀")
 
+    check_s3(ok, fx, cf, info)
+
     log("check: %d개 실패" % len(fails) if fails else "check: 모두 통과")
     return 2 if fails else 0
+
+
+def check_s3(ok, fx, cf, info):
+    """trend, dividends note, XBRL 초안 note, exhibits --images. 기대값은 fixture를 만들 때 손으로 셈(가상 회사)."""
+    import contextlib
+    import io as _io
+    # XBRL 초안 중 회사 FFO 표와 기준이 다른 칸(findings 15): 값은 그대로, note에 맞춰 볼 곳
+    draft = xbrl_draft(cf, "2026Q3")
+    for k in ("depreciation_amortization", "accumulated_depreciation", "diluted_shares_weighted", "net_income_common",
+              "debt_carrying_value"):
+        ok("회사 FFO 표와 기준이 다를 수 있다" in draft[k]["note"] and "Ex.99" in draft[k]["note"],
+           "XBRL 초안 %s note: 회사 FFO 표와 기준이 다를 수 있다, Ex.99 줄과 맞춰 볼 것" % k)
+    # dividends: 대조용으로 남기고 note
+    dd = xbrl_dividends_doc(info, cf)
+    ok("quote.py dividends" in dd["note"] and "split" in dd["note"] and "특별" in dd["note"] and dd["series"],
+       "edgar.py dividends 출력 note: split·특별배당을 가르지 못한다, quote.py dividends가 먼저")
+
+    # trend: 가상 회사 8분기
+    ct = read_json(os.path.join(fx, "companyfacts_trend.json"))
+    td = trend_doc(ct, "TEST", "2026Q3", 8)
+    qs = ["2024Q4", "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]
+    ok(td["quarters"] == qs and td["schema"] == TREND_SCHEMA and td["period"] == "2026Q3", "trend: 8분기(오래된 것부터)")
+    M = td["metrics"]
+
+    def vals(m):
+        return [(M[m]["values"][q]["value"], M[m]["values"][q]["status"]) for q in qs]
+    ok(vals("revenue") == [(1050, "derived"), (1060, "reported"), (1090, "reported"), (1105, "reported"), (1150, "derived"),
+                           (1200, "reported"), (1210, "reported"), (1230, "reported")]
+       and M["revenue"]["concept"] == "us-gaap:Revenues",
+       "매출: 4분기는 연간 − 9개월(4000 − 2950, 4400 − 3250), 다시 낸 값(1105)은 늦게 낸 것, 분기 값이 적은 concept은 고르지 않음")
+    ok(M["revenue"]["values"]["2025Q4"]["locator"].startswith("us-gaap:Revenues 2025-01-01..2025-12-31 4400 − 2025-01-01..2025-09-30 3250")
+       and M["revenue"]["values"]["2025Q3"]["source"] == "sec:xbrl 10-Q 0000000001-26-000030"
+       and M["revenue"]["values"]["2026Q3"]["as_of"] == "2026-09-30" and M["revenue"]["values"]["2026Q3"]["unit"] == "USD",
+       "값마다 source·locator(concept, 기간, 원래 값)·as_of·unit")
+    ok(vals("interest_expense") == [(90, "derived"), (92, "reported"), (94, "derived"), (96, "reported"), (98, "derived"),
+                                    (100, "reported"), (102, "reported"), (104, "reported")]
+       and M["interest_expense"]["concept"] == "us-gaap:InterestExpenseNonoperating",
+       "이자비용: 3개월 값이 없는 분기는 YTD 차이(6개월 186 − 1분기 92 = 94), 연간 값 하나뿐인 concept은 고르지 않음")
+    ok([M["debt"]["values"][q]["value"] for q in qs] == [5400, None, 5630, 5470, 5710, 5850, 5840, 5950]
+       and M["debt"]["values"]["2025Q1"]["status"] == "missing" and "NotesPayable" in M["debt"]["concept"]
+       and "LineOfCredit" in M["debt"]["concept"] and M["debt"]["values"]["2026Q3"]["status"] == "derived",
+       "부채: 합계 concept이 없으면 최근 분기에 있는 구성 concept(notes, secured, line of credit)의 합, 하나라도 없는 분기는 없음")
+    ok([M["diluted_shares"]["values"][q]["value"] for q in qs] == [None, 100, 101, 102, None, 104, 105, 106]
+       and "가중평균" in M["diluted_shares"]["values"]["2025Q4"]["note"],
+       "희석 주식 수: 가중평균이라 4분기(연간 − 9개월)를 풀지 않음")
+    ok("dividend_per_share" not in M and [x["metric"] for x in td["dropped"]] == ["dividend_per_share"]
+       and td["dropped"][0]["count"] == 3, "값이 4분기보다 적은 지표(주당 배당 3분기)는 표에서 빼고 dropped에 알림")
+    t4 = trend_doc(ct, "TEST", "2026Q3", 4)
+    ok(t4["quarters"] == qs[4:] and sorted(x["metric"] for x in t4["dropped"]) == ["diluted_shares", "dividend_per_share"],
+       "--quarters 4: 4분기 표, 희석 주식 수 3분기는 뺌")
+    ok(latest_quarter(ct) == "2026Q3", "--period가 없으면 companyfacts의 가장 늦은 분기")
+    net = {"facts": {"us-gaap": {"InterestIncomeExpenseNonoperatingNet": {"units": {"USD": [
+        {"start": a, "end": b, "val": v, "form": "10-Q", "accn": "0000000001-26-000030", "filed": "2026-11-03"}
+        for a, b, v in (("2025-10-01", "2025-12-31", -48), ("2026-01-01", "2026-03-31", -50),
+                        ("2026-04-01", "2026-06-30", -51), ("2026-07-01", "2026-09-30", -52))]}}}}}
+    tn = trend_doc(net, "TEST", "2026Q3", 4)["metrics"].get("interest_expense") or {}
+    ok([v["value"] for v in (tn.get("values") or {}).values()] == [48, 50, 51, 52] and "부호" in tn.get("note", ""),
+       "이자비용 concept이 순이자(InterestIncomeExpenseNonoperatingNet, 음수)뿐이면 부호를 바꿔 쓰고 note에 적음")
+
+    # CLI(가짜 http_get): trend 파일, exhibits --images
+    global http_get
+    real_get, urls = http_get, []
+    old_ua, old_dir = os.environ.get("SEC_USER_AGENT"), os.environ.get("INVEST_DATA_DIR")
+    files = {"company_tickers.json": "company_tickers.json", "/submissions/": "submissions.json",
+             "/companyfacts/": "companyfacts_trend.json", "-index.htm": "index.htm", "ex991.htm": "ex99_img.htm",
+             "supp.htm": "ex99.htm"}
+
+    def fake_get(url):
+        urls.append(url)
+        for key, name in files.items():
+            if key in url:
+                with open(os.path.join(fx, name), "rb") as f:
+                    return f.read()
+        if url.endswith((".jpg", ".png", ".gif")):
+            return b"IMG " + url.rsplit("/", 1)[-1].encode()
+        raise FetchError("HTTP 404 (%s)" % url)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["INVEST_DATA_DIR"] = tmp
+            os.environ["SEC_USER_AGENT"] = "Test User test@example.com"   # 가상 연락처
+            http_get = fake_get
+            out = _io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(_io.StringIO()) as err:
+                rc = main(["trend", "TEST"])
+            tp = os.path.join(tmp, "tickers", "TEST", "trend", "2026Q3.json")
+            ok(rc == 2 and os.path.exists(tp) and read_json(tp)["metrics"]["revenue"]["values"]["2025Q4"]["value"] == 1150
+               and json.loads(out.getvalue())["period"] == "2026Q3" and "dividend_per_share" in err.getvalue(),
+               "trend CLI: tickers/<T>/trend/<P>.json과 stdout, 뺀 지표가 있으면 exit 2와 stderr 알림")
+            adir = os.path.join(tmp, "tickers", "TEST", "filings", "0000000001-26-000008")
+            with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(_io.StringIO()):
+                r0 = main(["exhibits", "TEST", "--accession", "0000000001-26-000008"])
+            ok(r0 == 0 and not os.path.exists(os.path.join(adir, "g1.jpg")), "exhibits: 기본은 그림을 받지 않음")
+            out = _io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(_io.StringIO()):
+                r1 = main(["exhibits", "TEST", "--accession", "0000000001-26-000008", "--images"])
+            ex = json.loads(out.getvalue())["exhibits"]
+            ok(r1 == 0 and [i["name"] for i in ex[0]["images"]] == ["g1.jpg", "logo.jpg"] and ex[1]["images"] == []
+               and open(os.path.join(adir, "g1.jpg"), "rb").read() == b"IMG g1.jpg"
+               and not any("example.com" in u or "x.gif" in u or "chart.svg" in u for u in urls),
+               "exhibits --images: EX-99가 참조하는 jpg·png·gif를 같은 폴더에 받음(다른 host·상위 경로·다른 형식은 받지 않음, 겹치면 한 번)")
+    finally:
+        http_get = real_get
+        for k, v in (("SEC_USER_AGENT", old_ua), ("INVEST_DATA_DIR", old_dir)):
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 if __name__ == "__main__":
