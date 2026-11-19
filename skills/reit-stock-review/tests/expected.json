@@ -523,12 +523,12 @@
         },
         "ffo_fy1_rev_3m": {
           "value": -1.1628,
-          "status": "estimated",
+          "status": "derived",
           "why": "4.25(2026-10 호 FY1 2026) / 4.30(2026-07 호 FY1 2026) − 1 (bc −1.16279)"
         },
         "ffo_growth_fy2": {
           "value": 3.5294,
-          "status": "estimated",
+          "status": "derived",
           "why": "4.4 / 4.25 − 1 (bc 3.52941)"
         }
       },
@@ -539,7 +539,9 @@
         "noi_economic": 5461304,
         "economic_implied_cap_rate": 6.8547,
         "why": "회사 capex reserve 300,000(가상)이면 derived: (5,761,304 − 300,000) / 79,672,495 × 100 (bc 6.85466)"
-      }
+      },
+      "debt_mtm_basis_mix": 7.0132,
+      "debt_mtm_basis_mix_why": "회사 capex reserve 300,000(가상)에 NOI pro_rata, 부채 fair value·carrying consolidated: 5,461,304 / (79,672,495 − 1,800,700) × 100 (bc 7.01317...), 기준이 섞여 estimated"
     }
   },
   "edgar": {

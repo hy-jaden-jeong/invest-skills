@@ -131,6 +131,12 @@ SERIES_KINDS = {
     "covenants": "covenant",
 }
 COVENANT_UNITS = ("%", "x")
+# 칸의 기준. 회사 표의 consolidated(연결)·pro_rata(지분 몫) 열 중 어느 것인지 적는다(선택). 식의 입력끼리 다르면 estimated.
+BASES = ("consolidated", "pro_rata")
+# 0 이상이어야 하는 칸(음수면 부호를 잘못 옮긴 것이라 거절한다)
+NONNEG_FACTS = ("dev_remaining_spend", "capex_reserve")
+# 희석 주식 수가 기말 보통주와 이 배수 넘게 다르면 단위를 잘못 적은 것으로 본다
+SHARE_UNIT_RATIO = 10
 BRIDGE_STARTS = ["ffo_reported", "normalized_ffo_reported"]
 # AFFO bridge 줄의 성격. recurring_capex·leasing_cost는 부동산을 유지하는 데 드는 돈, straight_line은 현금이 아닌 임대료다.
 BRIDGE_CATEGORIES = ("straight_line", "recurring_capex", "leasing_cost", "non_cash", "other")
@@ -179,6 +185,13 @@ class Undefined(Exception):
     """식이 뜻을 잃는 입력(예: FCF가 0 이하인 payout). 값을 내지 않고 이유를 note에 쓴다."""
 
 
+def positive(x, why):
+    """분모가 0 이하면 Undefined(why). 양수면 True."""
+    if x <= 0:
+        raise Undefined(why)
+    return True
+
+
 def log(msg):
     print(msg, file=sys.stderr)
 
@@ -204,6 +217,14 @@ def parse_date(s):
     return dt.date(*[int(x) for x in s[:10].split("-")])
 
 
+def to_date(s):
+    """날짜 글이면 date, 아니면 None(멈추지 않는다)."""
+    try:
+        return parse_date(str(s))
+    except (ValueError, TypeError):
+        return None
+
+
 # ---------------------------------------------------------------- 값 다루기
 
 def missing(note):
@@ -223,8 +244,16 @@ def check_value(key, f):
     status = f.get("status")
     if status not in STATUSES:
         return missing("%s: status %r" % (key, status)), "status"
+    if f.get("not_disclosed") is True and f.get("value") is not None:
+        return missing("%s: value와 not_disclosed를 함께 적음(공시 없음이면 value는 비운다)" % key), "not_disclosed"
     if status == "missing" or f.get("value") is None:
-        return missing(f.get("note") or f.get("reason") or "값 없음"), None
+        note = f.get("note") or f.get("reason") or "값 없음"
+        if f.get("not_disclosed") is True:
+            if not (str(f.get("source", "")).strip() and str(f.get("locator", "")).strip()):
+                return missing("%s: not_disclosed에는 회사가 내지 않는다는 근거(source·locator)가 있어야 함: %s" % (
+                    key, note)), "출처"
+            return dict(missing(note), not_disclosed=True, source=f["source"], locator=f["locator"]), None
+        return missing(note), None
     if not is_finite(f.get("value")):
         return missing("%s: value(%r)가 유한한 숫자가 아님" % (key, f.get("value"))), "숫자"
     if not (str(f.get("source", "")).strip() and str(f.get("locator", "")).strip()):
@@ -248,7 +277,8 @@ def sum_parts(key, f, kind):
         got.append(env)
     st = worst([e["status"] for e in got])
     dates = [e["as_of"] for e in got if e.get("as_of")]
-    return {"value": round(sum(e["value"] for e in got), 4), "unit": BASE_UNIT[kind],
+    return {**({"basis": f["basis"]} if f.get("basis") else {}),
+            "value": round(sum(e["value"] for e in got), 4), "unit": BASE_UNIT[kind],
             "status": "derived" if st == "reported" else st, "as_of": min(dates) if dates else None,
             "source": "; ".join(sorted(set(e["source"] for e in got))),
             "locator": " + ".join(e["locator"] for e in got),
@@ -258,7 +288,11 @@ def sum_parts(key, f, kind):
 def normalize(key, f, kind):
     """facts 칸 하나를 검사하고(check_value) 단위를 맞춘다. 규칙을 어기면 missing으로 내리고 이유를 note에 쓴다.
     value 대신 parts(회사 표의 여러 줄)가 있으면 줄마다 검사해 더한다."""
-    if isinstance(f, dict) and "parts" in f and f.get("value") is None:
+    if isinstance(f, dict) and f.get("basis") is not None and f.get("basis") not in BASES:
+        return missing("%s: basis %r는 %s 중 하나여야 함" % (key, f.get("basis"), "·".join(BASES))), "basis"
+    if isinstance(f, dict) and "parts" in f:
+        if f.get("value") is not None:
+            return missing("%s: parts와 value를 함께 적음(parts면 value는 비운다)" % key), "parts"
         return sum_parts(key, f, kind)
     f, bad = check_value(key, f)
     if bad or f["status"] == "missing":
@@ -281,6 +315,9 @@ def read_covenant(key, it):
     if not isinstance(it, dict):
         return dict(missing("%s: 줄의 형식이 아님" % key), name=None), "형식"
     out = {k: it.get(k) for k in ("name", "limit", "actual", "direction", "unit", "status", "as_of", "source", "locator")}
+    for k in ("limit", "actual"):  # NaN·Infinity·문자는 출력에 null로(원래 값은 note에)
+        if out[k] is not None and not is_finite(out[k]):
+            out[k] = None
     out["note"] = it.get("note") or ""
     st = it.get("status")
     if st not in STATUSES:
@@ -321,8 +358,10 @@ def metric(name, formula, inputs, fn, unit, note=""):
     miss = [k for k, e in inputs.items() if e.get("value") is None]
     if miss:
         reasons = ["%s: %s" % (k, inputs[k].get("note") or "값 없음") for k in miss]
-        return dict(base, value=None, status="missing", as_of=None, missing_inputs=miss,
-                    note="; ".join(reasons))
+        out = dict(base, value=None, status="missing", as_of=None, missing_inputs=miss, note="; ".join(reasons))
+        if all(inputs[k].get("not_disclosed") for k in miss):
+            out["not_disclosed"] = True  # 빠진 입력이 모두 회사가 내지 않는 값이다
+        return out
     try:
         v = fn(*[e["value"] for e in inputs.values()])
     except ZeroDivisionError:
@@ -336,8 +375,17 @@ def metric(name, formula, inputs, fn, unit, note=""):
     notes = [note] if note else []
     notes += ["%s %s: %s" % (k, e["status"], e["note"]) for k, e in inputs.items()
               if e["status"] in ("estimated", "stale") and e.get("note")]
+    bases = {k: e["basis"] for k, e in inputs.items() if e.get("basis")}
+    extra = {}
+    if len(set(bases.values())) > 1:
+        st = worst([st, "estimated"])
+        notes.append("기준이 섞임(%s): 같은 기준 값끼리의 식이 아니라 어림" % ", ".join(
+            "%s %s" % kv for kv in sorted(bases.items())))
+        extra["basis"] = "mixed"
+    elif bases:
+        extra["basis"] = next(iter(bases.values()))
     return dict(base, value=round(v, 4), status=st, as_of=min(dates) if dates else None,
-                note="; ".join(notes))
+                note="; ".join(notes), **extra)
 
 
 def assume(m, note):
@@ -358,18 +406,24 @@ def first_of(*cands):
             return c
     out = dict(cands[0])
     out["note"] = " | ".join("%s: %s" % (c["metric"], c.get("note", "")) for c in cands)
+    out.pop("not_disclosed", None)
+    if all(c.get("not_disclosed") for c in cands):
+        out["not_disclosed"] = True
     return out
 
 
 def passthrough(name, env, note="회사 발표값"):
     out = {"metric": name, "formula": note, "unit": env.get("unit", ""), "inputs": [name]}
     out.update({k: env.get(k) for k in ("value", "status", "as_of", "source", "locator", "note")})
+    out.update({k: env[k] for k in ("basis", "not_disclosed") if env.get(k)})
     return out
 
 
 def env_of(m):
     """metric 결과를 다른 metric의 입력으로 쓴다."""
-    return {"value": m["value"], "status": m["status"], "as_of": m.get("as_of"), "note": m.get("note", "")}
+    out = {"value": m["value"], "status": m["status"], "as_of": m.get("as_of"), "note": m.get("note", "")}
+    out.update({k: m[k] for k in ("basis", "not_disclosed") if m.get(k)})
+    return out
 
 
 # ---------------------------------------------------------------- 순수 계산
@@ -458,6 +512,8 @@ def load_macro(path, sid="DGS10"):
     e = (snap.get("series") or {}).get(sid)
     if not e or e.get("value") is None:
         return missing("macro snapshot에 %s 값 없음" % sid), path
+    if not is_finite(e.get("value")):
+        return missing("macro snapshot의 %s 값(%r)이 유한한 숫자가 아님" % (sid, e.get("value"))), path
     out = {"value": e["value"], "unit": "%", "status": e["status"], "as_of": e.get("as_of"),
            "source": e.get("source", "fred:" + sid), "locator": "%s series.%s" % (path, sid), "note": e.get("note", ""),
            "snapshot_date": snap.get("date")}
@@ -472,6 +528,12 @@ def macro_aged(env, price, th):
             return dict(env, status="stale", note="macro snapshot이 가격 기준일보다 %d일 앞섬(허용 %d일)" % (
                 age, th["macro_max_age_days"]))
     return env
+
+
+def is_ladder_period(p):
+    """만기 사다리 period는 연도(YYYY)나 thereafter다."""
+    t = str(p) if isinstance(p, (str, int)) and not isinstance(p, bool) else ""
+    return (len(t) == 4 and t.isdigit()) or t.lower() == "thereafter"
 
 
 def maturities_within_24m(mats, period_end):
@@ -534,17 +596,42 @@ def load_reitwatch(dirpath, ticker):
 
 
 def load_tracker(dirpath):
-    """Tracker parsed(reit-sector-scan이 쓴다) 중 파일 이름이 가장 늦은 것. {"doc", "path", "note"}."""
+    """Tracker parsed(reit-sector-scan이 쓴다). {"doc", "path", "note", "older"}: doc은 파일 이름이 가장 늦은 것,
+    older는 그 앞 파일들(늦은 것부터). 가격 기준일에 맞는 파일은 pick_tracker가 고른다."""
     dirpath = dirpath or os.path.join(data_dir(), "tracker", "parsed")
+    found = []
     for p in sorted(glob.glob(os.path.join(dirpath, "*.json")), reverse=True):
         try:
             d = read_json(p)
         except ValueError:
             continue
         if d.get("schema") == TRACKER_SCHEMA and isinstance(d.get("rows"), list):
-            return {"doc": d, "path": p, "note": ""}
-    return {"doc": None, "path": None,
+            found.append((p, d))
+    if found:
+        return {"doc": found[0][1], "path": found[0][0], "note": "", "older": found[1:]}
+    return {"doc": None, "path": None, "older": [],
             "note": "Tracker parsed 없음(%s): reit-sector-scan skill로 tracker fetch를 먼저 돌린다" % dirpath}
+
+
+def pick_tracker(trk, ref_date):
+    """가격 기준일(ref_date) 뒤에 끝난 분기 파일은 고르지 않는다(그날 아직 없던 자료다).
+    분기 끝날(as_of)이 날짜가 아니면 그 파일을 건너뛰지 않고 missing 이유로 낸다."""
+    if trk.get("doc") is None:
+        return trk
+    cands = [(trk.get("path"), trk["doc"])] + list(trk.get("older") or [])
+    ref, later = to_date(ref_date), []
+    for p, d in cands:
+        q = to_date(d.get("as_of"))
+        if q is None:
+            return {"doc": None, "path": p, "note": "Tracker parsed %s의 as_of %r가 날짜가 아님: reit-sector-scan "
+                                                    "tracker fetch로 다시 받는다" % (p, d.get("as_of"))}
+        if ref is not None and q > ref:
+            later.append(str(d.get("quarter")))
+            continue
+        return {"doc": d, "path": p, "note": ("가격 기준일 %s 뒤에 끝난 분기 %s는 고르지 않음" % (
+            str(ref_date)[:10], "·".join(later))) if later else ""}
+    return {"doc": None, "path": None, "note": "가격 기준일 %s 전에 끝난 분기의 Tracker parsed가 없음(%s는 그 뒤 분기)" % (
+        str(ref_date)[:10], "·".join(later))}
 
 
 def load_tracker_map():
@@ -559,6 +646,7 @@ def tracker_env(trk, subsector, tmap, ref_date, max_days):
     doc = trk.get("doc")
     if doc is None:
         return missing(trk.get("note") or "Tracker parsed를 읽지 않음")
+    qend = parse_date(doc["as_of"])  # pick_tracker가 날짜인 것만 넘긴다
     if not subsector:
         return missing("REITWatch subsector를 몰라 Tracker row를 고르지 못함")
     entry = tmap.get(subsector)
@@ -566,19 +654,20 @@ def tracker_env(trk, subsector, tmap, ref_date, max_days):
         return missing("assets/tracker_map.json에 subsector %s가 없음" % subsector)
     rows = {r.get("name"): r for r in doc.get("rows") or []}
     name, parent = entry.get("name"), entry.get("parent")
-    row, st, notes = rows.get(name) if name else None, "reported", []
+    row, st, notes = rows.get(name) if name else None, "reported", [trk["note"]] if trk.get("note") else []
     if row is None or not is_finite(row.get("implied_cap_rate")):
         row = rows.get(parent) if parent else None
         if row is None or not is_finite(row.get("implied_cap_rate")):
             return missing("Tracker %s에 %s implied cap rate가 없음" % (doc.get("quarter"), name or subsector))
         st = "estimated"
         notes.append("Tracker에 %s 값이 없어 %s 전체 값" % (name or subsector, parent))
-    if ref_date and doc.get("as_of"):
-        age = (parse_date(ref_date) - parse_date(doc["as_of"])).days
+    ref = to_date(ref_date)
+    if ref is not None:
+        age = (ref - qend).days
         if age > max_days:
             st = worst([st, "stale"])
             notes.append("Tracker %s 분기 끝날 %s는 기준일 %s보다 %d일 앞섬(허용 %d일): reit-sector-scan tracker fetch로 갱신" % (
-                doc.get("quarter"), doc["as_of"], ref_date[:10], age, max_days))
+                doc.get("quarter"), doc["as_of"], str(ref_date)[:10], age, max_days))
     return {"value": round(row["implied_cap_rate"], 4), "unit": "%", "status": st, "as_of": doc.get("as_of"),
             "source": "nareit-tracker:%s" % doc.get("source"),
             "locator": "%s %s!%s (%s)" % (trk.get("path"), doc.get("sheet"),
@@ -608,7 +697,7 @@ def ffo_revision_env(rw):
         return missing("REITWatch %s 호에 %s FFO FY1이 없음" % (rw["month"], t))
     if not is_finite(old) or old <= 0:
         return missing("REITWatch %s 호에 %s %s 값이 없거나 0 이하" % (odoc.get("month"), t, col))
-    return aged({"value": round((new / old - 1) * 100, 4), "unit": "%", "status": "estimated", "as_of": rw.get("as_of"),
+    return aged({"value": round((new / old - 1) * 100, 4), "unit": "%", "status": "derived", "as_of": rw.get("as_of"),
                  "source": "reitwatch:%s,%s" % (rw["month"], odoc.get("month")),
                  "locator": "%s rows[ticker=%s].ffo_fy1 %s / %s rows[ticker=%s].%s %s" % (rw["path"], t, new, opath, t, col, old),
                  "note": "%s 호 FY%s %s / %s 호 %s(FY%s) %s − 1. consensus(애널리스트 추정)" % (
@@ -623,7 +712,7 @@ def ffo_growth_env(rw):
     a, b = row.get("ffo_fy1"), row.get("ffo_fy2")
     if not (is_finite(a) and is_finite(b)) or a <= 0:
         return missing("REITWatch %s 호에 %s FFO FY1·FY2가 없거나 FY1이 0 이하" % (rw["month"], row.get("ticker")))
-    return aged({"value": round((b / a - 1) * 100, 4), "unit": "%", "status": "estimated", "as_of": rw.get("as_of"),
+    return aged({"value": round((b / a - 1) * 100, 4), "unit": "%", "status": "derived", "as_of": rw.get("as_of"),
                  "source": "reitwatch:%s" % rw["month"],
                  "locator": "%s rows[ticker=%s].ffo_fy2 %s / ffo_fy1 %s" % (rw["path"], row.get("ticker"), b, a),
                  "note": "consensus(애널리스트 추정)"}, rw.get("age_note"))
@@ -705,16 +794,28 @@ def walk(ms):
 def finish(facts_doc, path, M, checks, flags, gaps, inputs, thresholds):
     """metrics 문서를 맺는다: missing·estimated·stale·check 실패를 데이터 구멍에 올리고 exit code를 정한다."""
     for k, m in walk(M):
-        if m.get("status") == "missing":
+        if m.get("status") == "missing" and m.get("not_disclosed"):
+            gaps.append({"item": k, "status": "not_disclosed", "reason": "공시 없음(회사가 내지 않음): " + m.get("note", "")})
+        elif m.get("status") == "missing":
             gaps.append({"item": k, "status": "missing", "reason": m.get("note", "")})
-        elif m.get("status") in ("estimated", "stale"):
+        elif m.get("status") in ("estimated", "stale") and m.get("value") is not None:
             gaps.append({"item": k, "status": m["status"], "reason": m.get("note", "")})
     for c in checks:
-        if not c["pass"]:
+        if c["pass"] is None:  # 회사가 그 값을 내지 않아 맞춰 볼 것이 없다
+            gaps.append({"item": "check:" + c["check"], "status": "not_disclosed", "reason": "공시 없음: " + c["note"]})
+        elif not c["pass"]:
             gaps.append({"item": "check:" + c["check"], "status": "fail" if c["status"] != "missing" else "missing",
                          "reason": c["note"]})
-    n_missing = sum(1 for _, m in walk(M) if m.get("status") == "missing")
-    n_fail = sum(1 for c in checks if not c["pass"])
+    seen, uniq = set(), []
+    for g in gaps:  # 같은 칸의 같은 이유는 한 번만(facts 검사와 그 칸의 passthrough가 같은 글을 낸다)
+        key = (g["item"], g["status"], g["reason"])
+        if key not in seen:
+            seen.add(key)
+            uniq.append(g)
+    gaps = uniq
+    n_missing = sum(1 for _, m in walk(M) if m.get("status") == "missing" and not m.get("not_disclosed"))
+    n_nd = sum(1 for _, m in walk(M) if m.get("status") == "missing" and m.get("not_disclosed"))
+    n_fail = sum(1 for c in checks if c["pass"] is False)
     doc = {
         "schema": METRICS_SCHEMA,
         "path": path,
@@ -727,19 +828,32 @@ def finish(facts_doc, path, M, checks, flags, gaps, inputs, thresholds):
         "checks": checks,
         "flags": flags,
         "data_gaps": gaps,
-        "summary": {"metrics_missing": n_missing, "checks_failed": n_fail,
+        "summary": {"metrics_missing": n_missing, "metrics_not_disclosed": n_nd, "checks_failed": n_fail,
                     "flags": {f["flag"]: f["level"] for f in flags}},
     }
     return doc, (2 if (n_missing or n_fail) else 0)
 
 
-def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=None):
+def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=None, dbaa=None):
     """facts 문서 → metrics 문서. 같은 입력이면 같은 출력(시각을 넣지 않는다).
-    macro는 DGS10, baa는 BAA10Y envelope(load_macro), tracker는 load_tracker 결과,
+    macro는 DGS10, baa는 BAA10Y, dbaa는 DBAA envelope(load_macro), tracker는 load_tracker 결과,
     tmap은 REITWatch subsector → Tracker row 대응(없으면 assets/tracker_map.json)."""
     if not is_reit_doc(facts_doc):
         return compute_dividend(facts_doc, th, macro=macro)
     F, S, gaps = read_facts(facts_doc)
+
+    def reject(key, why):
+        F[key] = missing(why)
+        gaps.append({"item": key, "status": "missing", "reason": why})
+    for k in NONNEG_FACTS:  # 0 이상이어야 하는 칸: 음수는 부호를 잘못 옮긴 것이다
+        if F[k]["value"] is not None and F[k]["value"] < 0:
+            reject(k, "%s %s는 0 이상이어야 함(음수 거절): 부호를 회사 표 방향대로 다시 본다" % (k, F[k]["value"]))
+    dsw, cso = F["diluted_shares_weighted"], F["common_shares_outstanding"]
+    if dsw["value"] is not None and cso["value"] is not None and dsw["value"] > 0 and cso["value"] > 0:
+        r = dsw["value"] / cso["value"]
+        if r >= SHARE_UNIT_RATIO or r <= 1.0 / SHARE_UNIT_RATIO:
+            reject("diluted_shares_weighted", "diluted_shares_weighted %s천 주가 기말 보통주 %s천 주와 %.4g배라 단위를 의심함"
+                   "(%d배 넘게 다름): unit을 다시 본다" % (round(dsw["value"], 4), round(cso["value"], 4), r, SHARE_UNIT_RATIO))
 
     M = {}
     checks = []
@@ -785,9 +899,12 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
                              env["category"], ", ".join(BRIDGE_CATEGORIES))})
     btol = th["affo_bridge_tolerance_pct"]
     if start not in BRIDGE_STARTS or not items:
-        checks.append({"check": "affo_bridge", "pass": False, "status": "missing", "note":
+        nd = bool(F["affo_reported"].get("not_disclosed")) and not items
+        checks.append({"check": "affo_bridge", "pass": None if nd else False, "status": "missing", "note":
+                       "회사가 AFFO를 내지 않아 bridge가 없음" if nd else
                        "affo_bridge가 없거나 start가 %s 중 하나가 아님" % "/".join(BRIDGE_STARTS)})
-        M["affo_bridge_sum"] = dict(missing("affo_bridge 없음"), metric="affo_bridge_sum", formula="", inputs=[])
+        M["affo_bridge_sum"] = dict(missing("affo_bridge 없음"), metric="affo_bridge_sum", formula="", inputs=[],
+                                    **({"not_disclosed": True} if nd else {}))
     else:
         ins = {start: F[start]}
         ins.update({"item%d" % i: e for i, e in enumerate(items)})
@@ -815,7 +932,8 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
         passthrough("affo_per_share_diluted", F["affo_per_share_diluted"]),
         metric("affo_per_share_diluted", "AFFO 총액 / 분기 가중평균 희석 주식 수",
                {"affo_reported": F["affo_reported"], "diluted_shares_weighted": F["diluted_shares_weighted"]},
-               lambda a, n: a / n, "USD/share", note="회사가 주당 AFFO를 내지 않아 총액으로 계산"))
+               lambda a, n: positive(n, "희석 주식 수가 0 이하라 주당 AFFO를 내지 않음") and a / n, "USD/share",
+               note="회사가 주당 AFFO를 내지 않아 총액으로 계산"))
     aps = env_of(M["affo_per_share_diluted"])
 
     # 연간 주당 FFO·AFFO (guidance 가운데 → consensus → 분기×4 가정)
@@ -857,22 +975,28 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
     M["forward_yield"] = metric("forward_yield", "forward dividend / price × 100",
                                 {"forward_dividend": env_of(M["forward_dividend"]), "price": F["price"]},
                                 lambda d, p: d / p * 100, "%")
+    def payout(why):  # 분모(AFFO·FFO)가 0 이하면 payout이 뜻을 잃는다(일반 배당주 EPS와 같은 규칙)
+        return lambda d, a: positive(a, why) and d / a * 100
     M["affo_payout_forward"] = metric("affo_payout_forward", "forward dividend / 연간 AFFO per share × 100",
                                       {"forward_dividend": env_of(M["forward_dividend"]), "affo_fy": env_of(M["affo_fy"])},
-                                      lambda d, a: d / a * 100, "%")
+                                      payout("연간 AFFO가 0 이하라 payout을 내지 않음"), "%")
     M["affo_payout_quarter"] = metric("affo_payout_quarter", "분기 지급 배당/share / 분기 AFFO/share × 100",
                                       {"dividends_paid_per_share_quarter": F["dividends_paid_per_share_quarter"],
                                        "affo_per_share_diluted": aps},
-                                      lambda d, a: d / a * 100, "%")
+                                      payout("분기 AFFO/share가 0 이하라 payout을 내지 않음"), "%")
     M["ffo_payout_forward"] = metric("ffo_payout_forward", "forward dividend / 연간 FFO per share × 100",
                                      {"forward_dividend": env_of(M["forward_dividend"]), "ffo_fy": env_of(M["ffo_fy"])},
-                                     lambda d, f: d / f * 100, "%",
+                                     payout("연간 FFO가 0 이하라 payout을 내지 않음"), "%",
                                      note="참고 줄(flag 없음). ffo_fy=" + M["ffo_fy"]["formula"])
     dividend_history(S, M)
 
     # AFFO bridge category: 유지 비용(maintenance capex + TI·LC) / NOI, straight-line rent / FFO
+    no_bridge_nd = bool(M["affo_bridge_sum"].get("not_disclosed"))  # 회사가 AFFO를 내지 않아 bridge 줄이 없다
+
     def cat_sum(cats):
         got = [e for e in items if e.get("category") in cats]
+        if not got and no_bridge_nd:
+            return dict(missing("회사가 AFFO를 내지 않아 AFFO bridge에 %s 줄이 없음" % "·".join(cats)), not_disclosed=True), []
         if not got:
             return missing("AFFO bridge에 %s 줄이 없음(회사가 AFFO에서 빼지 않았거나 category를 달지 않음)" % "·".join(cats)), []
         st = worst([e["status"] for e in got])
@@ -885,6 +1009,20 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
     sl, sl_rows = cat_sum(("straight_line",))
     if sl["value"] is None and sl_rows:
         sl = missing("straight_line 줄에 missing이 있음")
+    # 유지 비용 줄은 AFFO에서 빼는 줄이라 0 이하다. 양수면 부호를 뒤집어 옮긴 것이다(bridge 합은 허용 오차 안일 수 있다)
+    pos = [i for i, e in enumerate(items) if e.get("category") in ("recurring_capex", "leasing_cost")
+           and e["value"] is not None and e["value"] > 0]
+    for i in pos:
+        gaps.append({"item": "affo_bridge.items[%d]" % i, "status": "missing",
+                     "reason": "%s 줄 %r이 +%s: AFFO에서 빼는 유지 비용 줄은 0 이하여야 함(부호를 회사 표 방향대로)" % (
+                         items[i]["category"], items[i].get("label"), items[i]["value"])})
+    if pos:
+        capex = missing("recurring_capex·leasing_cost 줄 items[%s]이 양수라(부호 뒤집힘) 쓰지 않음" % ",".join(map(str, pos)))
+    unknown = [i for i, e in enumerate(items) if e["category"] is not None and e["category"] not in BRIDGE_CATEGORIES]
+    if unknown:  # 그 줄이 어느 category인지 몰라 합이 틀릴 수 있다. 0이나 일부 합으로 내지 않는다
+        why = "AFFO bridge에 모르는 category 줄(items[%s])이 있어 category 지표를 내지 않음: category를 고친다" % ",".join(
+            map(str, unknown))
+        capex, sl = missing(why), missing(why)
     M["recurring_capex_to_noi_pct"] = metric("recurring_capex_to_noi_pct",
                                              "−(recurring capex + leasing cost 줄, 분기) × 4 / 연환산 NOI × 100",
                                              {"recurring_capex_leasing": capex, "noi_annualized": F["noi_annualized"]},
@@ -912,7 +1050,14 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
                                       {"fixed_rate_debt": F["fixed_rate_debt"], "debt_principal_total": F["debt_principal_total"]},
                                       lambda f, t: f / t * 100, "%")
     mats = S["debt_maturities"]
-    if mats and all(e["value"] is not None for e in mats):
+    bad_periods = [i for i, e in enumerate(mats) if not is_ladder_period(e.get("period"))]
+    for i in bad_periods:
+        gaps.append({"item": "debt_maturities[%d]" % i, "status": "missing",
+                     "reason": "period %r는 연도(YYYY)나 thereafter가 아님: 날짜별 줄이면 연도를 period로 붙인다" % (
+                         mats[i].get("period"),)})
+    ladder_why = ("debt_maturities의 period가 연도·thereafter가 아닌 줄(%s)이 있음" % ",".join(map(str, bad_periods))
+                  if bad_periods else None)
+    if mats and not ladder_why and all(e["value"] is not None for e in mats):
         total = sum(e["value"] for e in mats)
         by_period = {}
         for e in mats:  # 같은 해 만기가 여러 줄이면(날짜별 표) 해마다 더한다
@@ -931,7 +1076,7 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
                                       "as_of": M["maturity_ladder"]["as_of"], "inputs": ["debt_maturities"],
                                       "note": ("%s년" % top["period"]) if top else "연도 칸이 없음"}
     else:
-        why = "debt_maturities 없음" if not mats else "debt_maturities에 missing 칸이 있음"
+        why = "debt_maturities 없음" if not mats else ladder_why or "debt_maturities에 missing 칸이 있음"
         M["maturity_ladder"] = dict(missing(why), metric="maturity_ladder", formula="", inputs=[])
         M["maturity_max_year_pct"] = dict(missing(why), metric="maturity_max_year_pct", formula="", inputs=[])
 
@@ -1008,12 +1153,18 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
     # 리파이낸싱·유동성: 24개월 안 만기를 시장 차입금리로 다시 빌릴 때의 이자 증가, 변동금리 충격, liquidity coverage
     dgs = macro_aged(macro if macro is not None else missing("macro snapshot을 읽지 않음"), F["price"], th)
     baa10y = macro_aged(baa if baa is not None else missing("macro snapshot을 읽지 않음"), F["price"], th)
+    dbaa_env = macro_aged(dbaa if dbaa is not None else missing("macro snapshot을 읽지 않음"), F["price"], th)
     M["wam_years"] = passthrough("wam_years", F["wam_years"])
     M["weighted_avg_rate_pct"] = passthrough("weighted_avg_rate_pct", F["weighted_avg_rate_pct"])
-    M["market_borrowing_rate_est"] = assume(metric(
-        "market_borrowing_rate_est", "DGS10 + BAA10Y(Moody's Baa 회사채 금리)", {"dgs10": dgs, "baa10y": baa10y},
-        lambda r, s: r + s, "%"), "투자등급 하단(Baa) 회사채 금리로 신규 차입금리를 어림(등급·만기·통화마다 다르다)")
-    if mats and all(e["value"] is not None for e in mats) and facts_doc.get("period_end"):
+    baa_note = "투자등급 하단(Baa) 회사채 금리로 신규 차입금리를 어림(등급·만기·통화마다 다르다)"
+    if dbaa_env.get("value") is not None:  # Baa 금리 차례는 reit-sector-scan과 같다: DBAA, 없으면 BAA10Y + DGS10
+        M["market_borrowing_rate_est"] = assume(metric(
+            "market_borrowing_rate_est", "DBAA(Moody's Baa 회사채 금리)", {"dbaa": dbaa_env}, lambda b: b, "%"), baa_note)
+    else:
+        M["market_borrowing_rate_est"] = assume(metric(
+            "market_borrowing_rate_est", "DGS10 + BAA10Y(Moody's Baa 회사채 금리)", {"dgs10": dgs, "baa10y": baa10y},
+            lambda r, s: r + s, "%"), baa_note)
+    if mats and not ladder_why and all(e["value"] is not None for e in mats) and to_date(facts_doc.get("period_end")):
         m24, used, split = maturities_within_24m(mats, facts_doc["period_end"])
         st = worst([e["status"] for e in used] or ["reported"])
         M["maturities_24m"] = {"metric": "maturities_24m", "unit": "USD thousands", "value": round(m24, 4),
@@ -1024,8 +1175,8 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
         if split:
             M["maturities_24m"] = assume(M["maturities_24m"], split)
     else:
-        why = "debt_maturities 없음" if not mats else (
-            "debt_maturities에 missing 칸이 있음" if facts_doc.get("period_end") else "facts에 period_end가 없음")
+        why = "debt_maturities 없음" if not mats else ladder_why or (
+            "debt_maturities에 missing 칸이 있음" if to_date(facts_doc.get("period_end")) else "facts에 period_end(날짜)가 없음")
         M["maturities_24m"] = dict(missing(why), metric="maturities_24m", formula="", inputs=[])
     M["affo_annualized"] = assume(metric("affo_annualized", "분기 AFFO 총액 × 4", {"affo_reported": F["affo_reported"]},
                                          lambda a: a * 4, "USD thousands"), "분기 AFFO 총액 × 4로 연환산(가정)")
@@ -1066,10 +1217,17 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
                                      {"maturities_24m": env_of(M["maturities_24m"]),
                                       "dev_remaining_spend": F["dev_remaining_spend"]},
                                      lambda m, d: m + d, "USD thousands")
-    M["liquidity_coverage_24m"] = metric("liquidity_coverage_24m", "liquidity sources / uses (24개월)",
-                                         {"liquidity_sources_24m": env_of(M["liquidity_sources_24m"]),
-                                          "liquidity_uses_24m": env_of(M["liquidity_uses_24m"])},
-                                         lambda a, b: a / b, "x")
+    uses = M["liquidity_uses_24m"]
+    if uses["value"] == 0:  # 24개월 안에 갚을 만기와 남은 개발비가 없다. 비율이 뜻을 잃지만 빠진 값은 아니다
+        M["liquidity_coverage_24m"] = {
+            "metric": "liquidity_coverage_24m", "formula": "liquidity sources / uses (24개월)", "unit": "x",
+            "inputs": ["liquidity_sources_24m", "liquidity_uses_24m"], "value": None, "status": uses["status"],
+            "as_of": uses.get("as_of"), "note": "갚을 것 없음: 24개월 안 만기와 남은 개발비가 0이라 비율을 내지 않음"}
+    else:
+        M["liquidity_coverage_24m"] = metric("liquidity_coverage_24m", "liquidity sources / uses (24개월)",
+                                             {"liquidity_sources_24m": env_of(M["liquidity_sources_24m"]),
+                                              "liquidity_uses_24m": env_of(uses)},
+                                             lambda a, b: a / b, "x")
 
     # 운영
     for k in ("occupancy_pct", "wale_years", "investment_grade_share_pct"):
@@ -1117,12 +1275,15 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
                                    lambda n, m, d, pf: n / (m + d + pf) * 100, "%")
 
     # valuation 기준선: Green Street식 economic implied cap rate(운영 부동산만, JV pro-rata, NOI − capex reserve)와 부채 시가
-    M["capex_reserve"] = dict(first_of(
-        passthrough("capex_reserve", F["capex_reserve"], "회사 발표 capex reserve(연간)"),
-        assume(metric("capex_reserve_run_rate", "−(AFFO bridge recurring capex + leasing cost 줄, 분기) × 4",
-                      {"recurring_capex_leasing": capex}, lambda c: -c * 4, "USD thousands"),
-               "회사가 capex reserve를 내지 않아 AFFO bridge의 분기 recurring capex·leasing cost × 4로 대신(가정)")),
-        metric="capex_reserve")
+    if any(g["item"] == "capex_reserve" for g in gaps):  # 회사 값을 거절했으면 bridge 대리값으로 덮지 않는다
+        M["capex_reserve"] = passthrough("capex_reserve", F["capex_reserve"], "회사 발표 capex reserve(연간)")
+    else:
+        M["capex_reserve"] = dict(first_of(
+            passthrough("capex_reserve", F["capex_reserve"], "회사 발표 capex reserve(연간)"),
+            assume(metric("capex_reserve_run_rate", "−(AFFO bridge recurring capex + leasing cost 줄, 분기) × 4",
+                          {"recurring_capex_leasing": capex}, lambda c: -c * 4, "USD thousands"),
+                   "회사가 capex reserve를 내지 않아 AFFO bridge의 분기 recurring capex·leasing cost × 4로 대신(가정)")),
+            metric="capex_reserve")
     M["noi_economic"] = metric("noi_economic", "연환산 NOI − capex reserve(연간)",
                                {"noi_annualized": F["noi_annualized"], "capex_reserve": env_of(M["capex_reserve"])},
                                lambda n, c: n - c, "USD thousands")
@@ -1204,9 +1365,11 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=Non
     # cap rate 비교 줄: 회사 매입·매각 cap rate(회사 정의), Tracker subsector implied cap rate(명목)
     M["acquisitions_cap_rate"] = passthrough("acquisitions_cap_rate", F["acquisitions_cap_rate"], "회사 발표 최근 매입 cap rate(회사 정의)")
     M["dispositions_cap_rate"] = passthrough("dispositions_cap_rate", F["dispositions_cap_rate"], "회사 발표 최근 매각 cap rate(회사 정의)")
-    trk = tracker if tracker is not None else {"doc": None, "path": None, "note": "Tracker parsed를 읽지 않음"}
+    ref_date = F["price"].get("as_of") or facts_doc.get("period_end")
+    trk = pick_tracker(tracker if tracker is not None else {"doc": None, "path": None, "note": "Tracker parsed를 읽지 않음"},
+                       ref_date)
     tenv = tracker_env(trk, M["subsector"]["value"], tmap if tmap is not None else load_tracker_map(),
-                       F["price"].get("as_of") or facts_doc.get("period_end"), th["tracker_max_age_days"])
+                       ref_date, th["tracker_max_age_days"])
     M["tracker_subsector_cap_rate"] = passthrough("tracker_subsector_cap_rate", tenv,
                                                   "Nareit REIT Industry Tracker subsector implied cap rate(명목)")
     M["implied_cap_rate_vs_tracker"] = metric("implied_cap_rate_vs_tracker",
@@ -1425,7 +1588,9 @@ def diff_metrics(prev, curr):
             if not pct_unit and pv != 0:
                 row["change_pct"] = round((cv - pv) / abs(pv) * 100, 4)
         elif pv is None or cv is None:
-            n_missing += 1
+            gone = [e for v, e in ((pv, p), (cv, c)) if v is None]  # 공시 없음·"갚을 것 없음"(값 없음이 정상)은 세지 않는다
+            if any(e.get("status", "missing") == "missing" and not e.get("not_disclosed") for e in gone):
+                n_missing += 1
             row["note"] = "; ".join(x for x in (
                 "prev: " + (p.get("note") or "값 없음") if pv is None else "",
                 "curr: " + (c.get("note") or "값 없음") if cv is None else "") if x)
@@ -1561,8 +1726,9 @@ def cmd_metrics(args):
     th = load_thresholds()
     macro, _ = load_macro(args.macro_snapshot)
     baa, _ = load_macro(args.macro_snapshot, "BAA10Y")
+    dbaa, _ = load_macro(args.macro_snapshot, "DBAA")
     rw = load_reitwatch(args.reitwatch_dir, facts["ticker"])
-    doc, code = compute(facts, th, macro=macro, rw=rw, baa=baa, tracker=load_tracker(args.tracker_dir))
+    doc, code = compute(facts, th, macro=macro, rw=rw, baa=baa, tracker=load_tracker(args.tracker_dir), dbaa=dbaa)
     doc["facts_file"] = os.path.abspath(args.facts)
     path = args.out or metrics_path(doc)
     write_json(doc, path)
@@ -2251,8 +2417,8 @@ def run_check():
         ok(lt["path"].endswith("2026Q3.json") and lt["doc"]["rows"][0]["implied_cap_rate"] == 6.5,
            "Tracker parsed가 여럿이면 파일 이름이 가장 늦은 분기를 읽음")
     r52 = vcompute(copy.deepcopy(base), rw=dict(rw, as_of="2024-09-30"))[0]["metrics"]["ffo_fy1_rev_3m"]
-    ok(r52["status"] == "estimated" and "허용 %d일" % th["reitwatch_max_age_days"] in r52["note"],
-       "REITWatch가 오래되면 revision note에도 나이")
+    ok(r52["status"] == "stale" and "허용 %d일" % th["reitwatch_max_age_days"] in r52["note"],
+       "REITWatch가 오래되면 revision은 stale과 note에 나이")
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "f.json")
         with open(p, "w", encoding="utf-8") as f:
@@ -2263,6 +2429,261 @@ def run_check():
         cli = read_json(os.path.join(tmp, "m.json"))
         ok(cli["inputs"].get("tracker_file", "").endswith(os.path.join("tracker", "2026Q3.json")),
            "metrics --tracker-dir로 Tracker 파일을 고름")
+
+    # 24. 2차 검증 결함: 값이 이상해도 멈추지 않고 그 줄만 missing, JSON에 NaN을 쓰지 않음
+    def cli_metrics(facts, extra=()):
+        """facts를 파일로 써서(NaN 토큰 허용) metrics CLI로 돌리고 실제로 쓴 JSON을 되읽는다. (exit, 문서 또는 None)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            p, out = os.path.join(tmp, "f.json"), os.path.join(tmp, "m.json")
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(facts, f)
+            args = ["metrics", "--facts", p, "--out", out, "--tracker-dir", os.path.join(fx, "tracker"),
+                    "--reitwatch-dir", os.path.join(fx, "reitwatch"), "--macro-snapshot", os.path.join(fx, "macro_snapshot.json")]
+            args += list(extra)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    code = main(args)
+                except Exception:  # noqa: BLE001 — 멈추면 그 자체가 실패다
+                    code = "exception"
+            return code, (read_json(out) if os.path.exists(out) else None)
+
+    cv = copy.deepcopy(base)
+    cv["series"]["covenants"][0]["actual"] = float("nan")
+    cv["series"]["covenants"][1]["limit"] = float("inf")
+    cv["series"]["covenants"][2] = dict(cv["series"]["covenants"][2], status="missing", actual=float("nan"))
+    c60, m60 = cli_metrics(cv)
+    rows60 = (m60 or {}).get("metrics", {}).get("covenant_headroom", {}).get("value") or []
+    ok(c60 == 2 and m60 is not None and m60["metrics"]["covenant_headroom_min_pct"]["value"] is None
+       and rows60 and rows60[0]["actual"] is None and rows60[1]["limit"] is None and rows60[2]["actual"] is None
+       and rows60[0]["headroom_pct"] is None and any(g["item"] == "covenants[0]" for g in m60["data_gaps"]),
+       "F1 covenant actual NaN·limit Infinity면 그 줄 missing, 출력에는 null, metrics 파일을 씀, exit 2 (got %s)" % c60)
+
+    nps2 = copy.deepcopy(base)
+    for k in ("affo_per_share_diluted", "affo_guidance_low", "affo_guidance_high"):
+        nps2["facts"][k] = {"value": None, "status": "missing", "note": "가상"}
+    na4 = copy.deepcopy(nps2)
+    na4["facts"]["affo_reported"]["value"] = -50000
+    na4["affo_bridge"]["items"] = []
+    d61, _ = compute(na4, th_rw, macro=macro, rw=rw, baa=baa)
+    f61 = next(f for f in d61["flags"] if f["flag"] == "affo_payout")
+    ok(d61["metrics"]["affo_payout_forward"]["value"] is None and d61["metrics"]["affo_payout_quarter"]["value"] is None
+       and "0 이하" in d61["metrics"]["affo_payout_forward"]["note"] and f61["level"] == "review",
+       "F4 AFFO 총액이 음수면 AFFO payout을 내지 않고 flag review (got %s %s)" % (
+           d61["metrics"]["affo_payout_forward"]["value"], f61["level"]))
+    ns4 = copy.deepcopy(nps2)
+    ns4["facts"]["diluted_shares_weighted"]["value"] = -948797
+    d62, _ = compute(ns4, th_rw, macro=macro, rw=rw, baa=baa)
+    ok(d62["metrics"]["affo_per_share_diluted"]["value"] is None and d62["metrics"]["affo_payout_forward"]["value"] is None
+       and next(f for f in d62["flags"] if f["flag"] == "affo_payout")["level"] == "review",
+       "F4 희석 주식 수가 0 이하면 주당 AFFO·payout missing, flag review")
+    np4 = copy.deepcopy(nps2)
+    np4["facts"]["affo_per_share_diluted"] = dict(base["facts"]["affo_per_share_diluted"], value=-0.1)
+    np4["facts"]["ffo_guidance_low"] = dict(base["facts"]["affo_guidance_low"], value=-1.0)
+    np4["facts"]["ffo_guidance_high"] = dict(base["facts"]["affo_guidance_high"], value=-1.0)
+    d63, _ = compute(np4, th_rw, macro=macro, rw=rw, baa=baa)
+    ok(d63["metrics"]["affo_payout_quarter"]["value"] is None and d63["metrics"]["affo_payout_forward"]["value"] is None
+       and d63["metrics"]["ffo_payout_forward"]["value"] is None and "0 이하" in d63["metrics"]["ffo_payout_forward"]["note"],
+       "F4 회사 주당 AFFO·연간 FFO가 0 이하면 AFFO payout·FFO payout(참고) missing")
+
+    su = copy.deepcopy(nps2)
+    su["facts"]["diluted_shares_weighted"]["unit"] = "shares"
+    d64, _ = compute(su, th_rw, macro=macro, rw=rw, baa=baa)
+    ok(d64["metrics"]["affo_per_share_diluted"]["value"] is None
+       and any(g["item"] == "diluted_shares_weighted" and "단위" in g["reason"] for g in d64["data_gaps"])
+       and next(f for f in d64["flags"] if f["flag"] == "affo_payout")["level"] == "review",
+       "F5 희석 주식 수가 기말 보통주와 10배 넘게 다르면(948.797천 vs 950,964천) 단위 의심 missing, 데이터 구멍")
+
+    sg = copy.deepcopy(base)
+    for it in sg["affo_bridge"]["items"]:
+        if it.get("category") in ("recurring_capex", "leasing_cost"):
+            it["value"] = abs(it["value"])
+    d65, _ = vcompute(sg)
+    M65 = d65["metrics"]
+    ok(M65["recurring_capex_to_noi_pct"]["value"] is None and M65["capex_reserve"]["value"] is None
+       and M65["economic_implied_cap_rate"]["value"] is None
+       and any(g["item"] == "affo_bridge.items[2]" and "0 이하" in g["reason"] for g in d65["data_gaps"]),
+       "F6 recurring capex·leasing cost 줄이 양수(부호 뒤집힘)면 capex 지표·capex reserve missing, 데이터 구멍 (got %s)" % (
+           M65["capex_reserve"]["value"],))
+    ncr = copy.deepcopy(base)
+    ncr["facts"]["capex_reserve"] = dict(cr["facts"]["capex_reserve"], value=-300000)
+    d66, _ = vcompute(ncr)
+    ok(d66["metrics"]["capex_reserve"]["value"] is None and d66["metrics"]["noi_economic"]["value"] is None
+       and any(g["item"] == "capex_reserve" and "0 이상" in g["reason"] for g in d66["data_gaps"]),
+       "F6 회사 capex reserve가 음수면 missing(AFFO bridge로 대신하지 않음), 데이터 구멍")
+
+    ty = copy.deepcopy(base)
+    for it in ty["affo_bridge"]["items"]:
+        if it.get("category") == "leasing_cost":
+            it["category"] = "Leasing_Cost"
+    d67, c67 = vcompute(ty)
+    M67 = d67["metrics"]
+    ok(c67 == 2 and all(M67[k]["value"] is None and "모르는 category" in M67[k]["note"]
+                        for k in ("recurring_capex_to_noi_pct", "straight_line_to_ffo_pct", "capex_reserve")),
+       "F7 모르는 category가 하나라도 있으면 category 지표·capex reserve 대리값 missing(0.0019로 내지 않음), exit 2")
+
+    dl = copy.deepcopy(base)
+    dl["series"]["debt_maturities"][0]["period"] = "2026-12-31"
+    d68, _ = vcompute(dl)
+    M68 = d68["metrics"]
+    ok(all(M68[k]["value"] is None for k in ("maturities_24m", "maturity_max_year_pct", "liquidity_coverage_24m"))
+       and any(g["item"] == "debt_maturities[0]" and "period" in g["reason"] for g in d68["data_gaps"]),
+       "F8 만기 사다리 period가 연도·thereafter가 아니면 24개월 만기·최대 해 비중 missing, 데이터 구멍")
+
+    bt = dict(trk, doc=dict(trk["doc"], as_of="2026-Q3"))
+    try:
+        d69, c69 = vcompute(copy.deepcopy(base), tracker=bt)
+        t69 = d69["metrics"]["tracker_subsector_cap_rate"]
+        f9 = c69 == 2 and t69["value"] is None and "날짜" in t69["note"] \
+            and d69["metrics"]["economic_implied_cap_rate"]["value"] is not None
+    except (ValueError, TypeError):
+        f9 = False
+    ok(f9, "F9 Tracker parsed as_of가 날짜가 아니면 Tracker 비교 줄만 missing, 계속")
+
+    pv = copy.deepcopy(base)
+    pv["facts"]["jv_debt_pro_rata"].update(value=1, status="reported", source="x (가상)", locator="y (가상)")
+    d70, _ = vcompute(pv)
+    ok(d70["metrics"]["jv_debt_pro_rata"]["value"] is None and d70["metrics"]["economic_ev"]["value"] is None
+       and any(g["item"] == "jv_debt_pro_rata" and "parts" in g["reason"] for g in d70["data_gaps"]),
+       "F10 parts와 value를 함께 적으면 missing, 데이터 구멍(value로 대신하지 않음)")
+
+    snap = read_json(os.path.join(fx, "macro_snapshot.json"))
+    with tempfile.TemporaryDirectory() as tmp:
+        for sid in ("BAA10Y", "DGS10"):
+            bad_s = copy.deepcopy(snap)
+            bad_s["series"][sid]["value"] = float("nan")
+            sp = os.path.join(tmp, sid + ".json")
+            with open(sp, "w", encoding="utf-8") as f:
+                json.dump(bad_s, f)
+            env71, _ = load_macro(sp, sid)
+            c71, m71 = cli_metrics(base, ["--macro-snapshot", sp])
+            ok(env71["value"] is None and env71["status"] == "missing" and c71 == 2 and m71 is not None
+               and m71["metrics"]["market_borrowing_rate_est"]["value"] is None,
+               "macro snapshot %s가 NaN이면 그 값 missing, metrics는 계속(exit 2, got %s)" % (sid, c71))
+
+    dn = copy.deepcopy(base)
+    dn["facts"]["dev_remaining_spend"]["value"] = -5
+    d72, _ = vcompute(dn)
+    ok(d72["metrics"]["liquidity_uses_24m"]["value"] is None
+       and any(g["item"] == "dev_remaining_spend" and "0 이상" in g["reason"] for g in d72["data_gaps"]),
+       "남은 개발비가 음수면 거절(missing, 데이터 구멍)")
+
+    uz = copy.deepcopy(base)
+    uz["series"]["debt_maturities"] = [e for e in uz["series"]["debt_maturities"] if e["period"] in ("2030", "thereafter")]
+    uz["facts"]["dev_remaining_spend"]["value"] = 0
+    d73, c73 = vcompute(uz)
+    l73 = d73["metrics"]["liquidity_coverage_24m"]
+    ok(l73["value"] is None and l73["status"] != "missing" and "갚을 것 없음" in l73["note"]
+       and not any(g["item"] == "liquidity_coverage_24m" for g in d73["data_gaps"]) and c73 == 0,
+       "24개월 안 만기와 남은 개발비가 0이면 coverage는 값 없이 note '갚을 것 없음', 데이터 구멍이 아님, exit 0 (got %s %s)" % (
+           l73["status"], c73))
+
+    ok(sum(1 for g in d40["data_gaps"] if g["item"] == "jv_debt_pro_rata") == 1,
+       "parts 오류는 데이터 구멍에 한 번만")
+
+    bs = copy.deepcopy(base)
+    bs["facts"]["debt_principal_total"]["basis"] = "pro_rata"
+    for k in ("total_assets", "accumulated_depreciation"):
+        bs["facts"][k]["basis"] = "consolidated"
+    d74, _ = vcompute(bs)
+    g74 = d74["metrics"]["debt_pref_to_gross_assets"]
+    ok(near(g74["value"], 36.4684) and g74["status"] == "estimated" and "기준" in g74["note"],
+       "debt 원금(pro_rata)과 gross assets(consolidated) 기준이 다르면 값은 그대로 estimated와 note (got %s)" % g74["status"])
+    bs["facts"]["debt_principal_total"]["basis"] = "consolidated"
+    ok(vcompute(bs)[0]["metrics"]["debt_pref_to_gross_assets"]["status"] == "derived", "같은 기준이면 derived")
+    bs["facts"]["debt_principal_total"]["basis"] = "pro-rata"
+    d75, _ = vcompute(bs)
+    ok(d75["metrics"]["debt_pref_to_gross_assets"]["value"] is None
+       and any(g["item"] == "debt_principal_total" and "basis" in g["reason"] for g in d75["data_gaps"]),
+       "basis가 consolidated·pro_rata가 아니면 그 칸 missing, 데이터 구멍")
+    bm = copy.deepcopy(cr)
+    bm["facts"]["noi_annualized"]["basis"] = "pro_rata"
+    for k in ("debt_fair_value", "debt_carrying_value"):
+        bm["facts"][k]["basis"] = "consolidated"
+    d76, _ = vcompute(bm)
+    ok(d76["metrics"]["economic_implied_cap_rate"]["status"] == "derived"
+       and near(d76["metrics"]["economic_implied_cap_rate_debt_mtm"]["value"], ev["debt_mtm_basis_mix"])
+       and d76["metrics"]["economic_implied_cap_rate_debt_mtm"]["status"] == "estimated"
+       and "기준" in d76["metrics"]["economic_implied_cap_rate_debt_mtm"]["note"],
+       "NOI(pro_rata)와 부채 시가 조정(consolidated)이 섞이면 부채 시가 반영 cap rate만 estimated(5,461,304 / 77,871,795)")
+
+    def nd(note):
+        return {"value": None, "status": "missing", "not_disclosed": True, "note": note + " (가상)",
+                "source": "sec:8-K (가상)", "locator": "debt summary 표에 그 줄이 없음 (가상)"}
+    nd1 = copy.deepcopy(base)
+    nd1["facts"]["principal_amortization"] = nd("회사가 정기 원금 상환을 내지 않음")
+    d77, c77 = vcompute(nd1)
+    f77 = d77["metrics"]["fixed_charge_coverage"]
+    ok(f77["value"] is None and f77.get("not_disclosed") is True and c77 == 0
+       and d77["summary"]["metrics_missing"] == 0 and d77["summary"].get("metrics_not_disclosed") == 1
+       and any(g["item"] == "fixed_charge_coverage" and g["status"] == "not_disclosed" and "공시 없음" in g["reason"]
+               for g in d77["data_gaps"]),
+       "not_disclosed(근거 source·locator)인 칸 때문에 빠진 지표는 missing이지만 exit에 세지 않고 데이터 구멍에 '공시 없음' (got %s)" % c77)
+    nd2 = copy.deepcopy(nd1)
+    nd2["facts"]["principal_amortization"]["locator"] = ""
+    d78, c78 = vcompute(nd2)
+    ok(c78 == 2 and d78["summary"]["metrics_missing"] == 1
+       and any(g["item"] == "principal_amortization" and "locator" in g["reason"] for g in d78["data_gaps"]),
+       "not_disclosed에 근거(locator)가 없으면 보통 missing으로 셈, exit 2")
+    nd3 = copy.deepcopy(nd1)
+    nd3["facts"]["capitalized_interest"] = {"value": None, "status": "missing", "note": "못 찾음(가상)"}
+    ok(vcompute(nd3)[1] == 2, "공시 없음과 못 찾음이 섞인 지표는 셈(exit 2)")
+    nd4 = copy.deepcopy(base)
+    nd4["facts"]["unencumbered_assets"] = nd("자산 금액을 내지 않음")
+    nd4["facts"]["unencumbered_noi"] = nd("NOI를 내지 않음")
+    ok(vcompute(nd4)[0]["metrics"]["unencumbered_pct"].get("not_disclosed") is True,
+       "후보(자산·NOI)가 모두 공시 없음이면 unencumbered 비율도 공시 없음")
+    nd5 = copy.deepcopy(base)
+    nd5["facts"]["affo_reported"] = nd("AFFO를 내지 않음")
+    nd5["affo_bridge"] = {"start": None, "items": []}
+    nd5["facts"]["capex_reserve"] = nd("capex reserve를 내지 않음")
+    d79, c79 = vcompute(nd5)
+    ab = next(c for c in d79["checks"] if c["check"] == "affo_bridge")
+    ok(ab["pass"] is None and c79 == 0 and d79["summary"]["checks_failed"] == 0
+       and any(g["item"] == "check:affo_bridge" and g["status"] == "not_disclosed" for g in d79["data_gaps"]),
+       "회사가 AFFO를 내지 않아 bridge가 없으면 affo_bridge check는 pass null(공시 없음), exit 0 (got %s %s)" % (ab["pass"], c79))
+    nd6 = copy.deepcopy(base)
+    nd6["facts"]["principal_amortization"] = dict(nd("x"), value=1000, unit="USD thousands")
+    d80, _ = vcompute(nd6)
+    ok(d80["metrics"]["fixed_charge_coverage"]["value"] is None
+       and any(g["item"] == "principal_amortization" and "not_disclosed" in g["reason"] for g in d80["data_gaps"]),
+       "값과 not_disclosed를 함께 적으면 missing, 데이터 구멍")
+    pr77 = dict(d77, period="2026Q2")
+    ok(diff_metrics(pr77, d77)[1] == 0, "diff: 두 분기 모두 공시 없음인 지표는 셈하지 않음(exit 0)")
+    cm77 = compare_metrics([d77, dict(d77, ticker="O2")])
+    ok(cm77[0]["summary"]["incomplete"] == [], "compare: 공시 없음만 있는 종목은 incomplete가 아님")
+
+    db = dict(baa, value=6.3, source="fred:DBAA", locator="fixture series.DBAA (가상)")
+    d81, _ = vcompute(copy.deepcopy(base), dbaa=db)
+    mb = d81["metrics"]["market_borrowing_rate_est"]
+    ok(near(mb["value"], 6.3) and mb["status"] == "estimated" and "DBAA" in mb["formula"],
+       "macro snapshot에 DBAA가 있으면 시장 차입금리 추정은 DBAA(reit-sector-scan과 같은 차례)")
+    with tempfile.TemporaryDirectory() as tmp:
+        sd = copy.deepcopy(snap)
+        sd["series"]["DBAA"] = dict(sd["series"]["BAA10Y"], value=6.3, source="fred:DBAA")
+        sp = os.path.join(tmp, "s.json")
+        with open(sp, "w", encoding="utf-8") as f:
+            json.dump(sd, f)
+        _, m82 = cli_metrics(base, ["--macro-snapshot", sp])
+        ok(m82 is not None and near(m82["metrics"]["market_borrowing_rate_est"]["value"], 6.3),
+           "metrics CLI가 snapshot의 DBAA를 읽음")
+
+    ok(M["ffo_fy1_rev_3m"]["status"] == "derived" and M["ffo_growth_fy2"]["status"] == "derived",
+       "consensus revision·FY2 성장은 REITWatch 값의 계산이라 derived(reit-sector-scan과 같다)")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        for q, a, v in (("2026Q3", "2026-09-30", 6.5), ("2026Q4", "2026-12-31", 9.9)):
+            with open(os.path.join(tmp, q + ".json"), "w", encoding="utf-8") as f:
+                json.dump(dict(trk["doc"], quarter=q, as_of=a,
+                               rows=[{"name": "Free Standing", "implied_cap_rate": v, "cells": {"implied_cap_rate": "X1"}}]), f)
+        d83, _ = vcompute(copy.deepcopy(base), tracker=load_tracker(tmp))
+        t83 = d83["metrics"]["tracker_subsector_cap_rate"]
+        ok(t83["value"] == 6.5 and "2026Q3.json" in t83["locator"] and "2026Q4" in t83["note"]
+           and d83["inputs"]["tracker_file"].endswith("2026Q3.json"),
+           "가격 기준일(2026-11-17) 뒤에 끝난 분기(2026Q4) Tracker 파일은 고르지 않음 (got %s)" % t83["value"])
+        early = copy.deepcopy(base)
+        early["facts"]["price"]["as_of"] = "2026-08-01"
+        t84 = vcompute(early, tracker=load_tracker(tmp))[0]["metrics"]["tracker_subsector_cap_rate"]
+        ok(t84["value"] is None and "가격 기준일" in t84["note"], "가격 기준일 전에 끝난 분기 파일이 없으면 missing")
 
     log("check: %d개 실패" % len(fails) if fails else "check: 모두 통과")
     return 2 if fails else 0

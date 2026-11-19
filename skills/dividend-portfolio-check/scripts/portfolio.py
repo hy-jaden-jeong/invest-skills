@@ -351,7 +351,8 @@ def ticker_view(h, ddir, rw, rw_path, filings_dir, dates, assets, today):
         freq = fact_value(facts.get("dividend_frequency"), "per year")
         sub = metric_value(m.get("subsector"), "")
         v["flags"] = [{k: f.get(k) for k in ("flag", "level", "value", "status", "basis", "note")} for f in metrics.get("flags", [])]
-        v["checks_failed"] = [c.get("check") for c in metrics.get("checks", []) if not c.get("pass")]
+        # pass null은 회사가 그 값을 내지 않아 맞춰 볼 것이 없는 check다(reit-stock-review "공시 없음")
+        v["checks_failed"] = [c.get("check") for c in metrics.get("checks", []) if c.get("pass") is False]
         v["from_metrics"] = {k: metric_value(m.get(k), "") for k in
                              ("forward_yield", "affo_payout_forward", "net_debt_to_ebitdare", "fixed_rate_debt_pct",
                               "yield_spread_vs_10y", "p_ffo", "p_affo") if k in m}
@@ -778,6 +779,11 @@ def run_check():
         write_json(m, mp)
         d6, c6 = run_tmp("ticker,shares\nAAA,100\n")
         ok(c6 == 2 and d6["summary"]["checks_failed"] == 1, "metrics에 check 실패가 있으면 exit 2")
+        m["checks"] = [dict(c, **{"pass": None}) for c in m["checks"]]
+        write_json(m, mp)
+        d6n, c6n = run_tmp("ticker,shares\nAAA,100\n")
+        ok(c6n == 0 and d6n["summary"]["checks_failed"] == 0,
+           "check pass가 null(회사가 그 값을 내지 않아 맞춰 볼 것이 없음)이면 실패로 세지 않음")
         fp = os.path.join(dd, "tickers", "BBB", "facts", "2026Q2.json")
         f = read_json(fp)
         f["facts"]["dividend_frequency"]["value"] = 3

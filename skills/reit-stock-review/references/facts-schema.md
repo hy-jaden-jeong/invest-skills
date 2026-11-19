@@ -28,6 +28,15 @@
 - `locator`: 원문 위치. exhibit text 파일 이름과 줄 번호, 표 이름, 원문 숫자를 그대로 쓴다. status와 상관없이 값이 있는데 `source`나 `locator`가 비어 있으면 script가 쓰지 않고(missing) 데이터 구멍에 올린다.
 - 회사 표에 그 줄이 없으면 `value: 0`, `status: reported`, `locator`에 표 이름, `note: "회사 표에 이 줄이 없음"`으로 둔다. 값을 못 찾은 것(`missing`)과 줄이 없는 것(0)은 다르다.
 - 못 찾았으면 `{"value": null, "status": "missing", "note": "이유"}`로 둔다. 추측으로 채우지 않는다.
+- 회사가 그 값을 원래 내지 않으면(그 칸이 있을 표에 줄이 없음) `not_disclosed: true`와 그 표의 `source`·`locator`를 함께 적는다. 그 값으로 셈하는 지표는 missing이지만 exit 2로 세지 않고 데이터 구멍에 "공시 없음"으로 오른다. 근거(`source`·`locator`)가 없거나 `value`와 함께 적으면 보통 missing으로 센다.
+
+```json
+"principal_amortization": {"value": null, "status": "missing", "not_disclosed": true,
+  "source": "sec:8-K ... ex99.2", "locator": "...supple.txt L34 Debt Summary: 정기 원금 상환 줄 없음",
+  "note": "회사가 정기 원금 상환을 내지 않음"}
+```
+
+- `basis`(선택): 돈 칸이 회사 표의 consolidated(연결) 열이면 `consolidated`, 지분 몫(pro-rata, Prologis Share 등) 열이면 `pro_rata`. 한 식의 입력끼리 basis가 다르면 script가 그 지표를 estimated로 내리고 note에 섞인 칸을 쓴다. 다른 값은 그 칸이 missing이다. 회사 표에서 기준을 알 수 있는 칸(부채 원금, 총자산, NOI, CIP, JV 부채, 부채 fair value, EBITDAre·이자비용 등)에 적는다.
 - 돈·주식 수 칸이 회사 표의 여러 줄 합이고 회사가 합계 줄을 내지 않으면, `value` 대신 `parts`에 줄마다 값을 적는다. 줄 하나는 위 값 하나와 같은 규칙(status, 유한한 숫자, source·locator)이다. script가 단위를 맞춰 더한다. agent가 더하지 않는 것은 숫자를 script만 계산하기 때문이다. 빼는 줄은 음수로 적는다.
 
 ```json
@@ -39,7 +48,7 @@
      "locator": "realtyincomeq32026supple.txt L24 (p.23) Bellagio Las Vegas Joint Venture 659,190"}]}
 ```
 
-  - 한 줄이라도 규칙을 어기면 그 칸은 missing과 데이터 구멍이고, 한 줄이 missing이면 그 칸도 missing이다. `edgar.py xbrl`은 parts가 있는 칸을 덮지 않는다.
+  - 한 줄이라도 규칙을 어기면 그 칸은 missing과 데이터 구멍이고, 한 줄이 missing이면 그 칸도 missing이다. `parts`와 `value`를 함께 적어도 missing이다. `basis`는 칸에 한 번 적는다. `edgar.py xbrl`은 parts가 있는 칸을 덮지 않는다.
 
 ## 칸
 
@@ -77,7 +86,7 @@
 | `wam_years`, `weighted_avg_rate_pct` | 부채 가중평균 잔여 만기, 가중평균 금리(swap 반영). 만기 사다리와 같은 기준 | debt summary |
 | `floating_rate_debt` | 변동금리 원금(swap으로 고정한 부분은 뺀 회사 값). 비율만 내면 missing | debt summary |
 | `revolver_available` | credit facility 남은 한도. commercial paper를 이미 뺀 값이면 note에 적는다 | liquidity 표 |
-| `dev_remaining_spend` | 개발 중 자산에 앞으로 들어갈 돈(cost to complete, remaining investment) | 개발 표 |
+| `dev_remaining_spend` | 개발 중 자산에 앞으로 들어갈 돈(cost to complete, remaining investment). 0 이상 | 개발 표 |
 | `liquidity_cash` | 유동성 계산용 현금·현금성 자산. net debt 표 때문에 `cash`가 0인 회사(D47)도 실제 현금을 적는다 | liquidity 표, balance sheet |
 | `occupancy_pct`, `wale_years`, `investment_grade_share_pct` | 점유율, 가중평균 잔여 임대기간, 투자등급 임차인 비중 | 보도자료, supplemental |
 | `same_store_current`, `same_store_prior` | same store NOI(없으면 회사의 same store 지표), 이번·전년 같은 기간 | supplemental |
@@ -88,14 +97,14 @@
 | `land_held` | 개발용 토지(land bank) 장부가. 운영 부동산의 토지(balance sheet Land)가 아니다. 없으면 0과 "회사 표에 이 줄이 없음" | land portfolio 표, NAV components |
 | `other_non_operating_assets` | NOI에 그 수익이 들어 있지 않은 그 밖의 부동산·투자(매각 예정 자산, 다른 JV 투자 등). NOI가 그 수익(대출 이자, JV 몫)을 넣었으면 넣지 않는다. 현금은 net debt에서 빼므로 넣지 않는다 | NAV components, balance sheet |
 | `jv_debt_pro_rata` | 미연결 JV 부채의 지분 몫 중 `total_debt`에 들어 있지 않은 것. 회사 net debt가 이미 pro-rata면 0과 note | JV 표, pro-rata debt 표 |
-| `capex_reserve` | 회사가 낸 연간 capex reserve(유지 capex + TI·LC). 내지 않으면 missing으로 두면 script가 AFFO bridge 줄로 대신한다 | NAV components, 보도자료 |
+| `capex_reserve` | 회사가 낸 연간 capex reserve(유지 capex + TI·LC), 0 이상. 내지 않으면 missing으로 두면 script가 AFFO bridge 줄로 대신한다 | NAV components, 보도자료 |
 | `debt_fair_value`, `debt_carrying_value` | 부채 fair value와 같은 표의 carrying value(대개 consolidated). 표에 없는 부채(revolver·CP)는 넣지 않는다 | 10-Q·10-K fair value 주석, XBRL `DebtInstrumentFairValue`·`LongTermDebt`. companyfacts에 그 분기가 없으면 10-Q 원문 |
 | `acquisitions_cap_rate`, `dispositions_cap_rate` | 그 분기 매입·매각 cap rate(%). 회사 정의(initial cash yield, stabilized cap rate)를 note에 쓴다 | supplemental 투자·매각 표 |
 
 ## series
 
 - `dividend_per_share_annual`: `edgar.py dividends --facts F`가 넣는다. 항목마다 `period`(연도)가 있다. 다시 돌리면 해마다 합치고, 값과 `locator`가 있는 해(agent가 고친 해)는 덮지 않는다.
-- `debt_maturities`: 만기 사다리. `period`는 연도나 `thereafter`. 같은 기준(pro-rata 또는 consolidated)의 원금 합 열을 쓴다.
+- `debt_maturities`: 만기 사다리. `period`는 연도(`"2027"`)나 `thereafter`. 다른 글(날짜 등)이 하나라도 있으면 만기 사다리·24개월 만기가 missing이다. 같은 기준(pro-rata 또는 consolidated)의 원금 합 열을 쓴다.
 - `top_tenants`: 임대료(ABR) 비중 상위 임차인. 항목마다 `label`(이름)과 `%` 값.
 - `covenants`: 회사가 낸 debt covenant 표의 줄. `value` 대신 `limit`(한도)과 `actual`(실제)을 둔다. 한도가 여러 문서(indenture, credit facility)에 따로 있으면 줄마다 `name`에 어느 쪽인지 쓴다.
 
@@ -106,7 +115,7 @@
 ```
 
   - `direction`: 실제가 한도 아래여야 하면(부채/자산 ≤ 60%) `max`, 위여야 하면(coverage ≥ 1.5x, unencumbered ≥ 150%) `min`.
-  - `unit`: `%` 또는 `x`. `limit`은 양수, `actual`은 0 이상이다. 어기면 그 줄만 missing과 데이터 구멍이다.
+  - `unit`: `%` 또는 `x`. `limit`은 양수, `actual`은 0 이상인 유한한 숫자다. 어기면 그 줄만 missing과 데이터 구멍이고 출력에는 null을 쓴다.
   - 회사가 covenant 표를 내지 않으면 빈 목록으로 둔다. 그러면 headroom은 missing, flag는 review다.
 
 ## affo_bridge
@@ -123,7 +132,7 @@
 | `non_cash` | 그 밖의 비현금 항목 | 주식 보상, 부채 할인 상각, above/below-market lease 상각 |
 | `other` | 위에 없는 것 | 일회성 비용, NCI·JV 조정, 우선주 배당 |
 
-다섯 가지가 아닌 category는 쓰지 않고 데이터 구멍에 오른다. category가 없는 줄은 bridge 합에만 들어간다.
+다섯 가지가 아닌 category가 하나라도 있으면 데이터 구멍에 오르고, category 지표(recurring capex/NOI, straight-line/FFO)와 capex reserve 대리값을 내지 않는다(그 줄을 빼고 나머지로 셈하면 틀린 값이 나온다). `recurring_capex`·`leasing_cost` 줄은 AFFO에서 빼는 줄이라 0 이하로 적는다. 양수면 부호를 뒤집어 옮긴 것으로 보고 같은 지표를 내지 않는다. category가 없는 줄은 bridge 합에만 들어간다.
 
 ## 일반 배당주 칸 (SIC가 6798이 아님)
 

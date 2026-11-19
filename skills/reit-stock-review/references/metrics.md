@@ -13,7 +13,12 @@
 - 한 값이 두 상태에 걸리면(2차 자료이면서 오래됨, REITWatch 추정값이면서 오래됨) 더 나쁜 쪽을 status로 두고 나머지 사정은 `note`에 쓴다. 그래서 오래된 2차 자료는 `estimated`다. stale로 바꾸면 오래될수록 좋은 status가 되기 때문이다.
 - facts 값은 status와 상관없이 `source`·`locator`가 있어야 하고, `value`는 유한한 숫자여야 한다(NaN·무한대는 아님). 어기면 missing으로 내리고 데이터 구멍에 올린다. 모르는 status도 missing이다.
 - 회사 표의 여러 줄 합인 facts 값은 `parts`에 줄마다 적고, script가 단위를 맞춰 더한다. status는 줄의 가장 나쁜 것이고 모두 reported면 derived다. 한 줄이라도 규칙을 어기거나 missing이면 그 칸은 missing이다. agent가 더하지 않는다.
-- 결과 JSON에는 NaN·Infinity를 쓰지 않는다. 회사 FFO·AFFO가 0이면 tie-out은 실패이고 `diff_pct`는 null이다.
+- 결과 JSON에는 NaN·Infinity를 쓰지 않는다. 회사 FFO·AFFO가 0이면 tie-out은 실패이고 `diff_pct`는 null이다. covenant 줄의 `limit`·`actual`이 유한한 숫자가 아니면 그 줄은 missing이고 출력에는 null을 쓴다. macro snapshot의 DGS10·BAA10Y·DBAA가 유한한 숫자가 아니면 그 값은 missing이다.
+- `parts`와 `value`를 함께 적으면 그 칸은 missing과 데이터 구멍이다(어느 쪽이 맞는지 고르지 않는다).
+- facts 값에 `basis`(`consolidated`·`pro_rata`)를 적으면 계산값이 물려받는다. 한 식의 입력끼리 basis가 다르면 값은 그대로 내되 status를 `estimated`로 내리고 note에 섞인 칸을 쓴다(`basis: mixed`). 다른 basis 값은 그 칸이 missing이다.
+- facts 값이 `not_disclosed: true`이고 근거(`source`·`locator`, 그 칸이 없는 표의 위치)가 있으면, 그 값으로 셈하는 지표는 missing이고 `not_disclosed: true`가 붙는다. 이 지표는 exit 2와 `summary.metrics_missing`에 세지 않고 `summary.metrics_not_disclosed`에 센다. 데이터 구멍에는 status `not_disclosed`("공시 없음")로 오른다. 빠진 입력 중 하나라도 보통 missing이면 그 지표는 보통 missing이다. 근거가 없거나 값과 함께 적으면 보통 missing이다.
+- 회사가 AFFO를 내지 않아(`affo_reported`가 공시 없음) bridge가 없으면 check `affo_bridge`는 `pass: null`이다(실패로 세지 않는다).
+- 0 이상이어야 하는 칸(`dev_remaining_spend`, `capex_reserve`)이 음수면 그 칸은 missing과 데이터 구멍이다. 회사 capex reserve를 거절하면 AFFO bridge 대리값으로 대신하지 않는다.
 
 ## FFO와 AFFO
 
@@ -23,9 +28,9 @@
 | check `ffo_tie_out` | (재계산 − 회사 FFO) / 회사 FFO | 0.5%(`ffo_tie_out_tolerance_pct`)를 넘으면 실패, exit 2, 데이터 구멍. facts를 잘못 옮겼거나 회사 정의가 Nareit과 다르다는 뜻이다 |
 | AFFO | 회사 정의를 따른다 | 표준이 없다. FFO에서 maintenance capex·leasing cost·straight-line rent·비현금 항목을 빼고 더하는 방식이 회사마다 다르다. 회사 reconciliation 줄을 그대로 `affo_bridge`에 옮긴다 |
 | check `affo_bridge` | 시작 값(FFO 또는 Normalized FFO) + bridge 줄 합 vs 회사 AFFO | 0.5%를 넘으면 실패. 빠진 줄이나 부호 실수를 잡는다 |
-| `affo_per_share_diluted` | 회사 발표값, 없으면 AFFO 총액 / 분기 가중평균 희석 주식 수(derived) | PLD·REXR처럼 총액만 내는 회사도 payout을 낸다. 주식 수가 AFFO 총액과 다른 기준이면 facts에서 estimated로 내려온다 |
+| `affo_per_share_diluted` | 회사 발표값, 없으면 AFFO 총액 / 분기 가중평균 희석 주식 수(derived) | PLD·REXR처럼 총액만 내는 회사도 payout을 낸다. 주식 수가 AFFO 총액과 다른 기준이면 facts에서 estimated로 내려온다. 희석 주식 수가 0 이하이거나 기말 보통주와 10배 넘게 다르면(단위 실수) 내지 않는다 |
 | `affo_fy`, `ffo_fy` | 연간 주당 값 | AFFO: guidance 가운데 → 분기×4(estimated). FFO: guidance 가운데 → consensus FFO FY1(REITWatch, estimated) → 분기×4(estimated) |
-| `recurring_capex_to_noi_pct` | −(bridge의 recurring_capex + leasing_cost 줄, 분기) × 4 / 연환산 NOI × 100 | 부동산을 유지하는 데 드는 돈(maintenance capex + TI·LC)이 NOI의 몇 %인지(Green Street의 capex reserve 방식). 그 category 줄이 없으면 missing |
+| `recurring_capex_to_noi_pct` | −(bridge의 recurring_capex + leasing_cost 줄, 분기) × 4 / 연환산 NOI × 100 | 부동산을 유지하는 데 드는 돈(maintenance capex + TI·LC)이 NOI의 몇 %인지(Green Street의 capex reserve 방식). 그 category 줄이 없으면 missing. recurring_capex·leasing_cost 줄이 양수(부호 뒤집힘)이거나 bridge에 다섯 가지가 아닌 category가 하나라도 있으면 missing(일부 줄의 합으로 내지 않는다). `straight_line_to_ffo_pct`도 모르는 category 규칙이 같다 |
 | `straight_line_to_ffo_pct` | −(bridge의 straight_line 줄, 분기) / 분기 FFO × 100 | FFO 중 현금이 아닌 임대료 몫 |
 
 ## 배당 지속성
@@ -34,9 +39,9 @@
 | --- | --- | --- |
 | `forward_dividend` | 최근 정기 배당 × 연 지급 횟수 | 특별배당은 넣지 않는다. TTM 합으로 대신하지 않는다(kanchi-dividend-sop의 regular forward yield) |
 | `forward_yield` | forward dividend / price × 100 | |
-| `affo_payout_forward` | forward dividend / 연간 AFFO per share × 100 | flag `affo_payout`의 기준 |
-| `affo_payout_quarter` | 분기 지급 배당 / 분기 AFFO per share × 100 | 회사가 보고서에 내는 payout과 맞춰 볼 수 있다 |
-| `ffo_payout_forward` | forward dividend / 연간 FFO per share × 100 | 참고 줄. flag와 기준값이 없다. AFFO를 내지 않는 회사(EGP)도 값이 나온다. `ffo_fy`가 Core FFO guidance면 회사 정의다 |
+| `affo_payout_forward` | forward dividend / 연간 AFFO per share × 100 | flag `affo_payout`의 기준. 연간 AFFO가 0 이하면 값을 내지 않는다(flag review) |
+| `affo_payout_quarter` | 분기 지급 배당 / 분기 AFFO per share × 100 | 회사가 보고서에 내는 payout과 맞춰 볼 수 있다. 분기 AFFO가 0 이하면 내지 않는다 |
+| `ffo_payout_forward` | forward dividend / 연간 FFO per share × 100 | 참고 줄. flag와 기준값이 없다. AFFO를 내지 않는 회사(EGP)도 값이 나온다. `ffo_fy`가 Core FFO guidance면 회사 정의다. 연간 FFO가 0 이하면 내지 않는다 |
 | `dividend_cagr_3y`, `_5y` | (마지막 해 / n년 전)^(1/n) − 1 | XBRL 10-K 연간 주당 배당 |
 | `dividend_cuts` | 연간 배당이 전년보다 줄어든 해 | 연간 값이라 한 해 안의 컷과 회복은 놓칠 수 있다 |
 
@@ -71,15 +76,15 @@
 | 지표 | 식 | 메모 |
 | --- | --- | --- |
 | `wam_years`, `weighted_avg_rate_pct` | 회사 발표값 그대로 | 가중평균 잔여 만기, 가중평균 금리 |
-| `market_borrowing_rate_est` | DGS10 + BAA10Y | macro snapshot. Moody's seasoned Baa 회사채 금리로 신규 차입금리를 어림한다. 투자등급 하단 기준이라 A등급 회사에는 보수적이고, 지수 만기(20년 안팎)가 신규 발행(5~10년)보다 길다 |
-| `maturities_24m` | 분기 끝날 해와 다음 해 만기 + 그다음 해 만기 × (분기 끝 달 / 12) | 사다리가 해마다라 셋째 해는 12달에 고르게 나눈다고 가정한다(12월 끝날이면 나누지 않음) |
+| `market_borrowing_rate_est` | DBAA, 없으면 DGS10 + BAA10Y | macro snapshot. reit-sector-scan의 Baa 금리와 같은 차례다. Moody's seasoned Baa 회사채 금리로 신규 차입금리를 어림한다. 투자등급 하단 기준이라 A등급 회사에는 보수적이고, 지수 만기(20년 안팎)가 신규 발행(5~10년)보다 길다 |
+| `maturities_24m` | 분기 끝날 해와 다음 해 만기 + 그다음 해 만기 × (분기 끝 달 / 12) | 사다리가 해마다라 셋째 해는 12달에 고르게 나눈다고 가정한다(12월 끝날이면 나누지 않음). `period`가 연도·`thereafter`가 아닌 줄이 있으면 이 줄과 만기 사다리·`maturity_max_year_pct`가 missing이다(0으로 채우지 않는다) |
 | `affo_annualized` | 분기 AFFO 총액 × 4 | |
 | `refi_cost_24m` | 24개월 만기 × (시장 차입금리 추정 − 기존 가중평균 금리) / 100 | 다시 빌린 뒤 1년에 늘어나는 이자(천 달러). 기존 금리는 만기 부채가 아니라 전체 평균이다. 음수면 이자가 준다 |
 | `refi_impact_affo_pct` | `refi_cost_24m` / 연간 AFFO 총액 × 100 | |
 | `floating_rate_shock_affo_pct` | 변동금리 원금 × 1%p / 연간 AFFO 총액 × 100 | 금리가 1%p 오를 때 1년 이자 증가 |
 | `retained_cash_flow_24m` | 2 × (연간 AFFO 총액 − forward dividend × (보통주 + OP unit)) | 배당 뒤 남는 AFFO가 24개월 이어진다고 가정 |
 | `liquidity_sources_24m`, `liquidity_uses_24m` | 현금 + revolver 잔여 + 유보 현금흐름, 24개월 만기 + 남은 개발비 | 현금은 `liquidity_cash`. revolver 잔여가 commercial paper를 이미 뺀 값이면 CP를 만기에서 한 번 더 세어 보수적이다 |
-| `liquidity_coverage_24m` | sources / uses | 1x 아래면 24개월 동안 자본시장(채권·주식 발행, 매각)에 기대야 한다는 뜻. 기준값과 flag는 두지 않는다 |
+| `liquidity_coverage_24m` | sources / uses | 1x 아래면 24개월 동안 자본시장(채권·주식 발행, 매각)에 기대야 한다는 뜻. 기준값과 flag는 두지 않는다. uses가 0이면(24개월 안 만기와 남은 개발비가 없음) 값은 null, status는 uses의 것, note "갚을 것 없음"이고 missing으로 세지 않는다 |
 
 ## 운영
 
@@ -101,10 +106,10 @@
 | `yield_spread_vs_10y`, `affo_yield_spread_vs_10y` | yield − DGS10 (%p) | DGS10은 macro-check snapshot. snapshot이 가격 기준일보다 7일 넘게 앞서면 stale |
 | `p_ffo_reitwatch`, `p_ffo_history_pctile` | REITWatch P/FFO FY1, 자기 history 중 최신값 이하 비율 | history 표본은 1·4·7·10월 호(가격 기준일이 분기말)와 최신 호다(reit-sector-scan과 같은 표본). 8개(`history_min_points`)보다 적으면 missing. 같은 출처(REITWatch)끼리 견준다 |
 | `peer_median_p_ffo`, `p_ffo_vs_peer` | 같은 subsector peer의 REITWatch P/FFO median, 비율 | reit-sector-scan의 parsed 파일을 읽기만 한다 |
-| `ffo_fy1_rev_3m` | 새 호 consensus FFO FY1 / 3개월 앞 호의 같은 회계연도 consensus FFO − 1(%) | REITWatch parsed. 앞 호 FY1이 같은 해면 FY1, FY가 바뀐 뒤면(2월 호부터) 앞 호 FY2와 견준다. 앞 호가 없거나 값이 0 이하면 missing. reit-sector-scan `ffo_fy1_rev_3m`과 같은 규칙이고 값도 같다. consensus라 estimated |
-| `ffo_growth_fy2` | consensus FFO FY2 / FY1 − 1(%) | REITWatch FFO growth column이 아니라 두 추정치로 셈한다(반올림 차이). estimated |
+| `ffo_fy1_rev_3m` | 새 호 consensus FFO FY1 / 3개월 앞 호의 같은 회계연도 consensus FFO − 1(%) | REITWatch parsed. 앞 호 FY1이 같은 해면 FY1, FY가 바뀐 뒤면(2월 호부터) 앞 호 FY2와 견준다. 앞 호가 없거나 값이 0 이하면 missing. reit-sector-scan `ffo_fy1_rev_3m`과 같은 규칙이고 값과 status도 같다. REITWatch 원문 값의 계산이라 derived(호가 오래되면 stale) |
+| `ffo_growth_fy2` | consensus FFO FY2 / FY1 − 1(%) | REITWatch FFO growth column이 아니라 두 추정치로 셈한다(반올림 차이). derived(호가 오래되면 stale) |
 
-REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `period_end`)보다 75일(`reitwatch_max_age_days`) 넘게 앞서면, 그 호에서 온 값(consensus FFO, `p_ffo_reitwatch`, `peer_median_p_ffo`, `p_ffo_history_pctile`, `ffo_fy1_rev_3m`, `ffo_growth_fy2`)의 `note`에 나이를 쓰고 데이터 구멍에 `reitwatch`(stale)를 올린다. status는 estimated 그대로다(estimated가 stale보다 나쁘다). REITWatch 호는 그 달 중순이 지나서 올라오기도 해 최신 호의 기준일이 평소에도 30~60일 앞서므로 그보다 넉넉히 둔다.
+REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `period_end`)보다 75일(`reitwatch_max_age_days`) 넘게 앞서면, 그 호에서 온 값(consensus FFO, `p_ffo_reitwatch`, `peer_median_p_ffo`, `p_ffo_history_pctile`, `ffo_fy1_rev_3m`, `ffo_growth_fy2`)의 `note`에 나이를 쓰고 데이터 구멍에 `reitwatch`(stale)를 올린다. estimated인 값은 estimated 그대로이고(estimated가 stale보다 나쁘다), derived인 consensus 변화·성장은 stale이 된다. REITWatch 호는 그 달 중순이 지나서 올라오기도 해 최신 호의 기준일이 평소에도 30~60일 앞서므로 그보다 넉넉히 둔다.
 
 ### valuation 기준선 (economic implied cap rate)
 
@@ -129,7 +134,7 @@ REITWatch 최신 호의 가격 기준일이 가격 기준일(없으면 facts `pe
 | `debt_mtm_adjustment` | fair value − carrying value | 음수면 시장금리가 기존 금리보다 높아 부채 시가가 장부가보다 낮다 |
 | `economic_implied_cap_rate_debt_mtm` | `noi_economic` / (`economic_ev` + `debt_mtm_adjustment`) × 100 | fair value 표에 없는 부채(JV 부채, 표가 빼 둔 revolver·CP)는 장부가 그대로 |
 | `acquisitions_cap_rate`, `dispositions_cap_rate` | 회사 발표 최근 매입·매각 cap rate | 회사 정의 그대로(initial cash yield, stabilized cap rate 등이 회사마다 다르다). 사적 시장 거래 가격의 단서다 |
-| `tracker_subsector_cap_rate` | Nareit REIT Industry Tracker의 그 subsector implied cap rate(넷째 자리) | reit-sector-scan의 Tracker parsed 가장 최근 파일. subsector 대응은 `assets/tracker_map.json`, 자기 row에 값이 없으면 parent 값(estimated). Tracker 분기 끝날이 가격 기준일보다 150일(`tracker_max_age_days`) 넘게 앞서면 stale. Tracker parsed가 없으면 missing |
+| `tracker_subsector_cap_rate` | Nareit REIT Industry Tracker의 그 subsector implied cap rate(넷째 자리) | reit-sector-scan의 Tracker parsed 중 가격 기준일(없으면 `period_end`) 전에 끝난 분기의 가장 늦은 파일(그 뒤 분기는 그날 없던 자료다). 분기 끝날(`as_of`)이 날짜가 아니면 missing. subsector 대응은 `assets/tracker_map.json`, 자기 row에 값이 없으면 parent 값(estimated). Tracker 분기 끝날이 가격 기준일보다 150일(`tracker_max_age_days`) 넘게 앞서면 stale. Tracker parsed가 없으면 missing |
 | `implied_cap_rate_vs_tracker` | 명목 implied cap rate − Tracker subsector implied cap rate(%p) | Tracker 값도 시총과 부채로 셈한 명목 값이라 명목끼리만 차를 낸다 |
 
 ## flag
