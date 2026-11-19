@@ -43,26 +43,26 @@ VICI·GLPI·NNN·DEA·MPT를 새 skill로 다시 돌려: 읽는 보고서가 용
 | --- | --- | --- |
 | B1 | deep 분석 뒤 `report.py build`를 돌리면 읽는 보고서가 나온다. 차례는 결론 한 줄, 축별 등급 표, 핵심 숫자 표, 경쟁 종목 비교 표, 8분기 추세 표, 주요 사건, 다시 볼 조건, 용어 표다. 용어 표를 빼고 60줄 이하이고, 본문에 script 칸 이름·exit 코드·영문 status가 없다 | |
 | B2 | 같은 명령이 부록을 전부 만든다(FFO 재계산, AFFO bridge, 만기표, covenant 표, cap rate 다리, 데이터 구멍과 출처 위치). agent가 표를 손으로 옮기지 않는다 | |
-| B3 | metrics에 축 5개의 등급과, 등급마다 근거 지표·값·기준이 들어간다. 축의 핵심 지표가 모두 없으면 "판정 못 함"이다 | |
+| B3 | metrics에 축 5개의 등급과, 등급마다 근거 지표·값·기준이 들어간다. 축의 핵심 지표가 모두 없으면 "판정 못 함"이다 || S2: 다섯 종목 등급이 기준표로 손으로 매긴 값과 같음(VICI 넉넉·넉넉·위험·위험·낮은 편 등). 실데이터 갱신 뒤 GLPI 배당 여력 보통(컷 2020만) |
 | B4 | 보고서는 status를 사람 말로 쓴다(공시값, 계산값, 추정, 오래됨, 없음, 공시 없음). 지표 이름은 `assets/labels.json`의 이름으로 쓰고, 처음 나오는 용어에 한 줄 풀이가 붙는다 | |
 | B5 | `report.py build`가 장표 3장(등급표, 만기 일정, 배당 여력)을 만든다. diagram-slides가 없으면 장표만 건너뛰고 보고서에 한 줄 적는다 | |
 | B6 | `report.py pdf`가 본문 + 차트 + 부록 + 용어 표를 A4 PDF 하나로 낸다. Chrome이 없으면 exit 1과 안내 | |
-| B7 | `reit_calc.py peers T`가 같은 subsector에서 시총이 가장 가까운 2개를 고른다. `--with A,B`면 그 종목. 같은 분기 deep metrics가 있으면 재사용한다고 알린다 | |
-| B8 | facts에 `depth: "light"`가 있으면 핵심 칸만으로 metrics가 exit 0이고, 내지 않은 지표는 "가볍게 봄"으로 표시된다. 비교 표에 종목마다 깊이가 적힌다 | |
-| B9 | facts의 `events`(type, 날짜, 제목, 출처, 원문 문장, 웹이면 URL)를 script가 검사해 읽는 보고서 "주요 사건"에 최신순 5개까지 싣는다. 출처나 원문 문장이 없는 사건은 버리고 알린다 | |
-| B10 | 차환 금리는 회사 최근 발행 금리 > 신용등급별 > Baa(추정) 차례로 고른다. MPT 같은 투자등급 아래 회사에서 차환 비용이 음수로 나오지 않는다 | |
-| B11 | covenant 표나 임차인 표를 내지 않는 회사는 series 단위로 공시 없음을 적을 수 있고, exit 2로 세지 않으며 그 축은 "판정 못 함"이다 | |
-| B12 | 회계 기준이 달라 견줄 수 없는 Tracker subsector(Gaming)는 cap rate 차이 줄을 내지 않고 이유를 적는다 | |
-| B13 | 부채가 전부 만기 일시 상환임을 공시 위치와 함께 적으면 정기 원금 상환 0으로 fixed-charge coverage가 나온다 | |
-| B14 | 연환산 NOI가 없고 분기 NOI만 있으면 분기×4를 추정으로 쓴다 | |
-| B15 | `quote.py dividends T`가 split 조정된 지급 내역에서 정기·특별을 가르고 연간 정기 주당 배당을 facts에 넣는다. DEA의 배당 CAGR이 계산되고, GLPI의 컷 목록에 특별배당 때문에 생긴 해가 없다 | |
-| B16 | ticker가 바뀐 종목(MPW → MPT)도 REITWatch history percentile이 이어진다 | |
-| B17 | `edgar.py trend T`가 최근 8분기의 매출, 이자비용, 부채, 주식 수, 주당 배당 표를 쓰고, 읽는 보고서와 PDF에 실린다 | |
+| B7 | `reit_calc.py peers T`가 같은 subsector에서 시총이 가장 가까운 2개를 고른다. `--with A,B`면 그 종목. 같은 분기 deep metrics가 있으면 재사용한다고 알린다 || S2: `peers NNN` → ADC(시총 1.06배)·EPRT(0.71배) make_light, O는 reusable_others(deep). `--with O,ADC`면 O reuse:true |
+| B8 | facts에 `depth: "light"`가 있으면 핵심 칸만으로 metrics가 exit 0이고, 내지 않은 지표는 "가볍게 봄"으로 표시된다. 비교 표에 종목마다 깊이가 적힌다 || S2: NNN 핵심 칸 15개만 light → exit 0, not_assessed 44, 만기·유동성 판정 못 함. 핵심 칸이 비면 exit 2(check) |
+| B9 | facts의 `events`(type, 날짜, 제목, 출처, 원문 문장, 웹이면 URL)를 script가 검사해 읽는 보고서 "주요 사건"에 최신순 5개까지 싣는다. 출처나 원문 문장이 없는 사건은 버리고 알린다 || S2: `--check` 36번. 맞는 사건 3개 최신순, URL 없는 web·모르는 type·빈 원문·날짜 아님은 버리고 data_gaps |
+| B10 | 차환 금리는 회사 최근 발행 금리 > 신용등급별 > Baa(추정) 차례로 고른다. MPT 같은 투자등급 아래 회사에서 차환 비용이 음수로 나오지 않는다 || S1: MPT 발행 금리 9.25%(2026-08-10) → 차환 비용 −3,425.7 → +41,006.9천. 등급만(CCC+, 사본) → DGS10 5.10 + HY 3.43 = 8.53% |
+| B11 | covenant 표나 임차인 표를 내지 않는 회사는 series 단위로 공시 없음을 적을 수 있고, exit 2로 세지 않으며 그 축은 "판정 못 함"이다 || S1: GLPI·DEA·MPT covenant `series_not_disclosed` → exit 2로 세지 않음. 실데이터 GLPI·DEA·MPT metrics exit 0 |
+| B12 | 회계 기준이 달라 견줄 수 없는 Tracker subsector(Gaming)는 cap rate 차이 줄을 내지 않고 이유를 적는다 || S1: VICI·GLPI implied_cap_rate_vs_tracker 값 없음 + not_comparable + 이유(Gaming lease 회계) |
+| B13 | 부채가 전부 만기 일시 상환임을 공시 위치와 함께 적으면 정기 원금 상환 0으로 fixed-charge coverage가 나온다 || S1: fixed-charge coverage VICI 4.09, NNN 4.09(만기 일시 상환, nnn-ex99_1 L842-864), GLPI 3.75(estimated, 다음 분기 최소 상환 830) |
+| B14 | 연환산 NOI가 없고 분기 NOI만 있으면 분기×4를 추정으로 쓴다 || S1: DEA implied cap rate 8.79%, economic 8.88%, 모두 estimated(분기 NOI 60,086×4) |
+| B15 | `quote.py dividends T`가 split 조정된 지급 내역에서 정기·특별을 가르고 연간 정기 주당 배당을 facts에 넣는다. DEA의 배당 CAGR이 계산되고, GLPI의 컷 목록에 특별배당 때문에 생긴 해가 없다 || S3: DEA 연간 정기 배당 2021~2025 2.625·2.65·2.65·2.65·2.0125, CAGR 3y −8.76%·5y −4.99%(손계산 같음), 컷 2025만. GLPI 컷 2015·2020·2022·2024 → 2020(분기 0.70 → 0.60 실제 컷). O 월 배당 |
+| B16 | ticker가 바뀐 종목(MPW → MPT)도 REITWatch history percentile이 이어진다 || S2: MPT P/FFO history percentile 18.75%(표본 48, MPW 호 45개를 이음) |
+| B17 | `edgar.py trend T`가 최근 8분기의 매출, 이자비용, 부채, 주식 수, 주당 배당 표를 쓰고, 읽는 보고서와 PDF에 실린다 || S3: O 8분기 trend, 2026Q3 매출 1,621,582·이자 333,564가 10-Q L287-299와 같음, 2025Q4 매출은 연간 − 9개월. MPT는 companyfacts가 2026Q1에서 끝남 |
 | B18 | compare가 사람이 읽는 비교 보고서(등급표, 핵심 지표 표, subsector 경고)와 장표를 낸다. JSON은 그대로 나온다 | |
 | B19 | earnings mode 보고서도 읽는 보고서 모양이다. 나빠진 등급·지표가 먼저 나온다 | |
 | B20 | 풀이 글에 금지어(매수, 매도, 목표가, 사라, 팔아라, NAV/share)가 있거나 길이를 넘으면 `report.py build`가 exit 2로 멈춘다 | |
-| B21 | 자잘한 표시 결함이 없다: 24개월 만기 note의 해 중복, AFFO가 공시 없음일 때 stderr의 "FAIL", 가격 지표의 기준일, 임차인 비중의 기준(ABR·매출) 표기 | |
-| B22 | 기존 facts 11개(O, PLD, REXR, EGP, VICI, JNJ, GLPI, NNN, DEA, MPT 2026Q3와 O 2026Q2)로 metrics를 다시 내면 B10~B16과 새 절(등급, 사건) 말고는 값이 그대로다 | |
+| B21 | 자잘한 표시 결함이 없다: 24개월 만기 note의 해 중복, AFFO가 공시 없음일 때 stderr의 "FAIL", 가격 지표의 기준일, 임차인 비중의 기준(ABR·매출) 표기 || S1: VICI 만기 note "2027·2028년", MPT stderr "공시 없음 affo_bridge", 가격 지표 as_of 2026-11-17, 임차인 formula에 측정 기준 |
+| B22 | 기존 facts 11개(O, PLD, REXR, EGP, VICI, JNJ, GLPI, NNN, DEA, MPT 2026Q3와 O 2026Q2)로 metrics를 다시 내면 B10~B16과 새 절(등급, 사건) 말고는 값이 그대로다 || S1·S2: facts 11개 기준 코드로 두 번 구워 바이트 같음. 바꾼 뒤 exit 다름 1(NNN 2→0), 차이 381줄 모두 B 번호로 설명(`reader-first-reports-tests/regress/explain-s2.json`) |
 | B23 | macro-check가 읽는 보고서(결론 한 줄, 지표 묶음별 방향 표, 풀이, 용어)와 장표를 낸다 | |
 | B24 | reit-sector-scan이 읽는 보고서(섹터 위치 표, "싸 보이는 이유", 용어)와 장표를 낸다 | |
 | B25 | dividend-portfolio-check가 읽는 보고서(비중, 쏠림, 월별 배당, 종목별 등급)와 장표를 낸다 | |
@@ -111,9 +111,9 @@ flowchart TB
 
 | # | 만드는 것 | 채우는 동작 | 먼저 끝나야 하는 slice | 증명 방법 | 상태 |
 | --- | --- | --- | --- | --- | --- |
-| S1 | 회귀 기준을 굽고 계산 약점을 고친다 | B10~B14, B21, B22 | 없음 | 다섯 종목 facts로 MPT 차환 비용 부호, GLPI·DEA exit, VICI·GLPI Tracker 줄, DEA cap rate를 본다 | 대기 |
-| S2 | 등급, 사건 검사, light, peers 고르기, ticker 별칭 | B3, B7, B8, B9, B16 | S1 | 다섯 종목 등급을 손으로 매긴 것과 견주고, NNN의 peers가 O를 재사용하는지 본다 | 대기 |
-| S3 | 배당 지급 내역과 8분기 추세 | B15, B17 | 없음 | DEA CAGR, GLPI 컷 목록, O 추세 표를 공시와 견준다 | 대기 |
+| S1 | 회귀 기준을 굽고 계산 약점을 고친다 | B10~B14, B21, B22 | 없음 | 다섯 종목 facts로 MPT 차환 비용 부호, GLPI·DEA exit, VICI·GLPI Tracker 줄, DEA cap rate를 본다 | 끝: PR #17, 회귀 381줄 모두 설명 |
+| S2 | 등급, 사건 검사, light, peers 고르기, ticker 별칭 | B3, B7, B8, B9, B16 | S1 | 다섯 종목 등급을 손으로 매긴 것과 견주고, NNN의 peers가 O를 재사용하는지 본다 | 끝: PR #17, 등급 손계산 일치 |
+| S3 | 배당 지급 내역과 8분기 추세 | B15, B17 | 없음 | DEA CAGR, GLPI 컷 목록, O 추세 표를 공시와 견준다 | 끝: PR #16, DEA CAGR·GLPI 컷·O trend 공시 일치 |
 | S4 | report.py: 단일 읽는 보고서, 부록, 장표, 풀이 글 검사, earnings 보고서 | B1, B2, B4, B5, B19, B20, B28 | S2, S3 | NNN을 끝까지 돌려 파일을 직접 읽는다 | 대기 |
 | S4b | report.py compare: 비교 보고서(맞대기·matrix), subsector 섞임, 장표, 7개 이상 거절 | B18, B29, B30, B31, B32, B33 | S4 | VICI·GLPI(같은 subsector 2개)와 VICI·GLPI·NNN·DEA·MPT(섞인 5개)를 돌려 파일을 직접 읽는다. `--check`에 1·2·4·7개 fixture | 대기 |
 | S5 | PDF(단일·비교) | B6, B34 | S4b | NNN 단일 PDF와 VICI·GLPI 비교 PDF를 열어 쪽마다 본다 | 대기 |
@@ -121,6 +121,16 @@ flowchart TB
 | S7 | macro-check 읽는 보고서와 장표 | B23, B27 | S4 | 오늘 snapshot으로 보고서를 읽는다 | 대기 |
 | S8 | reit-sector-scan 읽는 보고서와 장표 | B24, B27 | S4 | 오늘 섹터 표로 보고서를 읽는다 | 대기 |
 | S9 | dividend-portfolio-check 읽는 보고서와 장표 | B25, B27 | S4 | 가상 holdings로 보고서를 읽는다 | 대기 |
+
+## 피드백 루프
+
+사용자 요청(2026-11-19): 보고서를 만든 뒤 검토해 약점을 찾고 고치는 일을 세 번 돈다. 기준은 **보기 좋게, 좋은 정보, 정확한 정보**, 그 외 놓치기 쉬운 것.
+
+- 대상: VICI·GLPI·NNN·DEA·MPT 단일 보고서, VICI·GLPI 맞대기, 다섯 종목 비교의 md·장표·PDF
+- 루프마다 작성 과정을 보지 않은 새 검토자 둘: 전문 REIT 투자자 눈(빠진 정보, 해석, 읽기, 결론까지 걸리는 시간)과 숫자 대조(표본을 공시 원문과 대조, 출처 없는 값, 본문·장표·PDF 일치, 기준이 다른 값끼리 견줌). 앞 루프의 지적은 알려 주지 않는다
+- 검토 기준: 보기 좋게(첫 화면 결론, 표가 한 화면, 장표를 폭 760px로 줄여도 읽힘, PDF 쪽 나눔, 자릿수·단위 일관), 좋은 정보(왜·동종 대비·무엇이 바뀌면 달라지나에 답, 해석 없는 나열 없음, 중요한 사건 빠짐 없음), 정확한 정보(원문 대조, 추정 표시, 같은 숫자 일치, 기준 다른 값 견줌 없음), 그 외(용어 풀이, 권유·목표가 없음, 데이터 없음을 괜찮음으로 오해하게 쓰지 않음, 중복 없음)
+- 지적마다 등급(꼭 고침 / 고치면 좋음), 파일 위치, 고치는 법. 메인이 실제 파일에서 다시 확인해 맞는 것만 고친다
+- merge 조건: 세 번째 루프의 "꼭 고침" 0건
 
 ## 결정
 
