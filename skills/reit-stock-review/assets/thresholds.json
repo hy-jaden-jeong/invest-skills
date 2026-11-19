@@ -17,6 +17,7 @@
   "macro_max_age_days": 7,
   "history_min_points": 8,
   "reitwatch_max_age_days": 75,
+  "tracker_max_age_days": 150,
   "eps_payout_pct": {"watch": 75, "alert": 100, "direction": "above",
                      "source": "이 skill의 경험칙: 일반 배당주 EPS payout이 75%를 넘으면 배당을 늘릴 여유가 줄고, 100%를 넘으면 이익보다 많이 준다"},
   "fcf_payout_pct": {"watch": 80, "alert": 100, "direction": "above",

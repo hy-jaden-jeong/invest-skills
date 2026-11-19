@@ -2,7 +2,7 @@
 """reit-stock-review: facts JSON에서 REIT 지표를 계산해 metrics JSON을 쓴다.
 
 명령
-  metrics --facts F [--out P] [--macro-snapshot P] [--reitwatch-dir D]
+  metrics --facts F [--out P] [--macro-snapshot P] [--reitwatch-dir D] [--tracker-dir D]
                          facts를 읽어 지표·check·flag·데이터 구멍을 계산한다.
                          SIC가 6798이 아니면 일반 배당주 경로(EPS·FCF payout, Chowder, yield trap)
   diff --prev M1 --curr M2 [--out P]
@@ -18,9 +18,11 @@ exit: 0 = 다 채움, 2 = 계산은 했지만 missing이나 check 실패가 있�
 Python 3 stdlib만 쓴다(3.9 이상).
 """
 import argparse
+import contextlib
 import copy
 import datetime as dt
 import glob
+import io
 import json
 import math
 import os
@@ -31,6 +33,7 @@ FACTS_SCHEMA = "reit-facts/1"
 METRICS_SCHEMA = "reit-metrics/1"
 REITWATCH_SCHEMA = "reitwatch-parsed/1"
 MACRO_SCHEMA = "macro-snapshot/1"
+TRACKER_SCHEMA = "nareit-tracker/1"
 STATUSES = ["reported", "derived", "stale", "estimated", "missing"]
 RANK = {s: i for i, s in enumerate(STATUSES)}  # 뒤로 갈수록 나쁘다
 
@@ -106,6 +109,16 @@ FACT_KINDS = {
     "same_store_current": "money",
     "same_store_prior": "money",
     "noi_annualized": "money",
+    # valuation 기준선(economic implied cap rate). NOI와 같은 기준(pro-rata·consolidated)으로 적는다
+    "construction_in_progress": "money",
+    "land_held": "money",
+    "other_non_operating_assets": "money",
+    "jv_debt_pro_rata": "money",
+    "capex_reserve": "money",
+    "debt_fair_value": "money",
+    "debt_carrying_value": "money",
+    "acquisitions_cap_rate": "pct",
+    "dispositions_cap_rate": "pct",
     # 시장
     "price": "per_share",
     "common_shares_outstanding": "shares",
@@ -141,6 +154,7 @@ FLAG_RANK = {"ok": 0, "watch": 1, "alert": 2}
 # 자기 P/FFO history 표본은 1·4·7·10월 호(가격 기준일이 분기말)와 최신 호다. reit-sector-scan의 표본과 같다.
 # 매달 넣으면 최근 1년(매달 받은 호)의 무게가 네 배가 된다.
 QUARTER_MONTHS = (1, 4, 7, 10)
+REVISION_MONTHS = 3  # consensus FFO 변화는 정확히 3개월 앞 호와 견준다(reit-sector-scan과 같은 규칙)
 DIFF_SCHEMA = "reit-diff/1"
 COMPARE_SCHEMA = "reit-compare/1"
 
@@ -218,8 +232,34 @@ def check_value(key, f):
     return f, None
 
 
+def sum_parts(key, f, kind):
+    """회사 표의 여러 줄 합인 칸(parts): 줄마다 값 규칙과 단위를 맞춘 뒤 script가 더한다(agent가 더하지 않는다).
+    status는 줄의 가장 나쁜 것(reported면 derived). 한 줄이라도 규칙을 어기거나 missing이면 칸 전체가 missing."""
+    parts = f.get("parts")
+    if kind not in ("money", "shares") or not isinstance(parts, list) or not parts:
+        return missing("%s: parts는 돈·주식 수 칸에 줄이 하나 이상일 때만 쓴다" % key), "parts"
+    got = []
+    for i, p in enumerate(parts):
+        env, bad = normalize("%s.parts[%d]" % (key, i), p, kind)
+        if bad:
+            return missing(env["note"]), bad
+        if env["status"] == "missing":
+            return missing("%s.parts[%d]: %s" % (key, i, env["note"])), None
+        got.append(env)
+    st = worst([e["status"] for e in got])
+    dates = [e["as_of"] for e in got if e.get("as_of")]
+    return {"value": round(sum(e["value"] for e in got), 4), "unit": BASE_UNIT[kind],
+            "status": "derived" if st == "reported" else st, "as_of": min(dates) if dates else None,
+            "source": "; ".join(sorted(set(e["source"] for e in got))),
+            "locator": " + ".join(e["locator"] for e in got),
+            "note": "; ".join(x for x in (f.get("note") or "", "회사 표 %d줄의 합(script가 더함)" % len(got)) if x)}, None
+
+
 def normalize(key, f, kind):
-    """facts 칸 하나를 검사하고(check_value) 단위를 맞춘다. 규칙을 어기면 missing으로 내리고 이유를 note에 쓴다."""
+    """facts 칸 하나를 검사하고(check_value) 단위를 맞춘다. 규칙을 어기면 missing으로 내리고 이유를 note에 쓴다.
+    value 대신 parts(회사 표의 여러 줄)가 있으면 줄마다 검사해 더한다."""
+    if isinstance(f, dict) and "parts" in f and f.get("value") is None:
+        return sum_parts(key, f, kind)
     f, bad = check_value(key, f)
     if bad or f["status"] == "missing":
         return f, bad
@@ -473,8 +513,11 @@ def load_reitwatch(dirpath, ticker):
                 "files": []}
     month, path, latest = months[-1]
     row = next((r for r in latest["rows"] if r.get("ticker") == ticker), None)
+    k = int(month[:4]) * 12 + int(month[5:7]) - 1 - REVISION_MONTHS
+    old_month = "%04d-%02d" % (k // 12, k % 12 + 1)
+    old = next(((p, d) for m, p, d in months if m == old_month), None)
     out = {"month": month, "path": path, "as_of": latest.get("as_of"), "files": [p for _, p, _ in months],
-           "row": row, "note": ""}
+           "row": row, "note": "", "fy1": latest.get("fy1"), "rev_old_month": old_month, "rev_old": old}
     if row is None:
         out["note"] = "REITWatch %s에 %s row가 없음" % (month, ticker)
         return out
@@ -488,6 +531,102 @@ def load_reitwatch(dirpath, ticker):
         if r and is_finite(r.get("p_ffo_fy1")):
             out["history"].append((m, r["p_ffo_fy1"]))
     return out
+
+
+def load_tracker(dirpath):
+    """Tracker parsed(reit-sector-scan이 쓴다) 중 파일 이름이 가장 늦은 것. {"doc", "path", "note"}."""
+    dirpath = dirpath or os.path.join(data_dir(), "tracker", "parsed")
+    for p in sorted(glob.glob(os.path.join(dirpath, "*.json")), reverse=True):
+        try:
+            d = read_json(p)
+        except ValueError:
+            continue
+        if d.get("schema") == TRACKER_SCHEMA and isinstance(d.get("rows"), list):
+            return {"doc": d, "path": p, "note": ""}
+    return {"doc": None, "path": None,
+            "note": "Tracker parsed 없음(%s): reit-sector-scan skill로 tracker fetch를 먼저 돌린다" % dirpath}
+
+
+def load_tracker_map():
+    """REITWatch subsector → Tracker row 대응(assets/tracker_map.json, reit-sector-scan sector_map.json의 복사)."""
+    d = read_json(os.path.join(skill_root(), "assets", "tracker_map.json"))
+    return {k: v for k, v in d.items() if not k.startswith("_")}
+
+
+def tracker_env(trk, subsector, tmap, ref_date, max_days):
+    """REITWatch subsector의 Tracker implied cap rate envelope. 자기 row에 값이 없으면 parent row 값(estimated).
+    Tracker 분기 끝날이 ref_date(가격 기준일, 없으면 분기 끝날)보다 max_days 넘게 앞서면 stale."""
+    doc = trk.get("doc")
+    if doc is None:
+        return missing(trk.get("note") or "Tracker parsed를 읽지 않음")
+    if not subsector:
+        return missing("REITWatch subsector를 몰라 Tracker row를 고르지 못함")
+    entry = tmap.get(subsector)
+    if not entry:
+        return missing("assets/tracker_map.json에 subsector %s가 없음" % subsector)
+    rows = {r.get("name"): r for r in doc.get("rows") or []}
+    name, parent = entry.get("name"), entry.get("parent")
+    row, st, notes = rows.get(name) if name else None, "reported", []
+    if row is None or not is_finite(row.get("implied_cap_rate")):
+        row = rows.get(parent) if parent else None
+        if row is None or not is_finite(row.get("implied_cap_rate")):
+            return missing("Tracker %s에 %s implied cap rate가 없음" % (doc.get("quarter"), name or subsector))
+        st = "estimated"
+        notes.append("Tracker에 %s 값이 없어 %s 전체 값" % (name or subsector, parent))
+    if ref_date and doc.get("as_of"):
+        age = (parse_date(ref_date) - parse_date(doc["as_of"])).days
+        if age > max_days:
+            st = worst([st, "stale"])
+            notes.append("Tracker %s 분기 끝날 %s는 기준일 %s보다 %d일 앞섬(허용 %d일): reit-sector-scan tracker fetch로 갱신" % (
+                doc.get("quarter"), doc["as_of"], ref_date[:10], age, max_days))
+    return {"value": round(row["implied_cap_rate"], 4), "unit": "%", "status": st, "as_of": doc.get("as_of"),
+            "source": "nareit-tracker:%s" % doc.get("source"),
+            "locator": "%s %s!%s (%s)" % (trk.get("path"), doc.get("sheet"),
+                                         (row.get("cells") or {}).get("implied_cap_rate", "?"), row.get("name")),
+            "note": "; ".join(notes)}
+
+
+def ffo_revision_env(rw):
+    """consensus FFO FY1의 3개월 변화(%) envelope. 새 호 FY1 연도와 같은 회계연도 column을 3개월 앞 호에서 고른다
+    (앞 호 FY1이 같은 해면 FY1, 앞 호 FY2가 같은 해면 FY2. REITWatch는 2월 호에 FY가 바뀐다). 앞 호 값이 없거나 0 이하면 missing."""
+    row = rw.get("row")
+    if not row:
+        return missing(rw.get("note") or "REITWatch row 없음")
+    if rw.get("rev_old") is None:
+        return missing("REITWatch 3개월 앞 호(%s)가 없음" % rw.get("rev_old_month"))
+    opath, odoc = rw["rev_old"]
+    year = rw.get("fy1")
+    if year is None:
+        return missing("REITWatch %s 호의 FY1 연도를 모름" % rw["month"])
+    col = "ffo_fy1" if odoc.get("fy1") == year else "ffo_fy2" if odoc.get("fy2") == year else None
+    if col is None:
+        return missing("REITWatch %s 호에 %s년 column이 없음" % (odoc.get("month"), year))
+    t = row.get("ticker")
+    old = next((r for r in odoc.get("rows") or [] if r.get("ticker") == t), {}).get(col)
+    new = row.get("ffo_fy1")
+    if not is_finite(new):
+        return missing("REITWatch %s 호에 %s FFO FY1이 없음" % (rw["month"], t))
+    if not is_finite(old) or old <= 0:
+        return missing("REITWatch %s 호에 %s %s 값이 없거나 0 이하" % (odoc.get("month"), t, col))
+    return aged({"value": round((new / old - 1) * 100, 4), "unit": "%", "status": "estimated", "as_of": rw.get("as_of"),
+                 "source": "reitwatch:%s,%s" % (rw["month"], odoc.get("month")),
+                 "locator": "%s rows[ticker=%s].ffo_fy1 %s / %s rows[ticker=%s].%s %s" % (rw["path"], t, new, opath, t, col, old),
+                 "note": "%s 호 FY%s %s / %s 호 %s(FY%s) %s − 1. consensus(애널리스트 추정)" % (
+                     rw["month"], year, new, odoc.get("month"), col, year, old)}, rw.get("age_note"))
+
+
+def ffo_growth_env(rw):
+    """consensus FFO FY2 / FY1 − 1(%) envelope. FY1이 0 이하면 missing."""
+    row = rw.get("row")
+    if not row:
+        return missing(rw.get("note") or "REITWatch row 없음")
+    a, b = row.get("ffo_fy1"), row.get("ffo_fy2")
+    if not (is_finite(a) and is_finite(b)) or a <= 0:
+        return missing("REITWatch %s 호에 %s FFO FY1·FY2가 없거나 FY1이 0 이하" % (rw["month"], row.get("ticker")))
+    return aged({"value": round((b / a - 1) * 100, 4), "unit": "%", "status": "estimated", "as_of": rw.get("as_of"),
+                 "source": "reitwatch:%s" % rw["month"],
+                 "locator": "%s rows[ticker=%s].ffo_fy2 %s / ffo_fy1 %s" % (rw["path"], row.get("ticker"), b, a),
+                 "note": "consensus(애널리스트 추정)"}, rw.get("age_note"))
 
 
 def rw_env(rw, field, note):
@@ -594,9 +733,10 @@ def finish(facts_doc, path, M, checks, flags, gaps, inputs, thresholds):
     return doc, (2 if (n_missing or n_fail) else 0)
 
 
-def compute(facts_doc, th, macro=None, rw=None, baa=None):
+def compute(facts_doc, th, macro=None, rw=None, baa=None, tracker=None, tmap=None):
     """facts 문서 → metrics 문서. 같은 입력이면 같은 출력(시각을 넣지 않는다).
-    macro는 DGS10, baa는 BAA10Y envelope(load_macro)."""
+    macro는 DGS10, baa는 BAA10Y envelope(load_macro), tracker는 load_tracker 결과,
+    tmap은 REITWatch subsector → Tracker row 대응(없으면 assets/tracker_map.json)."""
     if not is_reit_doc(facts_doc):
         return compute_dividend(facts_doc, th, macro=macro)
     F, S, gaps = read_facts(facts_doc)
@@ -975,6 +1115,46 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None):
                                    {"noi_annualized": F["noi_annualized"], "market_cap": env_of(M["market_cap"]),
                                     "net_debt": env_of(M["net_debt"]), "preferred_equity": F["preferred_equity"]},
                                    lambda n, m, d, pf: n / (m + d + pf) * 100, "%")
+
+    # valuation 기준선: Green Street식 economic implied cap rate(운영 부동산만, JV pro-rata, NOI − capex reserve)와 부채 시가
+    M["capex_reserve"] = dict(first_of(
+        passthrough("capex_reserve", F["capex_reserve"], "회사 발표 capex reserve(연간)"),
+        assume(metric("capex_reserve_run_rate", "−(AFFO bridge recurring capex + leasing cost 줄, 분기) × 4",
+                      {"recurring_capex_leasing": capex}, lambda c: -c * 4, "USD thousands"),
+               "회사가 capex reserve를 내지 않아 AFFO bridge의 분기 recurring capex·leasing cost × 4로 대신(가정)")),
+        metric="capex_reserve")
+    M["noi_economic"] = metric("noi_economic", "연환산 NOI − capex reserve(연간)",
+                               {"noi_annualized": F["noi_annualized"], "capex_reserve": env_of(M["capex_reserve"])},
+                               lambda n, c: n - c, "USD thousands")
+    M["non_operating_assets"] = metric("non_operating_assets", "건설 중 자산(CIP) + 개발용 토지 + 그 밖의 비운영 자산",
+                                       {k: F[k] for k in ("construction_in_progress", "land_held", "other_non_operating_assets")},
+                                       lambda a, b, c: a + b + c, "USD thousands", note="NOI에 수익이 들어 있지 않은 자산")
+    M["jv_debt_pro_rata"] = passthrough("jv_debt_pro_rata", F["jv_debt_pro_rata"],
+                                        "미연결 JV 부채의 지분 몫(회사 표, 여러 줄이면 script가 더함)")
+    M["economic_ev"] = metric("economic_ev", "시총 + net debt + 우선주 + 미연결 JV 부채(지분 몫) − 비운영 자산",
+                              {"market_cap": env_of(M["market_cap"]), "net_debt": env_of(M["net_debt"]),
+                               "preferred_equity": F["preferred_equity"], "jv_debt_pro_rata": F["jv_debt_pro_rata"],
+                               "non_operating_assets": env_of(M["non_operating_assets"])},
+                              lambda m, d, pf, j, x: m + d + pf + j - x, "USD thousands")
+
+    def cap_rate(n, ev):
+        if ev <= 0:
+            raise Undefined("EV가 0 이하라 cap rate를 내지 않음")
+        return n / ev * 100
+    M["economic_implied_cap_rate"] = metric("economic_implied_cap_rate", "(연환산 NOI − capex reserve) / economic EV × 100",
+                                            {"noi_economic": env_of(M["noi_economic"]), "economic_ev": env_of(M["economic_ev"])},
+                                            cap_rate, "%", note="운영 부동산만, capex reserve를 뺀 NOI(Green Street식 economic cap rate)")
+    M["debt_fair_value"] = passthrough("debt_fair_value", F["debt_fair_value"], "10-Q·10-K fair value 표의 부채 fair value")
+    M["debt_carrying_value"] = passthrough("debt_carrying_value", F["debt_carrying_value"], "같은 fair value 표의 carrying value")
+    M["debt_mtm_adjustment"] = metric("debt_mtm_adjustment", "부채 fair value − 같은 표의 carrying value",
+                                      {"debt_fair_value": F["debt_fair_value"], "debt_carrying_value": F["debt_carrying_value"]},
+                                      lambda fv, cv: fv - cv, "USD thousands",
+                                      note="음수면 부채 시가가 장부가보다 낮다(시장금리가 기존 금리보다 높다)")
+    M["economic_implied_cap_rate_debt_mtm"] = metric(
+        "economic_implied_cap_rate_debt_mtm", "(연환산 NOI − capex reserve) / (economic EV + 부채 시가 조정) × 100",
+        {"noi_economic": env_of(M["noi_economic"]), "economic_ev": env_of(M["economic_ev"]),
+         "debt_mtm_adjustment": env_of(M["debt_mtm_adjustment"])},
+        lambda n, ev, a: cap_rate(n, ev + a), "%", note="fair value 표에 없는 부채(JV 부채 등)는 장부가 그대로")
     M["dgs10"] = passthrough("dgs10", dgs, "macro snapshot의 DGS10")
     M["yield_spread_vs_10y"] = metric("yield_spread_vs_10y", "forward yield − 10년물(DGS10), %p",
                                       {"forward_yield": env_of(M["forward_yield"]), "dgs10": dgs},
@@ -1017,6 +1197,22 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None):
         M["p_ffo_vs_peer"] = metric("p_ffo_vs_peer", "REITWatch P/FFO / peer median",
                                     {"p_ffo_reitwatch": rw_pffo, "peer_median_p_ffo": env_of(M["peer_median_p_ffo"])},
                                     lambda a, b: a / b, "x")
+    M["ffo_fy1_rev_3m"] = passthrough("ffo_fy1_rev_3m", ffo_revision_env(rwd),
+                                      "새 호 consensus FFO FY1 / 3개월 앞 호의 같은 회계연도 consensus FFO − 1, %")
+    M["ffo_growth_fy2"] = passthrough("ffo_growth_fy2", ffo_growth_env(rwd), "consensus FFO FY2 / FY1 − 1, %")
+
+    # cap rate 비교 줄: 회사 매입·매각 cap rate(회사 정의), Tracker subsector implied cap rate(명목)
+    M["acquisitions_cap_rate"] = passthrough("acquisitions_cap_rate", F["acquisitions_cap_rate"], "회사 발표 최근 매입 cap rate(회사 정의)")
+    M["dispositions_cap_rate"] = passthrough("dispositions_cap_rate", F["dispositions_cap_rate"], "회사 발표 최근 매각 cap rate(회사 정의)")
+    trk = tracker if tracker is not None else {"doc": None, "path": None, "note": "Tracker parsed를 읽지 않음"}
+    tenv = tracker_env(trk, M["subsector"]["value"], tmap if tmap is not None else load_tracker_map(),
+                       F["price"].get("as_of") or facts_doc.get("period_end"), th["tracker_max_age_days"])
+    M["tracker_subsector_cap_rate"] = passthrough("tracker_subsector_cap_rate", tenv,
+                                                  "Nareit REIT Industry Tracker subsector implied cap rate(명목)")
+    M["implied_cap_rate_vs_tracker"] = metric("implied_cap_rate_vs_tracker",
+                                              "implied cap rate(명목) − Tracker subsector implied cap rate, %p",
+                                              {"implied_cap_rate": env_of(M["implied_cap_rate"]), "tracker_subsector_cap_rate": tenv},
+                                              lambda a, b: a - b, "%p")
 
     flags = [
         flag("affo_payout", M["affo_payout_forward"] if M["affo_payout_forward"]["value"] is not None
@@ -1029,7 +1225,8 @@ def compute(facts_doc, th, macro=None, rw=None, baa=None):
 
     return finish(facts_doc, "reit", M, checks, flags, gaps,
                   {"macro_snapshot": (macro or {}).get("locator", "").split(" ")[0] or None,
-                   "reitwatch_files": rwd.get("files", []), "reitwatch_month": rwd.get("month")},
+                   "reitwatch_files": rwd.get("files", []), "reitwatch_month": rwd.get("month"),
+                   "tracker_file": trk.get("path")},
                   {k: th[k] for k in ("affo_payout_pct", "maturity_single_year_pct", "net_debt_to_ebitdare_x",
                                       "interest_coverage_x", "covenant_headroom_pct", "ffo_tie_out_tolerance_pct")})
 
@@ -1365,7 +1562,7 @@ def cmd_metrics(args):
     macro, _ = load_macro(args.macro_snapshot)
     baa, _ = load_macro(args.macro_snapshot, "BAA10Y")
     rw = load_reitwatch(args.reitwatch_dir, facts["ticker"])
-    doc, code = compute(facts, th, macro=macro, rw=rw, baa=baa)
+    doc, code = compute(facts, th, macro=macro, rw=rw, baa=baa, tracker=load_tracker(args.tracker_dir))
     doc["facts_file"] = os.path.abspath(args.facts)
     path = args.out or metrics_path(doc)
     write_json(doc, path)
@@ -1450,6 +1647,7 @@ def main(argv):
     m.add_argument("--out")
     m.add_argument("--macro-snapshot", help="기본: 가장 최근 macro snapshot")
     m.add_argument("--reitwatch-dir", help="기본: $INVEST_DATA_DIR/reitwatch/parsed")
+    m.add_argument("--tracker-dir", help="기본: $INVEST_DATA_DIR/tracker/parsed")
     d = sub.add_parser("diff", help="같은 종목 두 분기 metrics의 차이(earnings mode)")
     d.add_argument("--prev", required=True)
     d.add_argument("--curr", required=True)
@@ -1502,7 +1700,9 @@ def run_check():
     baa, _ = load_macro(os.path.join(fx, "macro_snapshot.json"), "BAA10Y")
     th_rw = dict(th, history_min_points=3)
     rw = load_reitwatch(os.path.join(fx, "reitwatch"), "O")
-    doc, code = compute(copy.deepcopy(base), th_rw, macro=macro, rw=rw, baa=baa)
+    trk = load_tracker(os.path.join(fx, "tracker"))
+    tmap = {"Free Standing (가상)": {"name": "Free Standing", "parent": "Retail"}}
+    doc, code = compute(copy.deepcopy(base), th_rw, macro=macro, rw=rw, baa=baa, tracker=trk, tmap=tmap)
     M = doc["metrics"]
 
     # 1. 회사 발표값·손계산과 맞춘다
@@ -1520,7 +1720,7 @@ def run_check():
                                                                    if g["status"] in ("missing", "fail")]))
     ok(M["subsector"]["value"] == "Free Standing (가상)" and M["peer_median_p_ffo"]["value"] == 14.0
        and near(M["p_ffo_history_pctile"]["value"], 66.6667), "REITWatch peer median 14.0, 자기 history percentile 66.6667")
-    again, _ = compute(copy.deepcopy(base), th_rw, macro=macro, rw=rw, baa=baa)
+    again, _ = compute(copy.deepcopy(base), th_rw, macro=macro, rw=rw, baa=baa, tracker=trk, tmap=tmap)
     ok(json.dumps(again, sort_keys=True) == json.dumps(doc, sort_keys=True), "같은 입력이면 같은 출력")
 
     # 2. FFO 입력 하나를 바꾸면 tie-out 실패, exit 2, 데이터 구멍
@@ -1945,6 +2145,124 @@ def run_check():
        and any(g["item"] == "affo_bridge.items[0]" and "category" in g["reason"] for g in d34["data_gaps"])
        and d34["checks"][1]["pass"],
        "그 category 줄이 없거나 category가 없으면 missing(0이 아님), 모르는 category는 데이터 구멍, bridge 합은 그대로")
+
+    # 23. valuation 기준선(economic implied cap rate, 부채 시가, Tracker·회사 cap rate)과 consensus revision (bc 손계산)
+    ev = exp["valuation"]
+    ok(th.get("tracker_max_age_days") == 150, "thresholds.json Tracker 나이 150일")
+    for name, want in ev["values"].items():
+        got = M.get(name, {})
+        ok(near(got.get("value"), want["value"]) and got.get("status") == want["status"],
+           "valuation %s = %s %s (got %s %s; %s)" % (name, want["value"], want["status"], got.get("value"),
+                                                    got.get("status"), want["why"]))
+    ok(near(M["implied_cap_rate"]["value"], exp["values"]["implied_cap_rate"]["value"])
+       and M["implied_cap_rate"]["formula"] == "연환산 NOI / (시총 + net debt + 우선주) × 100", "명목 implied cap rate 줄은 그대로")
+    ok(M.get("tracker_subsector_cap_rate", {}).get("locator", "").endswith("DD423 (Free Standing)")
+       and doc["inputs"].get("tracker_file", "").endswith("2026Q3.json"), "Tracker 셀 위치를 locator에, 읽은 파일을 inputs에")
+    ok([f["flag"] for f in doc["flags"]] == ["affo_payout", "maturity_concentration", "net_debt_to_ebitdare",
+                                             "interest_coverage", "covenant_headroom"], "cap rate·revision 줄에는 flag가 없음")
+
+    def vcompute(d, **kw):
+        args = dict(macro=macro, rw=rw, baa=baa, tracker=trk, tmap=tmap)
+        args.update(kw)
+        return compute(d, th_rw, **args)
+    pb = copy.deepcopy(base)
+    pb["facts"]["jv_debt_pro_rata"]["parts"][1]["locator"] = ""
+    d40, c40 = vcompute(pb)
+    ok(c40 == 2 and d40["metrics"]["economic_implied_cap_rate"]["value"] is None
+       and d40["metrics"]["implied_cap_rate"]["value"] is not None
+       and any(g["item"] == "jv_debt_pro_rata" and g["status"] == "missing" for g in d40["data_gaps"]),
+       "parts 한 줄에 locator가 없으면 그 칸 missing·데이터 구멍, economic cap rate missing, 명목은 그대로")
+    pu = copy.deepcopy(base)
+    pu["facts"]["debt_fair_value"]["parts"][0]["unit"] = "%"
+    d41, _ = vcompute(pu)
+    ok(d41["metrics"]["debt_mtm_adjustment"]["value"] is None
+       and d41["metrics"]["economic_implied_cap_rate_debt_mtm"]["value"] is None
+       and near(d41["metrics"]["economic_implied_cap_rate"]["value"], ev["values"]["economic_implied_cap_rate"]["value"]),
+       "parts 한 줄의 unit이 틀리면 부채 시가 줄만 missing, economic cap rate는 그대로")
+    pm = copy.deepcopy(base)
+    pm["facts"]["debt_fair_value"]["parts"][2] = {"value": None, "status": "missing", "note": "못 찾음(가상)"}
+    d42, _ = vcompute(pm)
+    ok(d42["metrics"]["debt_fair_value"]["value"] is None, "parts 한 줄이 missing이면 합도 missing(0으로 채우지 않음)")
+    cr = copy.deepcopy(base)
+    cr["facts"]["capex_reserve"] = {"value": 300000, "unit": "USD thousands", "status": "reported", "as_of": "2026-09-30",
+                                    "source": "(가상)", "locator": "capex reserve (가상)"}
+    d43, _ = vcompute(cr)
+    w = ev["capex_reserve_reported"]
+    ok(d43["metrics"]["capex_reserve"]["value"] == w["value"] and d43["metrics"]["capex_reserve"]["status"] == "reported"
+       and near(d43["metrics"]["noi_economic"]["value"], w["noi_economic"])
+       and near(d43["metrics"]["economic_implied_cap_rate"]["value"], w["economic_implied_cap_rate"])
+       and d43["metrics"]["economic_implied_cap_rate"]["status"] == "derived", w["why"])
+    nc = copy.deepcopy(base)
+    for it in nc["affo_bridge"]["items"]:
+        if it.get("category") in ("recurring_capex", "leasing_cost"):
+            it["category"] = "other"
+    d44, _ = vcompute(nc)
+    ok(d44["metrics"]["capex_reserve"]["value"] is None and d44["metrics"]["economic_implied_cap_rate"]["value"] is None,
+       "capex reserve도 bridge의 recurring capex·leasing cost 줄도 없으면 economic cap rate missing(0으로 두지 않음)")
+    neg = copy.deepcopy(base)
+    neg["facts"]["construction_in_progress"] = dict(neg["facts"]["construction_in_progress"], value=90000000)
+    d45, _ = vcompute(neg)
+    ok(d45["metrics"]["economic_implied_cap_rate"]["value"] is None and "0 이하" in d45["metrics"]["economic_implied_cap_rate"]["note"],
+       "economic EV가 0 이하면 cap rate를 내지 않음")
+    par = copy.deepcopy(trk)
+    par["doc"] = copy.deepcopy(trk["doc"])
+    next(r for r in par["doc"]["rows"] if r["name"] == "Free Standing")["implied_cap_rate"] = None
+    d46, _ = vcompute(copy.deepcopy(base), tracker=par)
+    t46 = d46["metrics"]["tracker_subsector_cap_rate"]
+    ok(t46["value"] == ev["parent_cap_rate"] and t46["status"] == "estimated" and "Retail" in t46["note"],
+       "subsector row에 값이 없으면 parent(Retail) 6.4를 estimated로")
+    old_t = copy.deepcopy(trk)
+    old_t["doc"] = dict(trk["doc"], quarter="2026Q1", as_of="2026-03-31")
+    t47 = vcompute(copy.deepcopy(base), tracker=old_t)[0]["metrics"]["tracker_subsector_cap_rate"]
+    ok(t47["status"] == "stale" and "231일" in t47["note"], "Tracker 분기 끝날이 가격 기준일보다 150일 넘게 앞서면 stale(231일)")
+    d48, c48 = vcompute(copy.deepcopy(base), tracker=load_tracker(os.path.join(fx, "nope")))
+    M48 = d48["metrics"]
+    ok(c48 == 2 and M48["tracker_subsector_cap_rate"]["value"] is None and M48["implied_cap_rate_vs_tracker"]["value"] is None
+       and "Tracker parsed" in M48["tracker_subsector_cap_rate"]["note"]
+       and M48["economic_implied_cap_rate"]["value"] is not None and M48["acquisitions_cap_rate"]["value"] is not None,
+       "Tracker가 없으면 Tracker 비교 줄만 missing, exit 2")
+    d49, _ = vcompute(copy.deepcopy(base), tmap={})
+    ok(d49["metrics"]["tracker_subsector_cap_rate"]["value"] is None
+       and "tracker_map" in d49["metrics"]["tracker_subsector_cap_rate"]["note"], "대응표에 없는 subsector는 missing")
+    with tempfile.TemporaryDirectory() as tmp:
+        for m, fy, v1, v2 in (("2026-01", (2025, 2026), 4.10, 4.20), ("2026-04", (2026, 2027), 4.25, 4.40)):
+            with open(os.path.join(tmp, m + ".json"), "w", encoding="utf-8") as f:
+                json.dump({"schema": REITWATCH_SCHEMA, "month": m, "as_of": m + "-28", "fy1": fy[0], "fy2": fy[1],
+                           "rows": [{"ticker": "O", "subsector": "Free Standing (가상)", "ffo_fy1": v1, "ffo_fy2": v2,
+                                     "p_ffo_fy1": 12.0}]}, f)
+        rw2 = load_reitwatch(tmp, "O")
+        r50 = vcompute(copy.deepcopy(base), rw=rw2)[0]["metrics"]["ffo_fy1_rev_3m"]
+        ok(near(r50["value"], ev["fy_switch_rev"]) and "ffo_fy2" in r50["note"],
+           "FY 교체 뒤면 앞 호의 FY2(같은 회계연도)와 견줌: 4.25 / 4.20 − 1 = 1.1905")
+        os.remove(os.path.join(tmp, "2026-01.json"))
+        r51 = vcompute(copy.deepcopy(base), rw=load_reitwatch(tmp, "O"))[0]["metrics"]["ffo_fy1_rev_3m"]
+        ok(r51["value"] is None and r51["status"] == "missing" and "2026-01" in r51["note"], "3개월 앞 호가 없으면 missing")
+    ok("AFFO bridge" in M["capex_reserve"]["note"] and "가정" in M["capex_reserve"]["note"],
+       "capex reserve를 AFFO bridge로 대신하면 그 가정을 note에 적음")
+    zero = dict(rw, rev_old=(rw["rev_old"][0], copy.deepcopy(rw["rev_old"][1])))
+    next(r for r in zero["rev_old"][1]["rows"] if r["ticker"] == "O")["ffo_fy1"] = 0
+    r53 = vcompute(copy.deepcopy(base), rw=zero)[0]["metrics"]["ffo_fy1_rev_3m"]
+    ok(r53["value"] is None and "0 이하" in r53["note"], "앞 호 FFO가 0이면 변화를 내지 않음")
+    with tempfile.TemporaryDirectory() as tmp:
+        for q, v in (("2026Q2", 9.9), ("2026Q3", 6.5)):
+            with open(os.path.join(tmp, q + ".json"), "w", encoding="utf-8") as f:
+                json.dump(dict(trk["doc"], quarter=q, rows=[{"name": "Free Standing", "implied_cap_rate": v}]), f)
+        lt = load_tracker(tmp)
+        ok(lt["path"].endswith("2026Q3.json") and lt["doc"]["rows"][0]["implied_cap_rate"] == 6.5,
+           "Tracker parsed가 여럿이면 파일 이름이 가장 늦은 분기를 읽음")
+    r52 = vcompute(copy.deepcopy(base), rw=dict(rw, as_of="2024-09-30"))[0]["metrics"]["ffo_fy1_rev_3m"]
+    ok(r52["status"] == "estimated" and "허용 %d일" % th["reitwatch_max_age_days"] in r52["note"],
+       "REITWatch가 오래되면 revision note에도 나이")
+    with tempfile.TemporaryDirectory() as tmp:
+        p = os.path.join(tmp, "f.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(base, f)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            main(["metrics", "--facts", p, "--out", os.path.join(tmp, "m.json"), "--tracker-dir", os.path.join(fx, "tracker"),
+                  "--reitwatch-dir", os.path.join(fx, "reitwatch"), "--macro-snapshot", os.path.join(fx, "macro_snapshot.json")])
+        cli = read_json(os.path.join(tmp, "m.json"))
+        ok(cli["inputs"].get("tracker_file", "").endswith(os.path.join("tracker", "2026Q3.json")),
+           "metrics --tracker-dir로 Tracker 파일을 고름")
 
     log("check: %d개 실패" % len(fails) if fails else "check: 모두 통과")
     return 2 if fails else 0

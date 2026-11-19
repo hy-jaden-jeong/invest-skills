@@ -1,0 +1,12 @@
+{
+ "schema": "nareit-tracker/1",
+ "quarter": "2026Q3",
+ "as_of": "2026-09-30",
+ "source": "(가상) check fixture",
+ "sheet": "Data Q3 2026",
+ "rows": [
+  {"name": "Retail", "implied_cap_rate": 6.4, "cells": {"implied_cap_rate": "DD420"}},
+  {"name": "Free Standing", "implied_cap_rate": 6.5, "cells": {"implied_cap_rate": "DD423"}},
+  {"name": "Industrial", "implied_cap_rate": null, "cells": {}}
+ ]
+}

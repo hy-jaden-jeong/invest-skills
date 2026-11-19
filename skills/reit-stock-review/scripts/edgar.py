@@ -4,7 +4,8 @@
 명령
   resolve T                         ticker → CIK, 회사 이름, SIC(6798이면 REIT)
   filings T [--forms F] [--limit N] 최근 공시 목록. 실적 8-K(item 2.02)를 표시한다
-  exhibits T --accession A          공시의 EX-99 문서를 받아 .txt로 바꾼다
+  exhibits T --accession A [--type 10-Q]
+                                    공시의 EX-99 문서(--type이면 그 type 문서)를 받아 .txt로 바꾼다
   xbrl T --period P [--facts F]     XBRL에서 그 분기 값을 facts 초안에 채운다(비어 있는 칸만).
                                     REIT가 아니면 일반 배당주 칸(EPS, 현금흐름 YTD, 배당)
   dividends T [--facts F]           XBRL 연간 주당 배당 history
@@ -76,6 +77,10 @@ XBRL_MAP = {
                                                 "us-gaap:DividendsPreferredStock"]),
     # 주당 AFFO를 내지 않는 회사의 분모. AFFO 총액과 같은 기준(OP unit 포함 여부)인지 Ex.99와 맞춰 본다
     "diluted_shares_weighted": ("duration", "shares", ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding"]),
+    # 부채 시가: 10-Q·10-K fair value 표의 fair value와 같은 표의 carrying value. 원금을 DebtInstrumentCarryingAmount로
+    # 다는 회사가 있어(PLD) carrying은 LongTermDebt를 먼저 본다. 10-Q 표와 맞춰 본다
+    "debt_fair_value": ("instant", "USD", ["us-gaap:DebtInstrumentFairValue", "us-gaap:LongTermDebtFairValue"]),
+    "debt_carrying_value": ("instant", "USD", ["us-gaap:LongTermDebt", "us-gaap:DebtInstrumentCarryingAmount"]),
 }
 # 일반 배당주(SIC가 6798이 아님) 칸 ← concept 후보. ytd는 회계연도 시작부터 그 분기 끝날까지(현금흐름표 기간).
 DIVIDEND_XBRL_MAP = {
@@ -322,6 +327,11 @@ def index_documents(index_html):
     return docs
 
 
+def wanted_documents(docs, doc_type):
+    """filing index 문서 중 type이 doc_type(EX-99, 10-Q 등)으로 시작하는 것."""
+    return [d for d in docs if d["type"].upper().startswith(doc_type.upper())]
+
+
 class _Text(html.parser.HTMLParser):
     BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section", "title"}
     SKIP = {"script", "style", "head", "ix:header"}
@@ -496,11 +506,11 @@ def add_new_fields(doc):
 
 
 def merge_missing(doc, draft):
-    """비어 있는(missing) 칸만 채운다. agent가 채운 값은 덮지 않는다."""
+    """비어 있는(missing) 칸만 채운다. agent가 채운 값(여러 줄 합인 parts 포함)은 덮지 않는다."""
     filled = []
     for k, v in draft.items():
         cur = doc["facts"].get(k)
-        if cur is None or cur.get("status") == "missing" or cur.get("value") is None:
+        if cur is None or ("parts" not in cur and (cur.get("status") == "missing" or cur.get("value") is None)):
             doc["facts"][k] = v
             filled.append(k)
     return filled
@@ -591,6 +601,9 @@ def cmd_config(args):
         if not ua or not EMAIL_RE.search(ua) or len(ua.split()) < 2:
             log("--user-agent는 \"이름 이메일\" 모양이어야 한다(SEC가 연락처를 요구한다)")
             return 1
+        if not ua.isascii():
+            log("--user-agent는 영문·숫자·기호(ASCII)로만 쓴다. HTTP header에 한글을 넣을 수 없다")
+            return 1
         doc = read_config()
         doc["sec_user_agent"] = ua
         write_json(doc, config_path())
@@ -617,9 +630,9 @@ def cmd_exhibits(args):
     base = ARCHIVES % (int(info["cik"]), acc.replace("-", ""))
     adir = os.path.join(filings_dir(args.ticker), acc)
     idx = cached(os.path.join(adir, "index.htm"), base + acc + "-index.htm", None).decode("utf-8", "replace")
-    docs = [d for d in index_documents(idx) if d["type"].upper().startswith("EX-99")]
+    docs = wanted_documents(index_documents(idx), args.type)
     if not docs:
-        log("이 공시에 EX-99 문서가 없음")
+        log("이 공시에 %s 문서가 없음" % args.type)
         return 2
     out = []
     for d in docs:
@@ -697,6 +710,7 @@ def main(argv):
             s.add_argument("--limit", type=int, default=20)
         if name == "exhibits":
             s.add_argument("--accession", required=True)
+            s.add_argument("--type", default="EX-99", help="받을 문서 type(기본 EX-99. 10-Q 본문의 fair value 주석은 10-Q)")
         if name == "xbrl":
             s.add_argument("--period", required=True)
         if name in ("xbrl", "dividends"):
@@ -765,6 +779,9 @@ def run_check():
     docs = index_documents(fx_text("index.htm"))
     ok([(d["type"], d["document"]) for d in docs if d["type"].startswith("EX-99")] == [tuple(x) for x in exp["ex99"]],
        "filing index에서 EX-99 문서 이름")
+    ok([d["type"] for d in wanted_documents(docs, "EX-99")] == ["EX-99.1", "EX-99.2"]
+       and [d["type"] for d in wanted_documents(docs, "8-k")] == ["8-K"],
+       "exhibits --type: 기본 EX-99, 10-Q·8-K 본문도 고를 수 있음(대소문자 무시)")
     text = html_to_text(fx_text("ex99.htm"))
     for line in exp["text_lines"]:
         ok(line in text.split("\n"), "HTML 표 → tab 줄: %r" % line)
@@ -791,6 +808,12 @@ def run_check():
        "초안은 빈 칸만 채우고 agent 값은 덮지 않음")
     ok(set(doc["facts"]) == set(reit_calc.FACT_KINDS) and doc["schema"] == reit_calc.FACTS_SCHEMA,
        "facts 초안에 reit_calc의 칸이 모두 있음")
+    pdoc = skeleton(info, "2026Q3", None)
+    pdoc["facts"]["debt_fair_value"] = {"parts": [{"value": 1, "unit": "USD thousands", "status": "reported",
+                                                   "source": "agent (가상)", "locator": "x (가상)"}], "unit": "USD thousands"}
+    pfilled = merge_missing(pdoc, draft)
+    ok("debt_fair_value" not in pfilled and "parts" in pdoc["facts"]["debt_fair_value"]
+       and "debt_carrying_value" in pfilled, "agent가 parts(여러 줄)로 적은 칸은 초안이 덮지 않음")
     old = skeleton(info, "2026Q3", None)
     del old["facts"]["principal_amortization"]
     del old["series"]["covenants"]
@@ -861,8 +884,9 @@ def run_check():
             import io as _io
             with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(_io.StringIO()):
                 bad_cfg = main(["config", "--user-agent", "nomail"])
-                saved = main(["config", "--user-agent", "Test User test@example.com (가상)"])
-            ok(bad_cfg == 1 and saved == 0 and read_json(config_path())["sec_user_agent"] == "Test User test@example.com (가상)"
+                bad_ascii = main(["config", "--user-agent", "테스트 test@example.com"])
+                saved = main(["config", "--user-agent", "Test User test@example.com"])
+            ok(bad_cfg == 1 and bad_ascii == 1 and saved == 0 and read_json(config_path())["sec_user_agent"] == "Test User test@example.com"
                and config_path().startswith(tmp), "config: 이메일 없는 값은 거절, 저장은 데이터 폴더의 config.json")
             ok(contact_ua()[1].startswith("config:") and user_agent("https://www.sec.gov/x").startswith("Test User"),
                "config.json의 sec_user_agent를 www.sec.gov에 씀")
