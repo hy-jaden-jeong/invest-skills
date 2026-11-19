@@ -77,10 +77,10 @@
 | B20 | 어떤 보고서에도 "사라", "팔아라", 목표가가 없다 | S1: SKILL.md "해석할 때"에 추천·목표가 금지를 적었다. 위 보고서에 `grep -E '사라|팔아|매수하|매도하|목표가|비중을 (늘|줄)|buy|sell'` 0건(머리의 "매수·매도 권유가 아니다" 고지만 있음). S3·S5 보고서에서 다시 확인한다 ; S2: SKILL.md "해석할 때"에 추천·목표가 금지를 적었다. `sectors` JSON에 위 grep 0건. 보고서 md는 agent가 쓰므로 S3·S5 보고서와 함께 다시 확인한다 ; S3: reit-stock-review SKILL.md "해석할 때"에 같은 금지를 적고 "다시 볼 조건"을 매매 조건이 아니라 다시 계산할 때로 정했다. O deep 보고서에 같은 grep 0건. S5 보고서에서 다시 확인한다 ; S5: SKILL.md "해석할 때"에 추천·비중 조정·리밸런싱·목표가 금지와 쏠림을 사실로만 쓰기를 적고, 쏠림에 기준값·flag를 두지 않았다(D55). `~/invest-data/portfolio/reports/2026-11-18.md`와 snapshot에 `grep -iE '사라|팔아|매수하|매도하|목표가|비중을 (늘|줄)|buy|sell'` 0건. `--check`도 snapshot에 같은 검사를 한다 |
 | B21 | deep 보고서에 신용 지표가 있다: debt(+우선주)/gross assets, secured debt/gross assets, unencumbered 자산(또는 NOI) 비율, S&P식 fixed-charge coverage(EBITDAre / (이자 + 자본화 이자 + 우선주 배당 + 원금 상환)), 회사 공시 covenant 표의 항목별 실제·한도·headroom과 최소 headroom | |
 | B22 | deep 보고서에 리파이낸싱·유동성이 있다: 가중평균 만기(WAM)·금리, 24개월 안 만기 × (시장 차입금리 추정 − 기존 금리) / 연간 AFFO, 변동금리 100bp 충격 / AFFO, 24개월 liquidity coverage((현금 + revolver 잔여 + 유보 현금흐름) / (만기 + 남은 개발비)) | |
-| B23 | `reit-sector-scan`이 Nareit REIT Industry Tracker XLSX를 받아 subsector마다 implied cap rate의 자기 history percentile, implied cap rate − DGS10·− Baa yield, same-store NOI YoY와 occupancy의 4분기 추세, development pipeline / 보유 자산을 섹터 표에 넣고 구조 신호 판정에 쓴다 | |
+| B23 | `reit-sector-scan`이 Nareit REIT Industry Tracker XLSX를 받아 subsector마다 implied cap rate의 자기 history percentile, implied cap rate − DGS10·− Baa yield, same-store NOI YoY와 occupancy의 4분기 추세, development pipeline / 보유 자산을 섹터 표에 넣고 구조 신호 판정에 쓴다 | S9: 데이터 복사본(`INVEST_DATA_DIR=<scratchpad>/s9/data`)에서 `reitwatch.py tracker fetch --quarter 2026Q3` exit 0, 2초: 2026-10 폴더 404 뒤 `.../2026-11/REIT_Industry_Tracker_2026Q3.xlsx`를 받아 row 20개, 분기 2000Q1~2026Q3, 없는 block 없음. 끝난 뒤 `tracker/`에 XLSX 0개, `parsed/2026Q3.json`(475KB)만 남음. 열과 분기의 대응은 같은 분기 PDF Tracker의 분기 머리가 달린 표로 확인했다: FFO Free Standing XLSX CZ8~DD8 1,492.287·1,515.21·1,548.498·1,558.235·1,622.273 = PDF "2025:Q3 … 2026:Q3" 1,492·1,515·1,548·1,558·1,622, SS NOI Industrial CZ98~DD98 = PDF 4.4·5.3·6.6·6.3·5.2. 따로 curl로 받은 XLSX(sha1 36e38f83…, 앞서 받아 둔 파일과 같음)의 셀 DD423(Free Standing) 6.6806189816935397, DD419(Industrial) 5.02268930185393이 parsed 값·`cells` 위치와 같고, 섹터 표에는 넷째 자리 6.6806·5.0227. percentile: 셀 BJ~DD(2015Q1~2026Q3, 0 뺌)를 따로 읽어 센 값 Free Standing 45/47 = 95.7447, Industrial 37/47 = 78.7234가 `implied_cap_rate_pctile`과 같음. − DGS10 1.5606·−0.0973, − Baa(BAA10Y 1.5 + DGS10 5.12 = 6.62) 0.0606·−1.5973. Free Standing의 SS NOI·occupancy·pipeline은 Tracker에 없어 Retail 값 estimated(4.7222·97.5439·0.5969). `sectors` exit 0, `summary.tracker_missing_cells` 31(Tracker가 내지 않는 칸). 구조 신호에 Tracker 지표가 들어가 Office가 watch → ok(occupancy 4분기 +2.4411%p, demand 5개 중 2개 나빠짐). Apartments는 Tracker occupancy 1·4분기 변화가 모두 음수라 나빠짐이 더해져 watch 그대로. 나머지 REITWatch 칸은 2026-11-18 표와 같음. `tracker/`를 지운 복사본에서 `sectors` exit 2, Tracker 칸 모두 missing(note "Tracker parsed가 없음"), 구조 신호는 macro만으로 watch 5개(전과 같음). 보고서 `<scratchpad>/s9/data/sectors/reports/2026-11-19.md`(Tracker 표, 구조 메모 포함)와 sectors JSON에 추천 grep 0건. `--check`(68 PASS)가 가상 XLSX 부품(`tests/fixtures/tracker_xlsx/`)으로 파싱·셀 위치·0은 빈 값·값 없는 sector 줄에서도 block이 이어짐·모르는 block 무시·분기 불일치 실패, 받기 후보 폴더 차례와 XLSX 삭제, percentile 60.0·13.3333·표본 6개면 missing, spread·DBAA 우선, parent estimated, 150일 stale, 판정의 and 조건, Tracker만 없어도 exit 2를 손계산 값으로 확인 |
 | B24 | deep 보고서의 valuation에 economic implied cap rate(분모에서 건설 중 자산·토지 등 비운영 자산 제외, pro-rata JV 부채 포함, NOI에서 capex reserve 차감)와 부채 시가(XBRL fair value) 반영 값, 회사의 최근 매입·매각 cap rate, Tracker의 subsector implied cap rate를 나란히 둔다. NAV/share와 목표가는 내지 않는다 | |
 | B25 | AFFO bridge 줄에 category(straight_line, recurring_capex, leasing_cost, non_cash, other)를 붙이면 recurring capex/NOI, straight-line rent/FFO를 계산한다. 주당 AFFO가 없고 총액이 있으면 총액 / 희석 주식 수로 주당 값을 derived로 낸다. FFO payout은 flag 없는 참고 줄로 낸다 | |
-| B26 | `reit-sector-scan`이 REITWatch parsed로 종목·subsector의 consensus FFO FY1 3개월 변화(1월 FY 교체 처리)와 FY2/FY1 성장 median을 섹터 표와 peers에 둔다. `reit-stock-review`는 종목의 revision을 deep 보고서에 옮긴다 | |
+| B26 | `reit-sector-scan`이 REITWatch parsed로 종목·subsector의 consensus FFO FY1 3개월 변화(1월 FY 교체 처리)와 FY2/FY1 성장 median을 섹터 표와 peers에 둔다. `reit-stock-review`는 종목의 revision을 deep 보고서에 옮긴다 | S10(sector-scan 부분): 데이터 복사본에서 `peers --ticker O` exit 0, `revision_vs_month` 2026-07. O `ffo_fy1_rev_3m` −0.4577 = parsed 손계산 4.35(2026-10 호, fy1 2026) / 4.37(2026-07 호, fy1 2026) − 1 = −0.45767%, `ffo_growth_fy2` 4.1379 = 4.53/4.35 − 1. Free Standing 10종목 변화의 가운데 두 값 0.0·0.2188 → median 0.1094 = 섹터 표 `ffo_rev_3m_median`. FY 교체: REITWatch는 2월 호(as_of 1월 말)부터 FY1이 새해다. O 2026-04 호 FY1 4.45를 2026-01 호(fy1 2025, fy2 2026)의 FY2 4.44와 견줘 +0.2252(손계산과 같음. FY1 4.27과 견주면 +4.22가 된다). `sectors` 표 17개 subsector 모두 변화·성장 median이 있음(음수는 Timberland −4.0308, Apartments −0.1175, Regional Malls −0.0764). `--check`가 가상 fixture로 종목 −6.25·25.0·20.0, 앞 호 값이 0이면 빈 값, median 20.0·6.6667, FY 교체 +10.0, 같은 회계연도 column이 없으면 빈 값, 3개월 앞 호가 없으면 missing을 확인. reit-stock-review 쪽은 S11 |
 
 ## 설계
 
@@ -102,8 +102,8 @@ flowchart TB
 | skill | 혼자 쓰는 데이터 (`$INVEST_DATA_DIR` 아래) | 읽기만 하는 데이터 |
 | --- | --- | --- |
 | `macro-check` | `macro/cache/`, `macro/snapshots/<날짜>.json`, `macro/reports/<날짜>.md` | 없음 |
-| `reit-sector-scan` | `reitwatch/parsed/<YYYY-MM>.json`, `reitwatch/history.csv`, `sectors/<날짜>.json`, `sectors/reports/<날짜>.md` | macro snapshot |
-| `reit-stock-review` | `config.json`(`sec_user_agent`, `edgar.py config`), `tickers/_sec/`(SEC ticker 목록 cache), `tickers/<T>/filings/`, `tickers/<T>/facts/<분기>.json`, `tickers/<T>/metrics/<분기>.json`, `tickers/<T>/reports/<날짜>-<mode>.md`, `tickers/<T>/reports/<날짜>-earnings.json`, `compare/<날짜>-<tickers>.{json,md}` | macro snapshot, REITWatch parsed |
+| `reit-sector-scan` | `reitwatch/parsed/<YYYY-MM>.json`, `reitwatch/history.csv`, `tracker/parsed/<YYYYQn>.json`(D93), `sectors/<날짜>.json`, `sectors/reports/<날짜>.md` | macro snapshot |
+| `reit-stock-review` | `config.json`(`sec_user_agent`, `edgar.py config`), `tickers/_sec/`(SEC ticker 목록 cache), `tickers/<T>/filings/`, `tickers/<T>/facts/<분기>.json`, `tickers/<T>/metrics/<분기>.json`, `tickers/<T>/reports/<날짜>-<mode>.md`, `tickers/<T>/reports/<날짜>-earnings.json`, `compare/<날짜>-<tickers>.{json,md}` | macro snapshot, REITWatch parsed, Tracker parsed(S11부터) |
 | `dividend-portfolio-check` | `portfolio/snapshots/<날짜>.json`, `portfolio/reports/<날짜>.md`, `portfolio/filings/<T>.json`(agent가 reit-stock-review `edgar.py filings` 출력을 둔다, D50), `portfolio/dividend_dates.json`(`paydate`) | holdings, 종목 metrics·facts, REITWatch parsed |
 
 ### scripts
@@ -113,7 +113,7 @@ flowchart TB
 | 위치 | 명령 |
 | --- | --- |
 | `macro-check/scripts/macro.py` | `fetch [--group G] [--sector S] [--out P]`, `web ID (--value V --as-of D --url U --quote Q [--secondary] \| --missing 이유) [--snapshot P]`, `--check`. series 목록은 `assets/series.json` |
-| `reit-sector-scan/scripts/reitwatch.py` | `fetch --month YYYY-MM [--backfill]`, `sectors [--macro-snapshot P] [--out P]`, `peers (--subsector S \| --ticker T) [--out P]`, `--check` |
+| `reit-sector-scan/scripts/reitwatch.py` | `fetch --month YYYY-MM [--backfill]`, `tracker fetch --quarter YYYYQn\|latest [--url U]`(파싱과 섹터 칸 계산은 같은 폴더의 `tracker.py`), `sectors [--macro-snapshot P] [--out P]`, `peers (--subsector S \| --ticker T) [--out P]`, `--check` |
 | `reit-stock-review/scripts/edgar.py` | `resolve T`, `filings T [--forms F] [--limit N]`, `exhibits T --accession A`, `xbrl T --period P [--facts F]`, `dividends T [--facts F]`, `config (--user-agent "이름 이메일" \| --show)`, `--check` |
 | `reit-stock-review/scripts/quote.py` | `price T... [--period P]`, `web T (--period P \| --facts F) (--value V --as-of D --url U --quote Q [--secondary] \| --missing 이유)`, `--check` |
 | `reit-stock-review/scripts/reit_calc.py` | `metrics --facts F [--out P] [--macro-snapshot P] [--reitwatch-dir D]`, `diff --prev M1 --curr M2 [--out P]`, `compare --metrics M... [--out P]`, `--check` |
@@ -153,6 +153,37 @@ flowchart TB
 - 칸 이름은 위와 같다. PDF에 값이 없으면(`-`) null이다. 단위: `price`·`ffo_*`는 달러(주당), `p_ffo_*`는 배수, `div_yield`·`debt_ratio`·`ffo_growth`·`tr_*`는 %, `mkt_cap`(equity)·`implied_mkt_cap`은 백만 달러. `fy1`·`fy2`는 FFO 추정 column의 연도다.
 - PDF의 AVERAGE row, FFO payout, Debt/EBITDA는 넣지 않는다(D9).
 - `unparsed`는 표 안에 있었지만 column 수가 맞지 않아 읽지 못한 줄이다.
+
+### Tracker parsed 형식
+
+`reit-sector-scan`이 쓰고 `reit-stock-review`(S11)가 subsector implied cap rate를 찾는 파일이다. `$INVEST_DATA_DIR/tracker/parsed/<YYYYQn>.json` 하나가 Tracker 한 분기다. 한 파일에 2000Q1부터의 history가 다 있어 가장 최근 파일만 읽으면 된다.
+
+```json
+{"schema": "nareit-tracker/1", "quarter": "2026Q3", "as_of": "2026-09-30",
+ "source": "https://www.reit.com/sites/default/files/2026-11/REIT_Industry_Tracker_2026Q3.xlsx",
+ "sheet": "Data Q3 2026", "parsed_at": "...",
+ "units": {"implied_cap_rate": "Percent", "debt_to_ebitda": "x", "dev_pipeline": "USD millions"},
+ "missing_blocks": [], "quarters": ["2000Q1", "2000Q2", "2026Q3"],
+ "rows": [{"name": "Free Standing", "implied_cap_rate": 6.68061898169354, "cap_rate_4q": 6.36, "ss_noi_yoy": null,
+           "occupancy": null, "debt_to_ebitda": null, "debt_to_market_assets": null, "payout": 76.37,
+           "dev_pipeline": null, "property_holdings": 109244.392, "dev_pipeline_pct_assets": null,
+           "cells": {"implied_cap_rate": "DD423"},
+           "history": {"implied_cap_rate": {"2000Q1": 9.243, "2026Q3": 6.68061898169354}}}]}
+```
+
+- 첫 칸은 `"schema": "nareit-tracker/1"`이다. `quarter`는 sheet 이름(`Data Q3 2026`)과 머리줄 마지막 분기가 같은 분기, `as_of`는 그 분기 끝날이다.
+- row는 Tracker의 sector·subsector 이름(앞 공백을 뺀 것)마다 하나다(`Retail`, `Free Standing`, `All Equity REITs` …). 칸은 `implied_cap_rate`, `cap_rate_4q`, `ss_noi_yoy`, `occupancy`, `payout`, `debt_to_market_assets`(%), `debt_to_ebitda`(x), `dev_pipeline`, `property_holdings`(백만 달러, 감가상각 전 장부가), `dev_pipeline_pct_assets`(= dev_pipeline / property_holdings × 100)다. 최신 분기 값이 없으면 null이다. Tracker는 sector마다 내는 칸이 달라(occupancy에는 Free Standing이 없고 Retail만 있다) null이 흔하다.
+- `cells`는 칸 → 최신 분기 셀 위치다(locator로 쓴다). `history`는 칸 → {분기: 값}이고 값이 없는 분기는 없다. 값은 XLSX 셀의 숫자 그대로다(반올림 안 함). 정확히 0인 셀은 빈 값으로 본다(D121).
+- REITWatch subsector → Tracker row 이름은 `reit-sector-scan/assets/sector_map.json`의 `tracker`(`name`, `parent`)다. 다른 skill은 이 대응표를 자기 assets로 복사한다(`AGENTS.md:11`).
+- 파일이 없으면 그 칸은 missing, 분기 끝날이 150일 넘게 지났으면 stale이다(D126).
+
+### consensus FFO 변화 규칙
+
+`reit-sector-scan`의 `ffo_fy1_rev_3m`(종목)과 `ffo_rev_3m_median`(subsector) 규칙이다. S11에서 `reit-stock-review`가 종목 값을 직접 셀 때도 같은 규칙을 쓴다(D128).
+
+- 새 호는 REITWatch parsed의 가장 최근 호, 앞 호는 정확히 3개월 앞 호(`month` − 3)다. 앞 호가 없으면 missing.
+- 새 호 `fy1` 연도와 같은 회계연도 column을 앞 호에서 고른다. 앞 호 `fy1`이 같으면 `ffo_fy1`, 앞 호 `fy2`가 같으면 `ffo_fy2`, 둘 다 아니면 missing이다. 변화 = 새 호 `ffo_fy1` / 앞 호 값 − 1(%, 넷째 자리). 앞 호 값이 없거나 0 이하면 missing.
+- subsector 값은 두 호에 값이 있는 종목의 median이다. FY2/FY1 성장 = `ffo_fy2` / `ffo_fy1` − 1(%)이고 `ffo_fy1`이 0 이하면 뺀다.
 
 ## 결정
 
@@ -236,6 +267,15 @@ flowchart TB
 | D92 | interest coverage 기준 | watch 3.0x, alert 1.5x → 2.0x | 사용자 | D34 | S&P Key Credit Factors 표에서 1.5x는 이미 aggressive 구간이다 | 정해짐 |
 | D93 | Nareit REIT Industry Tracker | owner는 `reit-sector-scan`. `$INVEST_DATA_DIR/tracker/parsed/<YYYYQn>.json`(schema `nareit-tracker/1`, subsector별 칸)으로 쓰고 XLSX는 파싱 후 지운다. 레포에 넣지 않는다. `reit-stock-review`는 읽기만 하고 없으면 missing | agent | D1 | 로그인 없이 받아지는 무료 분기 자료(2026-11-19 확인). 출처에 S&P Capital IQ Pro가 적혀 있어 REITWatch처럼 레포 밖에만 둔다 | 정해짐 |
 | D94 | 이번 개선의 출처 | S&P Key Credit Factors(2018), Moody's REIT scorecard(credit opinion), Fitch rating action, Green Street NAV 모델 발췌(2014), Nareit Tracker·블로그, Citi Research 발언. 방법만 우리 말로 옮기고 원문은 레포에 넣지 않는다 | agent | 없음 | 2026-11-19 Fable·Opus가 따로 조사해 같은 결론 | 정해짐 |
+| D120 | Tracker 받기 | `https://www.reit.com/sites/default/files/<YYYY-MM>/REIT_Industry_Tracker_<YYYY>Q<n>.xlsx`의 폴더 달을 분기 끝 달 뒤 1·2·3개월 차례로(오늘 달까지) 본다. `latest`는 끝난 마지막 분기, 없으면 그 앞 분기. 모두 404면 exit 1이고 agent가 reit.com page에서 찾은 URL을 `--url`로 준다. XLSX는 데이터 폴더의 `tracker/tmp/`에 받아 파싱하고 지운다. parsed는 분기마다 한 파일이고 덮어쓴다 | agent | D93 | 2026-11-19 확인: 2026Q3은 2026-11 폴더(2026-10은 404), 2026Q1은 2026-05 폴더. 2026Q2·2025Q4는 이 파일 이름으로 2026-01~09 폴더 어디에도 없어 이름이 다른 호가 있다. 그래서 고정 목록 대신 후보를 보고 `--url`을 남겼다 | 정해짐 |
+| D121 | Tracker 파싱 | 이름이 `Data Qn YYYY`인 worksheet 하나만 읽는다. 머리줄은 `YYYY.q` 숫자 칸이 8개 넘는 첫 줄이고, 그 column으로 분기를 정한다. 마지막 분기가 sheet 이름 분기와 다르거나 요청 분기와 다르면 exit 1. block은 column A의 제목(`Implied Cap Rate`, `Rolling 4-quarter Cap Rate`, `Same Store NOI`, `Occupancy Rates`, `Debt to EBITDA`, `Debt/Market Assets`, `Dividend Payout`, `Property Development Pipeline`, `Total Property Holdings, undepreciated book value`) 아래 row다. 숫자가 없는 줄 중 어디서도 숫자를 가진 적 없는 이름이 나오면 block이 끝나고(제목 바로 뒤 단위 줄은 건너뜀), 숫자가 없어도 sector 이름이면 block이 이어진다. 정확히 0인 셀은 빈 값. `Implied Cap Rate`가 없으면 exit 1, 다른 block이 없으면 `missing_blocks`에 적는다. 외부 라이브러리 없이 `zipfile`과 `xml.etree`만 쓴다 | agent | D93 | XLSX sheet 대부분은 chartsheet이고 숫자는 `Data Q3 2026` 한 곳에 있다. 열과 분기 대응은 머리줄(B2=2000.1 … DD2=2026.3)이 정하고 PDF Tracker 표로 확인했다. Tracker는 값이 없는 칸을 0으로 쓴다(Free Standing SS NOI가 PDF에는 '-', XLSX에는 0). 진짜 0과 가를 수 없지만 Self Storage 2026Q2 SS NOI는 0.0031처럼 0이 아니어서 0을 빈 값으로 보는 손해가 작다. Dividend Payout block의 Timberland 줄처럼 값 없는 sector 줄에서 block을 끊으면 뒤 row를 잃는다 | 정해짐 |
+| D122 | subsector 대응 | `assets/sector_map.json` `tracker`에 REITWatch subsector → Tracker `name`·`parent`를 둔다. 자기 row에 값이 없으면 parent 값을 estimated로 쓰고 note·locator에 parent를 적는다. parent 값은 구조 신호에 넣지 않는다 | agent | D23, D25 | 이름이 거의 같지만 Tracker는 occupancy·pipeline을 sector(Retail, Residential) 단위로만 낸다. 대리 값이라 estimated이고, 판정까지 대리 값으로 하면 Free Standing에 쇼핑센터 occupancy가 들어간다 | 정해짐 |
+| D123 | implied cap rate percentile | 같은 row의 2015Q1~최신 분기 값(빈 분기 뺌) 중 최신값 이하 비율(%). 8개 미만이면 missing. status는 cap rate의 status를 물려받는다(reported면 derived) | agent | D19 | REITWatch history(D10, 2015-01부터)와 같은 기간이어야 P/FFO percentile과 나란히 읽는다. 2000~2014년 cap rate는 7~11%라 넣으면 지금이 늘 하위에 놓인다. Tracker는 분기 자료라 D19의 분기 표본과 같은 간격이다 | 정해짐 |
+| D124 | cap rate spread | `cap_spread_dgs10` = implied cap rate − DGS10, `cap_spread_baa` = implied cap rate − Baa(%p). Baa는 macro snapshot에 DBAA가 있으면 DBAA, 없으면 BAA10Y + DGS10(derived). 금리 stale은 D71의 섹터 규칙(오늘과 견줘 7일)이고 두 기준일을 note에 쓴다 | agent | D20, D71 | macro-check는 지금 BAA10Y(Baa − 10년물 spread)만 받는다(net_lease 섹터). 회사채 대비 spread는 신용 위험을 진 대체 투자와 견주는 값이라 10년물 spread와 따로 둔다 | 정해짐 |
+| D125 | SS NOI·occupancy 추세와 구조 신호 | 섹터 표에 `ss_noi_yoy`·`ss_noi_yoy_avg_4q`(최근 4개 분기 평균, 빈 분기가 있으면 missing), `occupancy`·`occupancy_chg_1q`·`occupancy_chg_4q`(%p), `dev_pipeline_pct_assets`를 둔다. 구조 신호에는 demand 지표 둘(`tracker:ss_noi_yoy`: 최신값과 4분기 평균이 둘 다 음수면 나빠짐, `tracker:occupancy`: 1·4분기 변화가 둘 다 음수면 나빠짐)로 더한다. supply는 macro에만 있어서 macro 쪽이 review면 Tracker 지표는 표에만 놓는다. 개발 pipeline은 판정에 넣지 않는다 | agent | D23 | D23의 3·12개월 둘 다 규칙을 분기 자료에 옮겼다. SS NOI 성장이 느려진 것(6% → 5%)은 구조 하락이 아니라서 변화가 아니라 부호로 본다. 실데이터에서 Office는 macro 수요 둘이 나빠졌지만 occupancy가 4분기 +2.44%p라 watch → ok가 됐다 | 정해짐 |
+| D126 | Tracker 나이 | 분기 끝날이 오늘보다 150일 넘게 이르면 Tracker 값은 stale(percentile·spread도 물려받음) | agent | D62, D63 | Tracker는 분기 끝 뒤 약 48일에 나온다(2026Q3 XLSX의 last-modified는 2026-11-17). 다음 분기가 나오기 직전이 약 140일이라 150일이면 한 분기를 놓친 것이다. 원문 값이라 estimated가 아니라 stale이다 | 정해짐 |
+| D127 | Tracker 칸과 exit code | Tracker parsed가 없으면 모든 Tracker 칸이 missing이고 exit 2. 파일은 있는데 Tracker가 그 subsector·칸을 내지 않으면 missing이지만 exit에는 세지 않고 `summary.tracker_missing_cells`에 센다 | agent | D16 | Free Standing SS NOI처럼 Tracker가 원래 내지 않는 칸이 31개라 그것까지 세면 sectors가 늘 exit 2가 되어 exit 2가 아무것도 알리지 못한다 | 정해짐 |
+| D128 | consensus FFO 변화 | 설계 "consensus FFO 변화 규칙"대로. 정확히 3개월 앞 호와 견주고, 회계연도로 column을 맞춘다. FY2/FY1 성장은 row의 `ffo_fy1`·`ffo_fy2`로 셈하고 REITWatch FFO growth column은 쓰지 않는다. 섹터 표(`ffo_rev_3m_median`, `ffo_growth_fy2_median`)와 peers(`ffo_fy1_rev_3m`, `ffo_growth_fy2`, median)에 둔다. 섹터 표의 두 칸이 missing이면 exit 2로 센다 | agent | D19 | REITWatch의 FY 교체는 1월이 아니라 2월 호(as_of 1월 말)에 일어나서 달로 정하지 않고 연도로 맞춘다. FFO growth column은 반올림 전 값으로 셈해 FY2/FY1과 다르다(O 2026-10 호 4.2 vs 4.1379). 3개월 앞 호는 backfill의 최근 12개월에 늘 있다 | 정해짐 |
 
 ## test할 seam
 
@@ -260,8 +300,8 @@ flowchart TB
 | S6 | `reit-stock-review` 신용 지표·covenant | B21 | S5 | O 2026Q3: covenant 표(Ex.99.2 p35) 값과 headroom, secured/gross assets가 XBRL·공시와 맞음. covenant 표가 없는 종목은 missing | 대기 |
 | S7 | `reit-stock-review` 리파이낸싱·유동성, coverage 2.0x | B22, D92 | S6 | O·PLD로 refi 영향과 liquidity coverage가 나오고 손계산과 같음 | 대기 |
 | S8 | `reit-stock-review` AFFO category·주당 AFFO 총액 경로·FFO payout 참고 | B25, D91 | S6 | PLD·REXR AFFO payout이 review에서 값으로, O의 recurring capex/NOI 손계산 일치 | 대기 |
-| S9 | `reit-sector-scan` Tracker 받기·파싱·섹터 표·구조 신호 | B23, D93 | S5 | 2026Q3 Tracker로 Free Standing·Industrial implied cap rate가 XLSX 값과 같고 percentile이 나옴 | 대기 |
-| S10 | `reit-sector-scan` consensus revision | B26 | S9 | O ffo_fy1 3개월 변화가 parsed 파일 손계산과 같음 | 대기 |
+| S9 | `reit-sector-scan` Tracker 받기·파싱·섹터 표·구조 신호 | B23, D93 | S5 | 2026Q3 Tracker로 Free Standing·Industrial implied cap rate가 XLSX 값과 같고 percentile이 나옴 | 끝: 데이터 복사본에서 실제 2026Q3 Tracker를 받아 파싱(XLSX 남지 않음). Free Standing 6.6806189816935397·Industrial 5.02268930185393이 XLSX 셀 DD423·DD419와 같음(열과 분기 대응은 PDF Tracker 표로 확인). percentile 95.7447·78.7234가 셀을 따로 읽어 센 값과 같음. Tracker 없는 복사본은 칸 missing·exit 2로 계속. 보고서 작성, 추천 grep 0건. `--check` 6개 exit 0(reitwatch 68 PASS), skill 폴더만 떼어 `python3 -I`로도 exit 0. 로직을 하나씩 깨는 mutation 20개 모두 잡힘(S10 몫 5개 포함, 처음 놓친 5개는 fixture를 고쳐 잡음) |
+| S10 | `reit-sector-scan` consensus revision | B26 | S9 | O ffo_fy1 3개월 변화가 parsed 파일 손계산과 같음 | 끝: O −0.4577 = 4.35/4.37 − 1(2026-10 호 vs 2026-07 호), FY 교체 구간(2026-04 vs 2026-01) +0.2252 = 4.45/4.44 − 1이 손계산과 같음. Free Standing median 0.1094. 섹터 표·peers에 칸을 더했고 `--check` 통과 |
 | S11 | `reit-stock-review` valuation 기준선과 revision 옮기기 | B24, B26 | S8, S9, S10 | O deep 보고서에 economic implied cap rate, debt fair value, Tracker subsector 값, revision 줄 | 대기 |
 
 ## 검증 기록

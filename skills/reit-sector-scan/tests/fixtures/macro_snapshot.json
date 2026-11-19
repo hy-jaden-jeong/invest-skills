@@ -3,6 +3,7 @@
   "date": "2026-11-18",
   "_note": "(가상) macro-check snapshot 모양을 줄인 fixture. 값은 지어낸 것이다.",
   "series": {
+    "BAA10Y": {"value": 2.0, "unit": "Percent", "status": "reported", "as_of": "2026-11-16", "source": "fred:BAA10Y", "locator": "(가상)", "note": ""},
     "DGS10": {"value": 4.25, "unit": "Percent", "status": "reported", "as_of": "2026-11-16", "source": "fred:DGS10", "locator": "(가상)", "note": "",
               "derived": {"status": "derived", "chg_1m": 0.1, "chg_3m": 0.2, "chg_12m": 0.3, "yoy_pct": null, "pctile_10y": 90.0, "note": ""}},
     "USPBS": {"value": 22000, "unit": "Thousands of Persons", "status": "reported", "as_of": "2026-10-01", "source": "fred:USPBS", "locator": "(가상)", "note": "",
